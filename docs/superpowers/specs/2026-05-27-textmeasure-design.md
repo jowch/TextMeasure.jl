@@ -1,7 +1,7 @@
 # TextMeasure.jl — Design
 
 **Date:** 2026-05-27
-**Status:** Approved for planning
+**Status:** Approved for planning (revised after parallel design review)
 
 ## Purpose
 
@@ -29,19 +29,24 @@ exactly once, so downstream consumers never re-derive it.
 - The `AbstractMeasurementBackend` contract.
 - An in-core, zero-dependency `MonospaceBackend` (also serves as the deterministic
   test backend).
-- One v1 measurement-backend extension: `FreeTypeBackend` (weak dep on
-  FreeTypeAbstraction.jl).
+- `FreeTypeBackend` — extension (weak dep: FreeTypeAbstraction.jl). Accurate measurement
+  from a font file/FTFont, with no Makie dependency; keeps TextMeasure useful to any
+  consumer (Luxor, raw Cairo, SVG generators).
+- `MakieBackend` — extension (weak dep: Makie). A thin wrapper that resolves Makie's
+  font object and the scene's `px_per_unit` (DPI), then delegates to the same
+  summed-advance measurement as `FreeTypeBackend`. Its measurements match what Makie's
+  `text!`/`textlabel` will render, which is what the downstream MakieRepel.jl needs.
 
 **Out of scope (separate downstream packages / future work):**
-- Any consumer that *uses* layouts: `MakieRepel.jl` (ggrepel-style label repulsion),
-  treemap label fitting, annotation/textbox rendering. TextMeasure produces
+- Any consumer that *uses* layouts: `MakieRepel.jl` (ggrepel/adjustText-style label
+  repulsion), treemap label fitting, annotation/textbox rendering. TextMeasure produces
   line-broken geometry; it never renders, and never decides *why* the geometry is wanted.
-- A dedicated Makie backend. The FreeType backend uses the same library Makie uses
-  under the hood (FreeTypeAbstraction.jl), so measuring with the same font matches
-  Makie's rendering without a Makie dependency. A Makie-native backend can be added
-  later if a concrete need appears.
-- A browser/canvas (WGLMakie) backend.
-- UAX #14 line-breaking, CJK segmentation, hyphenation, and text justification.
+- A browser/canvas (WGLMakie/Bonito) backend. The contract supports it (canvas
+  `measureText` → run width; `fontBoundingBoxAscent/Descent` → vertical metrics, with
+  `line_advance` synthesized), but it is deferred.
+- UAX #14 line-breaking, CJK (spaceless) segmentation, hyphenation, justification, and
+  text rotation (rotation is an affine transform of the returned box, computed by the
+  caller — see "Consumer notes").
 
 ## Architecture
 
@@ -57,9 +62,15 @@ TextMeasure.jl                        # standalone, NO Makie/FreeType in core de
 │   ├── layout.jl                     # greedy wrap, align, bbox         (pure, no backend)
 │   └── monospace.jl                  # MonospaceBackend — zero-dep fallback, in core
 ├── ext/
-│   └── TextMeasureFreeTypeExt.jl     # weak dep: FreeTypeAbstraction.jl
+│   ├── TextMeasureFreeTypeExt.jl     # weak dep: FreeTypeAbstraction.jl → FreeTypeBackend
+│   └── TextMeasureMakieExt.jl        # weak dep: Makie            → MakieBackend
 └── test/                             # pure-layout tests via MonospaceBackend
 ```
+
+`Project.toml` must declare `[weakdeps]` (FreeTypeAbstraction, Makie) with their UUIDs,
+an `[extensions]` table (`TextMeasureFreeTypeExt = "FreeTypeAbstraction"`,
+`TextMeasureMakieExt = "Makie"`), and `[compat]` bounds for both (required for
+registration). Extension module name = file name = `[extensions]` key (Julia ≥ 1.9).
 
 ### Data flow
 
@@ -74,35 +85,64 @@ the cached `Prepared` and can be re-run freely at different widths/alignments.
 ## The backend contract
 
 Dispatch is via abstract-type subtypes. A backend is a struct holding its font
-configuration (font, size, DPI as applicable). It must implement exactly two methods:
+configuration (font, size, DPI as applicable). It must implement exactly two methods,
+**which are not exported** — backends implement them as `TextMeasure.measure` /
+`TextMeasure.font_metrics` (the symbols clash with Measures.jl, StatsBase, and
+Distributions, and are interface methods, not application-facing calls):
 
 ```julia
 abstract type AbstractMeasurementBackend end
 
 # (1) advance width of a single text run, in pixels
-measure(backend::AbstractMeasurementBackend, run::AbstractString)::Float64
+TextMeasure.measure(backend::AbstractMeasurementBackend, run::AbstractString)::Float64
 
 # (2) vertical metrics for the backend's configured font, in pixels
-font_metrics(backend::AbstractMeasurementBackend)::FontMetrics
+TextMeasure.font_metrics(backend::AbstractMeasurementBackend)::FontMetrics
 ```
 
 Font, fontsize, and DPI are **backend state**, fixed at construction — the engine
 itself never knows about fonts. The canonical unit everywhere downstream of the
 backend is **pixels**, at the backend's configured DPI.
 
-Backends shipped in v1:
+**Measurement semantics (important).** A run's width is the **sum of its glyphs'
+advances, with no kerning**. This is deliberate: Makie's own text layout advances the
+pen identically (`x += hadvance`, no kerning), so summed advances **reproduce Makie's
+rendered run width exactly**. Adding kerning would make measurements *diverge* from
+Makie, so backends must not apply it. (Because v1 only ever breaks at whitespace,
+inter-segment kerning is moot anyway.)
+
+### Backends
 
 ```julia
-MonospaceBackend(; fontsize=12, advance_ratio=0.6, lineheight=1.2)  # core, zero-dep
-FreeTypeBackend(; font="Inter", fontsize=12, dpi=72)                # extension
+# core, zero-dep — also the deterministic test backend
+MonospaceBackend(; fontsize=12, advance_ratio=0.6, lineheight_ratio=1.2)
+#   measure(b, run)  = length(graphemes(run)) * advance_ratio * fontsize
+#   font_metrics(b)  = FontMetrics(0.8*fontsize, 0.2*fontsize, lineheight_ratio*fontsize)
+
+# extension (weak dep FreeTypeAbstraction) — struct + methods live in the extension
+FreeTypeBackend(; font="Inter", fontsize=12, dpi=72)
+#   measure: pixel_size * Σ hadvance(get_extent(face, glyph)),  pixel_size = fontsize*dpi/72
+#   font_metrics: ascent = ascender(face)*pixel_size, descent = -descender(face)*pixel_size,
+#                 line_advance = (face.height / units_per_EM) * pixel_size
+#   guard: if face.height == 0 (some bitmap/variable fonts) → line_advance = ascent + descent
+
+# extension (weak dep Makie) — struct + methods live in the extension
+MakieBackend(; font=<Makie default>, fontsize=12, px_per_unit=1.0)
+#   resolves the Makie font object → FTFont and folds px_per_unit into pixel size,
+#   then uses the same summed-advance / face-metrics path as FreeTypeBackend
 ```
 
-`MonospaceBackend.measure` returns `length(graphemes(run)) * advance_ratio * fontsize`.
-It is deterministic and dependency-free, making it the test backend as well as a
-usable draft-quality fallback.
+`FreeTypeBackend` and `MakieBackend` exist only after their weak dep is loaded
+(`using FreeTypeAbstraction` / `using Makie`).
 
-> Note: `measure` is a common name and is exported; consumers with a clash may need
-> to qualify it as `TextMeasure.measure`.
+> Note: `lineheight_ratio` (a backend constructor kwarg that sets the font's natural
+> `line_advance`) is distinct from `layout`'s `lineheight` kwarg (a multiplier applied
+> on top of `line_advance`). Effective spacing is their product.
+
+**Known v1 limitation:** Makie performs per-character font *fallback* (substituting a
+different font for glyphs missing from the primary font). A single-font backend cannot
+replicate this, so labels containing such glyphs may measure slightly off. Acceptable
+for label-repel use; documented.
 
 ## Core types
 
@@ -113,11 +153,11 @@ struct FontMetrics
     line_advance :: Float64   # font's natural baseline-to-baseline distance, pixels
 end
 
-# one measured segment of the source string
+# internal measurement artifact (NOT exported)
 struct Segment
-    str                  :: String
-    width                :: Float64   # pixels
-    is_break_opportunity :: Bool      # may a line break occur before this segment?
+    str   :: String
+    width :: Float64          # pixels; 0 for newline segments
+    kind  :: Symbol           # :word | :space | :newline
 end
 
 # produced by prepare() — caches the expensive measurement
@@ -128,18 +168,23 @@ end
 
 # one laid-out line
 struct Line
-    str      :: String
-    width    :: Float64   # trimmed line width, pixels
-    x        :: Float64   # horizontal alignment offset, pixels
-    baseline :: Float64   # baseline y; top line = 0, increasing downward
+    str      :: String        # trimmed of leading/trailing whitespace
+    width    :: Float64        # trimmed line width, pixels
+    x        :: Float64        # horizontal alignment offset, pixels
+    baseline :: Float64        # baseline y; block top = 0, increasing downward
 end
 
 # produced by layout() — pure arithmetic over Prepared
 struct Layout
-    lines :: Vector{Line}
-    size  :: NTuple{2,Float64}   # (width, height) of the laid-out block, pixels
+    lines   :: Vector{Line}
+    size    :: NTuple{2,Float64}   # (width, height) of the laid-out block, pixels
+    metrics :: FontMetrics         # echoed from Prepared so a Layout-only holder
+                                   # can convert baseline↔top-left and center optically
 end
 ```
+
+All structs are immutable. Callers must not mutate `prep.segments` (it is shared
+across repeated `layout` calls).
 
 ## Public API
 
@@ -152,52 +197,108 @@ layout(prep::Prepared;
        lineheight :: Real   = 1.0             # multiplier on metrics.line_advance
       )::Layout
 
-# Baseline-to-baseline distance used for stacking lines:
-#     line_advance_used = lineheight * prep.metrics.line_advance
-# (lineheight = 1.0 reproduces the font's natural spacing)
+# convenience: top-left y of a line (block top = 0)
+line_top(lay::Layout, ln::Line) = ln.baseline - lay.metrics.ascent
 ```
 
-Exports: `prepare`, `layout`, `measure`, `font_metrics`, `Prepared`, `Layout`, `Line`,
-`Segment`, `FontMetrics`, `AbstractMeasurementBackend`, `MonospaceBackend`.
+Exports: `prepare`, `layout`, `line_top`, `Prepared`, `Layout`, `Line`, `FontMetrics`,
+`AbstractMeasurementBackend`, `MonospaceBackend`. (`measure`, `font_metrics`, and
+`Segment` are **not** exported.)
 
-## Segmentation & line-break policy (v1)
+## Layout geometry
 
-- `prepare` splits the string into segments at **break opportunities**, which occur at
-  **whitespace (space, tab)** and at explicit `\n` (always a hard break).
-- Within a word, text is treated as **Unicode grapheme clusters** (via the `Unicode`
-  stdlib) so multi-codepoint clusters (e.g. `"2σ"`, emoji + modifier) never split.
-- `layout` greedily packs segments onto a line until the next would exceed `max_width`,
-  then breaks. Trailing whitespace is trimmed from each line's reported `width`.
-- A single segment wider than `max_width` overflows onto its own line rather than
-  looping forever; `size[1]` reports the true overflow width so a consumer can decide
-  to grow or clip.
+Let `la = lineheight * metrics.line_advance` (effective baseline-to-baseline distance).
+For `N` laid-out lines indexed `i = 0 … N-1`:
 
-**v1 non-goals (documented limitations):** UAX #14 line-breaking, CJK (spaceless)
-segmentation, hyphenation, and justification.
+```
+baseline_i = ascent + i * la
+size[2] (height) = ascent + (N-1) * la + descent          # = ascent+descent for N=1
+size[1] (width)  = maximum trimmed line width over all lines (0 if no lines)
+line_top_i = baseline_i - ascent = i * la                  # top line's top = 0
+```
+
+The first line's baseline sits at `ascent` (not 0) so its ascenders are not clipped
+above the block. `align` sets each line's `x`: `0` for `:left`,
+`(size[1] - line.width)/2` for `:center`, `size[1] - line.width` for `:right`.
+
+## Segmentation & line-breaking semantics (v1)
+
+**Tokenizing (`prepare`).** The string is split into a sequence of `Segment`s:
+- maximal runs of non-whitespace characters → `:word` segments (measured, atomic);
+- maximal runs of space/tab → `:space` segments (measured);
+- each `\n` → a `:newline` segment (width 0, hard break).
+
+A v1 word is **atomic**: it is never broken internally (no mid-word breaking, no
+hyphenation). CJK and other spaceless scripts therefore do not wrap in v1 (documented
+non-goal). `MonospaceBackend` counts grapheme clusters when estimating a run's width,
+but grapheme clustering plays no role in *layout* because words are atomic.
+
+**Wrapping (`layout`, greedy).** Walk the segments accumulating the current line:
+- `:newline` → flush the current line; start a new line (always a hard break).
+- `:word` → if the current line is non-empty and adding the pending `:space` plus this
+  word would exceed `max_width`, break *before* this word (the pending space is
+  consumed — it belongs to neither line); otherwise append the pending space + word.
+- `:space` → held as pending; folded into width only if a word follows it on the same
+  line.
+
+**Trimming.** Leading and trailing whitespace are excluded from each line's `str` and
+`width`. Interior multiple spaces are **preserved** (not collapsed) — measurement is
+lossless. The space *at* a wrap point is consumed (counted in neither line).
+
+**Invariant.** Every non-empty paragraph produces ≥ 1 line, and **every line contains
+at least one segment** — so a single word wider than `max_width` occupies its own line
+(it overflows rather than looping forever), and `size[1]` reports its true overflow
+width (so a consumer can detect "does not fit even wrapped").
+
+**Hard-break / blank-line rules (defined, predictable):** the string is effectively
+split on `\n` into paragraphs, each of which soft-wraps to ≥ 1 line. Consequences,
+stated explicitly:
+- `"a\nb"` → 2 lines.
+- `"a\n"` → 2 lines; the second is empty (width 0, consumes one `la` of height). A
+  trailing `\n` *does* produce a trailing empty line — no special-casing.
+- `"\n"` → 2 empty lines; `"\n\n"` → 3 empty lines.
+- An empty or whitespace-only paragraph → one line with `str=""`, `width=0`.
 
 ## Error & edge handling (all in the pure layer)
 
-- Empty string → `Layout` with zero lines and `size = (0, 0)`.
-- `max_width ≤ 0` or `NaN` → treated as `Inf` (no wrap) rather than erroring.
+- Empty string `""` → `Layout` with zero lines, `size = (0, 0)`.
+- `max_width ≤ 0` or `NaN` → treated as `Inf` (no wrap).
 - Backend returning a negative width → clamped to 0.
-- Backend returning `NaN` → defensive error at `prepare` time, with a message naming
-  the offending run (covers the degenerate-font case).
-- Whitespace-only string → one line, trimmed width 0, height = one `line_advance`.
+- Backend returning `NaN` → defensive error raised at `prepare` time, naming the
+  offending run (covers the degenerate-font case).
+- Whitespace-only string (no `\n`) → one line, `width = 0`, `height = ascent + descent`.
+
+## Consumer notes (documentation, not API)
+
+- `Layout.size` is an **unplaced extent**, not a positioned rectangle. Anchoring,
+  padding, and centering are the consumer's coordinate decisions. (MakieRepel computes
+  the box origin as `anchor + offset - align .* size` and clips its leader line to the
+  box edge itself.)
+- **Rotation**: a consumer needing a rotated label's footprint computes the AABB from
+  `size` and angle θ: `w' = |w·cosθ| + |h·sinθ|`, `h' = |w·sinθ| + |h·cosθ|`.
+- For optical (cap-height) centering rather than full-box centering, use
+  `metrics.ascent`/`metrics.descent` (now available directly on `Layout`).
 
 ## Testing strategy
 
 - **Layout layer (pure):** tested with `MonospaceBackend` — deterministic, no font deps,
-  no rendering. Covers wrapping, alignment offsets, trailing-whitespace trimming,
-  multiline via `\n`, over-wide-token overflow, and all edge cases above.
-- **FreeType extension:** a thin separate test, gated behind the weak dep — measure a
-  known string and assert the width is positive, finite, and stable across two calls.
+  no rendering. Covers wrapping, alignment offsets, trailing/leading-whitespace trimming,
+  interior-space preservation, the space-at-wrap-point rule, multiline via `\n`,
+  blank-line and trailing-`\n` behavior, the over-wide-token overflow + `size[1]`
+  reporting, baseline/height arithmetic, and all numeric edge cases above.
+- **FreeType / Makie extensions:** thin tests gated behind the weak deps — measure a
+  known string and assert width is positive, finite, and stable across two calls, plus
+  one **golden-value** assertion against a known FreeTypeAbstraction output to catch
+  silent unit/DPI regressions.
 
 ## Example consumers (illustrative, not part of this package)
 
-**Label repel (MakieRepel.jl):** `prepare` each label once; call `layout(p; max_width=Inf).size`
-to get single-line bboxes; feed bboxes to its own force solver. On camera pan/zoom only
-the (pure) `layout` + solver re-run — no font calls.
+**Label repel (MakieRepel.jl):** `prepare` each label once with a `MakieBackend`; call
+`layout(p; max_width=Inf).size` for single-line bboxes; feed bboxes to its own force
+solver. On camera pan/zoom only the (pure) `layout` + solver re-run — no font calls.
+Optical centering uses `layout(...).metrics.ascent/descent`.
 
 **Wrapped annotation box:** `prepare` once; `layout(p; max_width=160, align=:left)`;
-render a background rect from `lay.size` and one `text!` per `lay.lines` entry using each
-line's `x` and `baseline`. Changing width/alignment is a pure re-layout.
+render a background rect from `lay.size` + padding and one `text!` per `lay.lines` entry,
+positioned with `line_top(lay, ln)` (top-left) or `ln.baseline` (baseline align).
+Changing width/alignment is a pure re-layout.
