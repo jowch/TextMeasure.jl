@@ -153,23 +153,20 @@ end # module
 
 > Note: `Segment`, `measure`, and `font_metrics` are intentionally **not** exported (spec).
 
-- [ ] **Step 3b: Create stub `src/prepare.jl` and `src/layout.jl`** so the module loads in Phase 0; Streams A and B overwrite these (no edit to `TextMeasure.jl` needed in Phase 1).
+- [ ] **Step 3b: Create comment-only stubs for every file `TextMeasure.jl` includes but a later task implements**, so the module loads from Task 1 onward. Each later task (2/3/4 in Phase 0; A/B in Phase 1) *overwrites* its own stub.
 
-`src/prepare.jl`:
-```julia
-# prepare(): implemented in Phase 1, Stream A.
-function prepare end
-```
+Create these five files, each containing just a one-line comment:
 
-`src/layout.jl`:
-```julia
-# layout() + line_top: implemented in Phase 1, Stream B.
-function layout end
-function line_top end
-```
+`src/backend.jl` → `# AbstractMeasurementBackend + contract: implemented in Task 2.`
+`src/monospace.jl` → `# MonospaceBackend: implemented in Task 3.`
+`src/backend_containers.jl` → `# FreeTypeBackend/MakieBackend structs: implemented in Task 4.`
+`src/prepare.jl` → `# prepare(): implemented in Phase 1, Stream A.`
+`src/layout.jl` → `# layout() + line_top: implemented in Phase 1, Stream B.`
 
-These empty generic functions make the exported names resolve so the module loads in
-Phase 0; Streams A/B overwrite each file with the real method definitions.
+> Verified: a module that *exports* a name not yet defined loads cleanly in Julia 1.12 —
+> the name only errors (`UndefVarError`) when accessed. So these comment stubs let the
+> module load while the exported names (`MonospaceBackend`, `prepare`, …) stay undefined
+> until their task fills them in. No task after Task 1 edits `src/TextMeasure.jl`.
 
 - [ ] **Step 4: Write `test/Project.toml`**
 
@@ -205,21 +202,23 @@ end
 - [ ] **Step 6: Run the test**
 
 Run: `julia test/test_types.jl`
-Expected: PASS (`Test Summary: core types | Pass 6`)
+Expected: PASS (`Test Summary: core types | Pass 4` — six conditions, four `@test`s)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Project.toml src/TextMeasure.jl src/types.jl src/prepare.jl src/layout.jl test/Project.toml test/test_types.jl
+git add Project.toml src/TextMeasure.jl src/types.jl \
+        src/backend.jl src/monospace.jl src/backend_containers.jl src/prepare.jl src/layout.jl \
+        test/Project.toml test/test_types.jl
 git commit -m "feat: scaffold TextMeasure + core value types"
 ```
 
 ## Task 2: Backend contract
 
 **Files:**
-- Create: `src/backend.jl`
+- Overwrite the Phase-0 stub: `src/backend.jl`
 
-- [ ] **Step 1: Write `src/backend.jl`**
+- [ ] **Step 1: Write `src/backend.jl`** (overwrite the Phase-0 stub)
 
 ```julia
 """
@@ -256,7 +255,8 @@ git commit -m "feat: abstract measurement backend contract"
 ## Task 3: MonospaceBackend (the test backend)
 
 **Files:**
-- Create: `src/monospace.jl`, `test/test_monospace.jl`
+- Overwrite the Phase-0 stub: `src/monospace.jl`
+- Create: `test/test_monospace.jl`
 
 - [ ] **Step 1: Write `test/test_monospace.jl`**
 
@@ -329,7 +329,8 @@ git commit -m "feat: MonospaceBackend (zero-dep test backend)"
 ## Task 4: Backend container structs (freeze the extension contract)
 
 **Files:**
-- Create: `src/backend_containers.jl`, `test/test_containers.jl`
+- Overwrite the Phase-0 stub: `src/backend_containers.jl`
+- Create: `test/test_containers.jl`
 
 - [ ] **Step 1: Write `test/test_containers.jl`**
 
@@ -406,7 +407,7 @@ git commit -m "feat: FreeTypeBackend/MakieBackend container structs"
 
 # PHASE 1 — Parallel streams (A, B, C independent)
 
-> Each stream owns distinct files. **First action of Stream A and Stream B:** uncomment the corresponding `include(...)` line in `src/TextMeasure.jl` that was disabled in Task 3. (If both streams edit that one line, expect a trivial merge — re-add both includes.)
+> Each stream owns distinct files: Stream A overwrites only `src/prepare.jl` (+ its test), Stream B only `src/layout.jl` (+ its test), Stream C only `ext/*` (+ their tests). `src/TextMeasure.jl` already includes all files (Phase 0), so **no stream edits it** — there is no shared-file merge point between the parallel streams.
 
 ## STREAM A — `prepare` (tokenize + measure)
 
@@ -474,7 +475,7 @@ end
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `julia --project=. test/test_prepare.jl`
-Expected: FAIL — `prepare` is a stub / no method (the stub file defines nothing).
+Expected: FAIL — `UndefVarError: prepare` (the stub file defines nothing; the exported name is undefined until this task).
 
 - [ ] **Step 3: Write `src/prepare.jl`** (overwrite the Phase-0 stub)
 
@@ -618,7 +619,7 @@ end
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `julia --project=. test/test_layout.jl`
-Expected: FAIL — `layout` is a stub / no method.
+Expected: FAIL — `UndefVarError: layout` (the stub file defines nothing; the exported name is undefined until this task).
 
 - [ ] **Step 3: Write `src/layout.jl`** (overwrite the Phase-0 stub)
 
@@ -794,7 +795,9 @@ git commit -m "test: layout newlines, blank/trailing/empty edge cases"
 
 ## STREAM C — Extensions (FreeType + Makie)
 
-> Uses the scratch env from the Test-commands section. Run setup once before Task C1.
+> Uses the scratch env from the Test-commands section; the one-time setup in Task C1 Step 1 installs the deps for **both** C1 and C2. Stream C is independent of Streams A and B — its tests assert only backend-specific properties (`measure`/`font_metrics`/additivity/scaling). The real-backend `prepare → layout` end-to-end check lives in Phase 2 (`test_integration.jl`), which runs after A+B+C merge.
+>
+> **Heads-up:** the first `Pkg.add`/precompile of Makie (and the first `using Makie`) is heavy — expect several minutes. A slow extension step is precompilation, not a hang.
 
 ### Task C1: FreeTypeBackend extension
 
@@ -828,13 +831,13 @@ using Test, TextMeasure, FreeTypeAbstraction
     @test m.ascent > 0 && m.descent > 0 && m.line_advance > 0
     @test isfinite(m.line_advance)
 
-    # dpi scales linearly: dpi=144 doubles widths vs dpi=72
+    # dpi scales linearly: dpi=144 doubles widths vs dpi=72 (guards unit/DPI regressions)
     b2 = FreeTypeBackend(; font="DejaVu Sans", fontsize=100.0, dpi=144.0)
     @test TextMeasure.measure(b2, "A") ≈ 2 * wA
 
-    # end-to-end through the pure engine
-    lay = layout(prepare(b, "hello world"); max_width=Inf)
-    @test length(lay.lines) == 1 && lay.size[1] > 0
+    # golden sanity: catches a gross unit bug (font-units → thousands, em-fractions → <1).
+    # "A" in DejaVu Sans at fontsize=100, dpi=72 is ~60–80 px.
+    @test 40.0 < wA < 100.0
 end
 ```
 
@@ -923,10 +926,6 @@ using Test, TextMeasure, Makie
     # px_per_unit scales widths linearly
     b2 = MakieBackend(; font="TeX Gyre Heros Makie", fontsize=24.0, px_per_unit=2.0)
     @test TextMeasure.measure(b2, "AVATAR") ≈ 2 * TextMeasure.measure(b, "AVATAR")
-
-    # end-to-end
-    lay = layout(prepare(b, "hello world"); max_width=Inf)
-    @test length(lay.lines) == 1 && lay.size[1] > 0
 end
 ```
 
@@ -1000,6 +999,7 @@ git commit -m "feat: MakieBackend extension (markerspace width match)"
 
 ```julia
 using Test, TextMeasure
+using FreeTypeAbstraction   # exercises the real-backend → prepare → layout path
 
 @testset "integration: prepare → layout (Monospace)" begin
     b = MonospaceBackend(fontsize=10.0, advance_ratio=1.0, lineheight_ratio=1.2)
@@ -1008,6 +1008,14 @@ using Test, TextMeasure
     @test all(l.width ≤ 60.0 || length(split(l.str)) == 1 for l in lay.lines)
     @test join([l.str for l in lay.lines], " ") == "one two three"   # words preserved in order
     @test lay.size[2] ≈ 8.0 + (length(lay.lines)-1)*12.0 + 2.0       # height matches N
+end
+
+@testset "integration: prepare → layout (FreeType backend)" begin
+    b = FreeTypeBackend(; font="DejaVu Sans", fontsize=14.0)
+    lay = layout(prepare(b, "the quick brown fox"); max_width=80.0)
+    @test length(lay.lines) ≥ 2                      # wraps at 80 px
+    @test all(isfinite(l.baseline) for l in lay.lines)
+    @test lay.size[1] > 0 && lay.size[2] > 0
 end
 ```
 
