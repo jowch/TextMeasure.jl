@@ -1,5 +1,5 @@
 using Test, TextMeasure
-import TextMeasure: Segment, prepare
+import TextMeasure: Segment, FontMetrics, prepare
 
 # advance_ratio = 1.0, fontsize = 10  ⇒  each char is 10 px wide
 const B = MonospaceBackend(fontsize=10.0, advance_ratio=1.0, lineheight_ratio=1.2)

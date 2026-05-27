@@ -1,5 +1,5 @@
 using Test, TextMeasure
-import TextMeasure: Segment, Prepared, layout, line_top
+import TextMeasure: Segment, Prepared, FontMetrics, layout, line_top
 
 const M = FontMetrics(8.0, 2.0, 12.0)   # ascent 8, descent 2, line_advance 12
 W(s, w) = Segment(s, w, :word)

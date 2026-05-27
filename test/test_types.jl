@@ -1,5 +1,5 @@
 using Test
-include("../src/types.jl")
+import TextMeasure: FontMetrics, Segment, Prepared, Line, Layout
 
 @testset "core types" begin
     m = FontMetrics(8.0, 2.0, 12.0)
