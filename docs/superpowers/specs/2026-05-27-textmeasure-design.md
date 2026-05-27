@@ -124,12 +124,22 @@ FreeTypeBackend(; font="Inter", fontsize=12, dpi=72)
 #   measure: pixel_size * Σ hadvance(get_extent(face, glyph)),  pixel_size = fontsize*dpi/72
 #   font_metrics: ascent = ascender(face)*pixel_size, descent = -descender(face)*pixel_size,
 #                 line_advance = (face.height / units_per_EM) * pixel_size
-#   guard: if face.height == 0 (some bitmap/variable fonts) → line_advance = ascent + descent
+#   guard: if face.height == 0 (some bitmap/odd fonts) → line_advance = ascent + descent
+#          (Makie divides face.height directly with no guard, so in the rare height==0 case
+#           this is a deliberate, safer divergence from Makie rather than a match.)
 
 # extension (weak dep Makie) — struct + methods live in the extension
 MakieBackend(; font=<Makie default>, fontsize=12, px_per_unit=1.0)
-#   resolves the Makie font object → FTFont and folds px_per_unit into pixel size,
-#   then uses the same summed-advance / face-metrics path as FreeTypeBackend
+#   font: resolved via Makie.to_font(font) → an FTFont. Makie.NativeFont === FreeTypeAbstraction.FTFont,
+#         so this loads the IDENTICAL font object Makie's own text! would. Default font =
+#         Makie.to_font(Makie.automatic) (TeX Gyre Heros Makie). Then uses the same summed-advance /
+#         face-metrics path as FreeTypeBackend, with pixel_size = fontsize * px_per_unit.
+#   px_per_unit (default 1.0): LEAVE AT 1.0 to match Makie's markerspace/scene geometry. Makie computes
+#         its text layout — and the markerspace boundingbox(::Text) a repel solver compares against — at
+#         px_per_unit = 1 (fontsize is already in px); px_per_unit is applied only later at rasterization.
+#         Folding in e.g. CairoMakie's default 2.0 would make every box 2× too large vs Makie's own boxes.
+#         Set it >1 only if you want device-pixel dimensions of an exported bitmap. It is a Makie *Screen*
+#         property — not on the Scene, not auto-discoverable pre-render — hence a plain constructor arg.
 ```
 
 `FreeTypeBackend` and `MakieBackend` exist only after their weak dep is loaded
@@ -141,8 +151,10 @@ MakieBackend(; font=<Makie default>, fontsize=12, px_per_unit=1.0)
 
 **Known v1 limitation:** Makie performs per-character font *fallback* (substituting a
 different font for glyphs missing from the primary font). A single-font backend cannot
-replicate this, so labels containing such glyphs may measure slightly off. Acceptable
-for label-repel use; documented.
+replicate this, so labels containing such glyphs may measure slightly off — both in run
+width and, if the fallback font is taller, in the vertical metrics (`font_metrics` always
+reports the primary font's ascent/descent/line_advance). Negligible and acceptable for
+label-repel use; documented.
 
 ## Core types
 
@@ -197,7 +209,7 @@ layout(prep::Prepared;
        lineheight :: Real   = 1.0             # multiplier on metrics.line_advance
       )::Layout
 
-# convenience: top-left y of a line (block top = 0)
+# convenience: top-left y of a line (block top = 0); `ln` must be a line of `lay`
 line_top(lay::Layout, ln::Line) = ln.baseline - lay.metrics.ascent
 ```
 
@@ -257,11 +269,16 @@ stated explicitly:
 - `"a\n"` → 2 lines; the second is empty (width 0, consumes one `la` of height). A
   trailing `\n` *does* produce a trailing empty line — no special-casing.
 - `"\n"` → 2 empty lines; `"\n\n"` → 3 empty lines.
-- An empty or whitespace-only paragraph → one line with `str=""`, `width=0`.
+- A whitespace-only paragraph, or an empty paragraph produced by a `\n` split (interior
+  or trailing), → one line with `str=""`, `width=0`. **The sole exception is the
+  whole-string empty input `""`**, which yields *zero* lines (see Error & edge handling).
+  So every input except `""` produces ≥ 1 line; `"\n"` → 2 lines because the newline
+  separates two empty paragraphs, whereas `""` is no content at all.
 
 ## Error & edge handling (all in the pure layer)
 
-- Empty string `""` → `Layout` with zero lines, `size = (0, 0)`.
+- Empty string `""` → `Layout` with zero lines, `size = (0, 0)` (still carries `metrics`).
+  This is the *only* zero-line input; every other input yields ≥ 1 line.
 - `max_width ≤ 0` or `NaN` → treated as `Inf` (no wrap).
 - Backend returning a negative width → clamped to 0.
 - Backend returning `NaN` → defensive error raised at `prepare` time, naming the
@@ -289,7 +306,9 @@ stated explicitly:
 - **FreeType / Makie extensions:** thin tests gated behind the weak deps — measure a
   known string and assert width is positive, finite, and stable across two calls, plus
   one **golden-value** assertion against a known FreeTypeAbstraction output to catch
-  silent unit/DPI regressions.
+  silent unit/DPI regressions. For the Makie extension, additionally assert that
+  `MakieBackend(px_per_unit=1)` reproduces Makie's markerspace `boundingbox(::Text)`
+  width for a known string (the property MakieRepel relies on).
 
 ## Example consumers (illustrative, not part of this package)
 
