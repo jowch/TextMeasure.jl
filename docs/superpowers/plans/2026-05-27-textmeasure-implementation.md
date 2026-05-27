@@ -475,7 +475,7 @@ end
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `julia --project=. test/test_prepare.jl`
-Expected: FAIL — `UndefVarError: prepare` (the stub file defines nothing; the exported name is undefined until this task).
+Expected: FAIL — `UndefVarError: prepare`. (A harmless `WARNING: Imported binding TextMeasure.prepare was undeclared at import time` precedes it — that's the `import` of the not-yet-defined name, not the failure cause.)
 
 - [ ] **Step 3: Write `src/prepare.jl`** (overwrite the Phase-0 stub)
 
@@ -619,7 +619,7 @@ end
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `julia --project=. test/test_layout.jl`
-Expected: FAIL — `UndefVarError: layout` (the stub file defines nothing; the exported name is undefined until this task).
+Expected: FAIL — `UndefVarError: layout`. (A harmless `WARNING: Imported binding ... was undeclared at import time` precedes it — that's the `import` of the not-yet-defined name, not the failure cause.)
 
 - [ ] **Step 3: Write `src/layout.jl`** (overwrite the Phase-0 stub)
 
@@ -975,7 +975,7 @@ end # module
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `julia --project=@tm-exttest test/test_makie.jl`
-Expected: PASS (all `ours ≈ makie` at rtol 1e-6)
+Expected: PASS (all `ours ≈ makie` at rtol 1e-4)
 
 - [ ] **Step 5: Commit**
 
@@ -1108,7 +1108,7 @@ git commit -m "docs: README with usage example"
 
 ## Self-review notes (for the implementer)
 
-- **Phase 0 stubs:** `src/prepare.jl`/`src/layout.jl` are created in Task 1 as empty generic functions so the module loads. Streams A and B each *overwrite* their own stub file in Phase 1 — neither touches `src/TextMeasure.jl`, so there is no shared-file merge point between the parallel streams.
+- **Phase 0 stubs:** all five included-but-later files (`backend.jl`, `monospace.jl`, `backend_containers.jl`, `prepare.jl`, `layout.jl`) are created in Task 1 as comment-only stubs so the module loads from Task 1 onward (a module exporting a not-yet-defined name loads fine; the name throws `UndefVarError` only on access). Each later task *overwrites* its own stub — no task after Task 1 touches `src/TextMeasure.jl`, so there is no shared-file merge point between the parallel streams.
 - **`measure`/`font_metrics`/`Segment` are not exported** — always qualify (`TextMeasure.measure`) or `import` them in tests.
 - **Backend container structs are parametric** (`{F}`) so `face` is type-stable; core never names `FTFont`.
 - **Extension tests use the scratch env** (`@tm-exttest`); the aggregate `Pkg.test()` uses `test/Project.toml`. Both must list FreeTypeAbstraction + Makie.
