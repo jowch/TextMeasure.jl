@@ -111,6 +111,14 @@ rendered run width exactly**. Adding kerning would make measurements *diverge* f
 Makie, so backends must not apply it. (Because v1 only ever breaks at whitespace,
 inter-segment kerning is moot anyway.)
 
+> **Verified empirically (spike, Makie 0.24.10, fontsize 24, TeX Gyre Heros Makie):**
+> `fontsize · Σ hadvance(get_extent(face, c))` equals `Makie.text_bb(str, font, fontsize)`
+> width to **0.0% relative difference** across kerning-heavy strings (`AVATAR`, `Wm. iii`,
+> `fjord`, `Aconcagua`, …). `Makie.to_font("TeX Gyre Heros Makie")` returns an `FTFont`
+> directly. Metrics for this font: ascent 22.728, descent 5.232, line_advance 27.96 px —
+> note `line_advance == ascent + descent` here (zero line gap), which is why
+> `line_advance` is read as its own field rather than assumed larger.
+
 ### Backends
 
 ```julia
