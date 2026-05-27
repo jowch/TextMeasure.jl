@@ -82,3 +82,33 @@ end
 
     @test_throws ArgumentError layout(p; align=:justify)
 end
+
+@testset "newlines and blank lines" begin
+    # "a\nb" ⇒ 2 lines
+    @test [l.str for l in layout(prep([W("a",6.0), NL(), W("b",6.0)])).lines] == ["a", "b"]
+
+    # trailing newline ⇒ trailing empty line: "a\n" ⇒ ["a", ""]
+    l1 = layout(prep([W("a",6.0), NL()]))
+    @test [l.str for l in l1.lines] == ["a", ""]
+    @test l1.lines[2].width == 0.0
+    @test l1.size[2] == 8.0 + 1*12.0 + 2.0       # N=2
+
+    # lone "\n" ⇒ 2 empty lines; "\n\n" ⇒ 3
+    @test length(layout(prep([NL()])).lines) == 2
+    @test length(layout(prep([NL(), NL()])).lines) == 3
+    @test all(l.str == "" for l in layout(prep([NL(), NL()])).lines)
+end
+
+@testset "whitespace-only and empty" begin
+    # whitespace-only (no newline) ⇒ ONE empty line, width 0, height = ascent+descent
+    lws = layout(prep([Segment("   ",18.0,:space)]))
+    @test length(lws.lines) == 1
+    @test lws.lines[1].str == "" && lws.lines[1].width == 0.0
+    @test lws.size == (0.0, 10.0)
+
+    # empty input (no segments) ⇒ ZERO lines, size (0,0); still carries metrics
+    le = layout(Prepared(Segment[], M))
+    @test isempty(le.lines)
+    @test le.size == (0.0, 0.0)
+    @test le.metrics === M
+end
