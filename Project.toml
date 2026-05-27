@@ -1,0 +1,4 @@
+name = "TextMeasure"
+uuid = "06791c1d-2336-41e1-bd6f-a74c63395da6"
+version = "0.1.0"
+authors = ["Jonathan Chen <jwhc@ucla.edu>"]
