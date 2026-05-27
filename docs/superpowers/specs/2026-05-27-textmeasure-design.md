@@ -75,7 +75,7 @@ registration). Extension module name = file name = `[extensions]` key (Julia ≥
 ### Data flow
 
 ```
-prepare(str, backend)  ──[backend calls]──▶  Prepared          (once, expensive)
+prepare(backend, text) ──[backend calls]──▶  Prepared          (once, expensive)
 layout(prep; max_width, align, lineheight) ─▶ Layout           (many times, pure)
 ```
 
@@ -93,8 +93,9 @@ Distributions, and are interface methods, not application-facing calls):
 ```julia
 abstract type AbstractMeasurementBackend end
 
-# (1) advance width of a single text run, in pixels
-TextMeasure.measure(backend::AbstractMeasurementBackend, run::AbstractString)::Float64
+# (1) advance width of a single text run, in pixels.
+#     `text` is one run — no line breaks; prepare() owns segmentation.
+TextMeasure.measure(backend::AbstractMeasurementBackend, text::AbstractString)::Float64
 
 # (2) vertical metrics for the backend's configured font, in pixels
 TextMeasure.font_metrics(backend::AbstractMeasurementBackend)::FontMetrics
@@ -124,7 +125,7 @@ inter-segment kerning is moot anyway.)
 ```julia
 # core, zero-dep — also the deterministic test backend
 MonospaceBackend(; fontsize=12, advance_ratio=0.6, lineheight_ratio=1.2)
-#   measure(b, run)  = length(graphemes(run)) * advance_ratio * fontsize
+#   measure(b, text) = length(graphemes(text)) * advance_ratio * fontsize
 #   font_metrics(b)  = FontMetrics(0.8*fontsize, 0.2*fontsize, lineheight_ratio*fontsize)
 
 # extension (weak dep FreeTypeAbstraction) — struct + methods live in the extension
@@ -209,7 +210,7 @@ across repeated `layout` calls).
 ## Public API
 
 ```julia
-prepare(str::AbstractString, backend::AbstractMeasurementBackend)::Prepared
+prepare(backend::AbstractMeasurementBackend, text::AbstractString)::Prepared
 
 layout(prep::Prepared;
        max_width  :: Real   = Inf,
