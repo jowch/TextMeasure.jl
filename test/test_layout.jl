@@ -64,3 +64,21 @@ end
     @test line_top(lay, lay.lines[1]) == 0.0    # baseline 8 - ascent 8
     @test line_top(lay, lay.lines[2]) == 12.0   # baseline 20 - ascent 8 = la
 end
+
+@testset "alignment" begin
+    # two lines of differing width: "abcd"(24) wraps from "ef"(12) at max_width=24
+    segs = [W("abcd",24.0), Segment(" ",6.0,:space), W("ef",12.0)]
+    p = prep(segs)
+
+    ll = layout(p; max_width=24.0, align=:left)
+    @test [l.x for l in ll.lines] == [0.0, 0.0]
+
+    lc = layout(p; max_width=24.0, align=:center)
+    @test lc.size[1] == 24.0
+    @test [l.x for l in lc.lines] == [0.0, 6.0]   # (24-24)/2, (24-12)/2
+
+    lr = layout(p; max_width=24.0, align=:right)
+    @test [l.x for l in lr.lines] == [0.0, 12.0]  # 24-24, 24-12
+
+    @test_throws ArgumentError layout(p; align=:justify)
+end
