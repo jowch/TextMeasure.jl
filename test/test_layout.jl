@@ -112,3 +112,26 @@ end
     @test le.size == (0.0, 0.0)
     @test le.metrics === M
 end
+
+@testset "lineheight scales baseline spacing and height" begin
+    # two lines via an explicit newline; M.line_advance = 12, ascent 8, descent 2
+    segs = [W("a", 6.0), NL(), W("b", 6.0)]
+
+    # default lineheight = 1.0: la = 12 ⇒ baselines [8, 20], height = 8 + 12 + 2 = 22
+    d = layout(prep(segs))
+    @test [l.baseline for l in d.lines] == [8.0, 20.0]
+    @test d.size[2] == 22.0
+
+    # lineheight = 2.0: la = 24 ⇒ baselines [8, 32], height = 8 + 24 + 2 = 34
+    l2 = layout(prep(segs); lineheight=2.0)
+    @test [l.baseline for l in l2.lines] == [8.0, 32.0]
+    @test l2.size[2] == 34.0
+
+    # lineheight = 0.5: la = 6 ⇒ baselines [8, 14], height = 8 + 6 + 2 = 16
+    lh = layout(prep(segs); lineheight=0.5)
+    @test [l.baseline for l in lh.lines] == [8.0, 14.0]
+    @test lh.size[2] == 16.0
+
+    # lineheight never changes width
+    @test l2.size[1] == d.size[1] == 6.0
+end
