@@ -18,6 +18,14 @@ struct Prepared
     metrics  :: FontMetrics
 end
 
+"""
+    Prepared(; segments, metrics)
+
+Keyword constructor (outer method) forwarding to the positional
+`Prepared(segments, metrics)`. The auto-generated positional constructor is preserved.
+"""
+Prepared(; segments, metrics) = Prepared(segments, metrics)
+
 """One laid-out line. `str`/`width` are trimmed of leading/trailing whitespace.
 `baseline` y has block-top = 0, increasing downward; `x` is the alignment offset."""
 struct Line
