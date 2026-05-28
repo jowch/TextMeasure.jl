@@ -45,10 +45,13 @@ match Makie exactly.
 ## Scope
 
 In scope:
-- `RichText` with arbitrary nesting of spans, **including embedded `\n` (multi-line)**.
+- `RichText` with arbitrary nesting of spans, **including embedded `\n` (multi-line) at any
+  nesting depth** — a newline inside a nested span persists for subsequent outer-span text
+  (implemented via a global line-drop counter; see Architecture).
 - Per-span `font`, `fontsize`, `offset` resolution with inheritance from the parent/default.
 - `subscript` / `superscript` baseline shifts and `0.66` scale (Makie's hardcoded constants).
-- `subsup` / `leftsubsup` — stacked two-child sub+super spans (the consumer uses these).
+- `subsup` / `leftsubsup` — stacked two-child sub+super spans (the consumer uses these),
+  **including `:fontsize`/`:font` set on the subsup node itself** (applied to both children).
 - Mixed fonts (bold / italic) — these are simply spans with a different `:font`/`:fontsize`,
   so they fall out of the same tree walk for free.
 - **Degenerate inputs:** empty `RichText` (`rich("")`) and whitespace-only `RichText`
@@ -151,21 +154,30 @@ A new file (e.g. `src/bounds.jl`) adds:
     `:sub` → size `× 0.66`, baseline `− 0.25·parent_size`; `:span` → unchanged.
   - `:subsup` / `:leftsubsup` — stacked two-child spans (exactly two children: sub, super).
     Both children are laid out from the **same parent x and baseline**, the sub shifted down by
-    `−0.25·parent_size` and the super up by `+0.40·parent_size` at `0.66` scale (same baseline
-    *constants* as `:sub`/`:sup`, but **note: the subsup children do _not_ apply the span
-    `offset` attribute** — only `:sub`/`:sup`/`:span` do). x then advances by the **max** of the
-    two children's post-x. `:subsup` is left-aligned at the shared start x; `:leftsubsup` is
-    right-aligned via Makie's `right_align!`, which aligns by the **ink bounding-box right
-    edge** (not advance width) — mirror `ink_bounding_box` math exactly. Makie forbids internal
-    line breaks here. Exact horizontal placement is pinned by the golden test.
+    `−0.25·parent_size` and the super up by `+0.40·parent_size` (baseline shift constants stay
+    parent-based). The **subsup node's own `:fontsize`** (default `0.66·parent_size`) and
+    **`:font`** (default parent) are read from the node's attributes and applied to **both**
+    children's glyph runs — matching Makie's `new_glyphstate` for `:subsup_sub`/`:subsup_sup`.
+    **Note:** the subsup children do _not_ apply the span `offset` attribute (only
+    `:sub`/`:sup`/`:span` do). x then advances by the **max** of the two children's post-x.
+    `:subsup` is left-aligned at the shared start x; `:leftsubsup` is right-aligned via Makie's
+    `right_align!`, which aligns by the **ink bounding-box right edge** (not advance width) —
+    mirror `ink_bounding_box` math exactly. Makie forbids internal line breaks here. Exact
+    horizontal placement is pinned by the golden test.
   - For each character in a string leaf, advance `x` by `hadvance(get_extent(font, char))
     × size`, using `find_font_for_char` fallback when the span's font lacks the glyph (mirror
     Makie). Sum advances with **no kerning**.
-  - On `\n` in a string leaf, reset `x = 0` and drop the baseline by Makie's per-line spacing.
-    **Note:** Makie 0.24.x's `apply_lineheight!` is a hardcoded stub — a flat `20` px per line
-    (`oy - (i-1)*20`), independent of fontsize or `lineheight`, marked `# TODO: Lineheight` in
-    Makie. We mirror that `20` px to match Makie's current bbox. This is the most fragile
-    constant we depend on; the golden test guards it (see Risks).
+  - On `\n` in a string leaf, reset `x = 0` and bump a **shared, monotonic line-drop counter**
+    (passed as a `Ref{Float64}` alongside the per-node glyph state). Per-node `baseline` carries
+    only the sub/sup shift and **restores** on node return; the line-drop counter is **never
+    restored**, so a `\n` nested inside a span correctly persists for subsequent outer-span
+    text. Each emitted run's final baseline is `gs.baseline − drop[]`. This mirrors Makie's
+    two-stage model: `process_rt_node!` only buckets glyphs into a global `lines` list, and a
+    separate `apply_lineheight!` pass drops line *i* by `(i−1)·20`. **Note:** Makie 0.24.x's
+    `apply_lineheight!` is a hardcoded stub — a flat `20` px per line (`oy - (i-1)*20`),
+    independent of fontsize or `lineheight`, marked `# TODO: Lineheight` in Makie. We mirror
+    that `20` px to match Makie's current bbox. This is the most fragile constant we depend
+    on; the golden test guards it (see Risks).
   - Emit one `StyledRun` per contiguous styled run (a string leaf under one glyph state, on one
     line), with `ascent`/`descent` from that run's resolved font/size.
   - **Degenerate inputs:** an empty `RichText` produces zero runs → `bounds([]) =

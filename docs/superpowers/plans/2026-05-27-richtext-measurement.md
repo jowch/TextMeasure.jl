@@ -452,6 +452,9 @@ Add inside the outer `@testset` in `test/test_richtext.jl`:
     @testset "subsup / leftsubsup" begin
         check(Makie.rich("x", Makie.subsup("i", "2")))           # sub="i", super="2"
         check(Makie.rich("M", Makie.left_subsup("a", "b"), "z"))
+        # node-level :fontsize / :font on the subsup node itself (must be read from rt.attributes)
+        check(Makie.rich("x", Makie.subsup("i", "2"; fontsize = 30.0)))
+        check(Makie.rich("x", Makie.subsup("i", "2"; font = "TeX Gyre Heros Makie Bold")))
     end
 ```
 
@@ -463,18 +466,26 @@ Expected: FAIL — `ArgumentError: unsupported RichText span type: subsup`.
 Add this helper next to `_rt_child` in `ext/TextMeasureMakieExt.jl`:
 
 ```julia
-# sub/sup child state for subsup children. NOTE: Makie does NOT apply the span `offset`
-# to subsup children (unlike :sub/:sup), so none is added here.
-# v1 gap (not exercised by supported labels): a `:fontsize`/`:font` set directly on the
-# `subsup`/`leftsubsup` node itself is ignored here — Makie reads it from the node's own
-# attributes. Document, don't fix, until a consumer needs it.
-_rt_subsup(gs::_RTState, ::Val{:sup}) =
-    _RTState(gs.x, gs.baseline + 0.40 * gs.size, 0.66 * gs.size, gs.font)
-_rt_subsup(gs::_RTState, ::Val{:sub}) =
-    _RTState(gs.x, gs.baseline - 0.25 * gs.size, 0.66 * gs.size, gs.font)
+# sub/sup child state for subsup children. Reads :fontsize/:font from the SUBSUP NODE's
+# own attributes (default 0.66·parent / parent font), matching Makie's new_glyphstate for
+# :subsup_sub/:subsup_sup. NOTE: Makie does NOT apply the span `offset` to subsup children
+# (unlike :sub/:sup), so none is added here. The baseline shift constants stay parent-based.
+function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sup})
+    att  = rt.attributes
+    size = Float64(get(att, :fontsize, 0.66 * gs.size))
+    font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+    return _RTState(gs.x, gs.baseline + 0.40 * gs.size, size, font)
+end
+function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sub})
+    att  = rt.attributes
+    size = Float64(get(att, :fontsize, 0.66 * gs.size))
+    font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+    return _RTState(gs.x, gs.baseline - 0.25 * gs.size, size, font)
+end
 ```
 
-Replace `_rt_walk!` with the version that special-cases the stacked types:
+Replace `_rt_walk!` with the version that special-cases the stacked types (passing the
+subsup node `rt` into `_rt_subsup` so its `:fontsize`/`:font` attributes flow through):
 
 ```julia
 function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
@@ -484,9 +495,10 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
     if t === :subsup || t === :leftsubsup
         length(rt.children) == 2 ||
             throw(ArgumentError("$t requires exactly 2 children (sub, super)"))
-        # children laid out from the SAME parent x and baseline (child 1 = sub, 2 = super)
-        e_sub = _rt_walk!(runs, _rt_subsup(gs, Val(:sub)), rt.children[1])
-        e_sup = _rt_walk!(runs, _rt_subsup(gs, Val(:sup)), rt.children[2])
+        # children laid out from the SAME parent x and baseline (child 1 = sub, 2 = super);
+        # subsup node's :fontsize/:font flow to both children via `rt` → _rt_subsup
+        e_sub = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
+        e_sup = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sup)), rt.children[2])
         # AABB advances by the wider child; alignment doesn't change the union box
         return _RTState(max(e_sub.x, e_sup.x), gs.baseline, gs.size, gs.font)
     else
@@ -494,11 +506,9 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
         for child in rt.children
             cur = _rt_walk!(runs, cur, child)
         end
-        # Advance x; restore baseline/size/font to the parent. v1 limitation: this discards
-        # any line-drop a `\n` introduced *inside* this child, so a newline nested in a span
-        # followed by more outer-span text (e.g. rich(rich("a\nb"), "c")) would mis-place the
-        # trailing text. Supported labels put `\n` at the top level, so this is not exercised;
-        # documented rather than handled in v1.
+        # Advance x; restore sub/sup baseline shift + size/font to the parent.
+        # (Line position is threaded globally via the line-drop Ref added in Task 5,
+        # so a `\n` inside this child correctly persists after we return.)
         return _RTState(cur.x, gs.baseline, gs.size, gs.font)
     end
 end
@@ -523,50 +533,68 @@ git commit -m "feat: RichText subsup/leftsubsup measurement"
 
 ---
 
-### Task 5: Multi-line (`\n`)
+### Task 5: Multi-line (`\n`) — including newlines nested inside spans
 
 **Files:**
-- Modify: `ext/TextMeasureMakieExt.jl` (handle `\n` in `_rt_string!`)
-- Modify: `test/test_richtext.jl` (add golden cases)
+- Modify: `ext/TextMeasureMakieExt.jl` (rework `_rt_string!`, `_rt_walk!`, `measure_bounds`
+  to thread a global line-drop counter)
+- Modify: `test/test_richtext.jl` (add golden cases including nested newlines)
 
-- [ ] **Step 1: Write the failing test**
+**Design note — mirror Makie's two-stage layout.** Makie's `process_rt_node!` does not bake the
+line drop into glyph baselines; instead it appends glyphs to a **global `lines` list** (a `\n`
+pushes a new bucket), and a separate `apply_lineheight!` pass drops line *i* by `(i−1)·20`. We
+mirror that: the per-node `gs.baseline` carries only the sub/sup shift (and is restored on node
+return), while a shared `drop::Ref{Float64}` is the **global, monotonic** line-drop counter that
+increments on every `\n` and is **never restored** across nested-span boundaries. Each emitted
+`StyledRun` gets `baseline = gs.baseline − drop[]`. This makes
+`rich(rich("x\n"), "y")` work correctly: the `\n`'s drop persists when the nested span returns,
+so `"y"` lands on line 2, not back on line 1.
+
+- [ ] **Step 1: Write the failing test (including nested-newline cases)**
 
 Add inside the outer `@testset` in `test/test_richtext.jl`:
 
 ```julia
     @testset "multi-line" begin
+        # top-level newlines
         check(Makie.rich("line one\nline two"))
         check(Makie.rich("a\nbb\nccc"))
         check(Makie.rich("top\n", Makie.superscript("x")))
+        # newlines nested inside spans — the line drop must persist across the span boundary
+        check(Makie.rich(Makie.rich("x\n"), "y"))
+        check(Makie.rich(Makie.rich("a\nb"), "c"))
+        check(Makie.rich("pre ", Makie.rich("inner\nnext", fontsize = 18.0), " post"))
     end
 ```
 
 Run: `julia --project=test -e 'using TextMeasure, Test, Makie; include("test/test_richtext.jl")'`
-Expected: FAIL — height/width wrong (the current `_rt_string!` advances `x` past `\n` instead of
-starting a new line; the box is too wide and too short).
+Expected: FAIL — the current `_rt_string!` has no `\n` handling, so the top-level multi-line
+cases give too-wide / too-short boxes, and the nested cases additionally collapse the line drop
+when the inner span returns.
 
-- [ ] **Step 2: Handle `\n` in `_rt_string!`**
+- [ ] **Step 2: Rework `_rt_string!`, `_rt_walk!`, and `measure_bounds` to thread a global line-drop Ref**
 
-Replace `_rt_string!` in `ext/TextMeasureMakieExt.jl` with the line-aware version. Makie 0.24.x's
-`apply_lineheight!` is a hardcoded stub — each line drops by a flat `20`px (`oy - (i-1)*20`),
-independent of fontsize/lineheight. We mirror that constant.
+Add the constant and the three replacement functions in `ext/TextMeasureMakieExt.jl`.
 
 ```julia
 const _RT_LINE_DROP = 20.0   # Makie 0.24.x apply_lineheight! stub: flat 20px/line (# TODO in Makie)
 
-# Emit StyledRuns for a string leaf, splitting at '\n' (x→0, baseline drops 20px per line).
-function _rt_string!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, s::AbstractString)
+# Emit StyledRuns for a string leaf, splitting at '\n'. On '\n', x resets to 0 and the GLOBAL
+# `drop[]` line counter increments — `gs.baseline` (sub/sup shift) is untouched. Each emitted
+# run's baseline is `gs.baseline - drop[]`, mirroring Makie's two-stage (process_rt_node! +
+# apply_lineheight!) layout.
+function _rt_string!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
+                     gs::_RTState, s::AbstractString)
     asc  =  FTA.ascender(gs.font)  * gs.size
     desc = -FTA.descender(gs.font) * gs.size
-    x = gs.x; baseline = gs.baseline
-    seg_start = gs.x; seg_w = 0.0; nonempty = false
+    x = gs.x; seg_start = gs.x; seg_w = 0.0; nonempty = false
     for ch in s
         if ch == '\n'
             if nonempty
-                push!(runs, TextMeasure.StyledRun(seg_start, baseline, seg_w, asc, desc))
+                push!(runs, TextMeasure.StyledRun(seg_start, gs.baseline - drop[], seg_w, asc, desc))
             end
-            x = 0.0; baseline -= _RT_LINE_DROP
-            seg_start = 0.0; seg_w = 0.0; nonempty = false
+            drop[] += _RT_LINE_DROP        # global, monotonic — persists across node returns
+            x = 0.0; seg_start = 0.0; seg_w = 0.0; nonempty = false
         else
             bestfont = Makie.find_font_for_char(ch, gs.font)
             adv = FTA.hadvance(FTA.get_extent(bestfont, ch)) * gs.size
@@ -574,26 +602,60 @@ function _rt_string!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, s::Abstr
         end
     end
     if nonempty
-        push!(runs, TextMeasure.StyledRun(seg_start, baseline, seg_w, asc, desc))
+        push!(runs, TextMeasure.StyledRun(seg_start, gs.baseline - drop[], seg_w, asc, desc))
     end
-    return _RTState(x, baseline, gs.size, gs.font)
+    return _RTState(x, gs.baseline, gs.size, gs.font)
+end
+
+# Walk threads `drop` through every recursive call. Sub/sup shift restores on node return;
+# `drop` does not (it's a Ref — shared across the whole walk).
+function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
+                   gs::_RTState, node)
+    node isa AbstractString && return _rt_string!(runs, drop, gs, node)
+    rt = node::Makie.RichText
+    t  = rt.type
+    if t === :subsup || t === :leftsubsup
+        length(rt.children) == 2 ||
+            throw(ArgumentError("$t requires exactly 2 children (sub, super)"))
+        e_sub = _rt_walk!(runs, drop, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
+        e_sup = _rt_walk!(runs, drop, _rt_subsup(gs, rt, Val(:sup)), rt.children[2])
+        return _RTState(max(e_sub.x, e_sup.x), gs.baseline, gs.size, gs.font)
+    else
+        cur = _rt_child(gs, rt)
+        for child in rt.children
+            cur = _rt_walk!(runs, drop, cur, child)
+        end
+        return _RTState(cur.x, gs.baseline, gs.size, gs.font)
+    end
+end
+
+function TextMeasure.measure_bounds(b::TextMeasure.MakieBackend, rt::Makie.RichText)
+    runs = TextMeasure.StyledRun[]
+    drop = Ref(0.0)
+    gs0  = _RTState(0.0, 0.0, _pixel_size(b), b.face)
+    _rt_walk!(runs, drop, gs0, rt)
+    return TextMeasure.bounds(runs)
 end
 ```
 
 - [ ] **Step 3: Run the test to verify it passes**
 
 Run: `julia --project=test -e 'using TextMeasure, Test, Makie; include("test/test_richtext.jl")'`
-Expected: PASS for all testsets.
+Expected: PASS for all testsets (including the nested-newline cases — the box should match
+Makie's bbox exactly, since `drop` persists across the inner span's return).
 
 > If multi-line height is off by a consistent amount, confirm the live Makie version: `using Makie;
 > pkgversion(Makie)`. The `20`px constant is for 0.24.x; if Makie changed it, update `_RT_LINE_DROP`
 > and the comment, and note the new validated version in `test/test_richtext.jl`.
+> If only the *nested* cases fail while the top-level ones pass, the `drop` Ref isn't actually
+> being threaded — verify the recursive `_rt_walk!` calls all pass `drop` and that `_rt_walk!` does
+> not return a fresh `_RTState` that drops `drop` (it shouldn't; `drop` lives outside the state).
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add ext/TextMeasureMakieExt.jl test/test_richtext.jl
-git commit -m "feat: multi-line RichText (mirror Makie 20px line-spacing stub)"
+git commit -m "feat: multi-line RichText incl. nested newlines (global line-drop Ref)"
 ```
 
 ---
