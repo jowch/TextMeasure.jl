@@ -74,3 +74,60 @@ end
     pk = shape_pack(prep, rect_chord_fn(50); line_advance=prep.metrics.line_advance)
     @test isempty(pk.placements) && isempty(pk.overflowed)
 end
+
+@testset "overflow: widest_row places + records" begin
+    b = MonospaceBackend()
+    prep = prepare(b, "tiny enormousindivisibletoken end")
+    big = findfirst(s -> s.str == "enormousindivisibletoken", prep.segments)
+    bigw = prep.segments[big].width
+    w = bigw - 10.0                                   # narrower than the big token
+    pk = shape_pack(prep, rect_chord_fn(w); line_advance=prep.metrics.line_advance, min_chord_width=0.0)
+    @test big in pk.overflowed
+    @test any(p -> p.segment_index == big && p.x == 0.0, pk.placements)   # still placed at L
+    @test any(p -> prep.segments[p.segment_index].str == "tiny", pk.placements)
+    @test any(p -> prep.segments[p.segment_index].str == "end", pk.placements)
+end
+
+@testset "overflow: skip drops + records + back-fills same band" begin
+    b = MonospaceBackend()
+    # big token is the FIRST word of band 1, so the following fitting word back-fills band 1.
+    prep = prepare(b, "enormousindivisibletoken end")
+    big = findfirst(s -> s.str == "enormousindivisibletoken", prep.segments)
+    w = prep.segments[big].width - 10.0
+    pk = shape_pack(prep, rect_chord_fn(w); line_advance=prep.metrics.line_advance,
+                    min_chord_width=0.0, overflow_strategy=:skip)
+    @test big in pk.overflowed
+    @test all(p -> p.segment_index != big, pk.placements)                # never placed
+    endp = only(p for p in pk.placements if prep.segments[p.segment_index].str == "end")
+    @test endp.y == prep.metrics.ascent                                  # band-1 baseline (back-fill)
+end
+
+@testset "overflow: reject aborts" begin
+    b = MonospaceBackend()
+    prep = prepare(b, "tiny enormousindivisibletoken end")
+    big = findfirst(s -> s.str == "enormousindivisibletoken", prep.segments)
+    w = prep.segments[big].width - 10.0
+    pk = shape_pack(prep, rect_chord_fn(w); line_advance=prep.metrics.line_advance,
+                    min_chord_width=0.0, overflow_strategy=:reject)
+    @test isempty(pk.placements)
+    @test big in pk.overflowed
+    endidx = findfirst(s -> s.str == "end", prep.segments)
+    @test endidx in pk.overflowed                     # all later :word indices overflowed
+end
+
+@testset "min_chord_width skips narrow bands" begin
+    b = MonospaceBackend()
+    prep = prepare(b, "aaa bbb ccc ddd eee")
+    la = prep.metrics.line_advance
+    # even bands wide (100), odd bands a 5px sliver. min_chord_width=24 ⇒ slivers skipped.
+    cf = (yt, yb) -> begin
+        band = round(Int, yt / la) + 1
+        iseven(band) ? [(0.0, 100.0)] : [(0.0, 5.0)]
+    end
+    pk = shape_pack(prep, cf; line_advance=la, min_chord_width=24.0)
+    @test !isempty(pk.placements)
+    for p in pk.placements
+        band = round(Int, (p.y - prep.metrics.ascent) / la) + 1
+        @test iseven(band)                            # odd slivers were skipped
+    end
+end
