@@ -86,6 +86,7 @@ Add `Prepared(; segments, metrics)` kwargs constructor and `subprep(prep, r)` na
 - `Prepared(; segments=s, metrics=m).segments == s` and `.metrics == m`.
 - `subprep(prep, 1:length(prep.segments)) == prep` semantically.
 - Slicing at a word boundary, calling `layout` on both halves, confirms widths sum back correctly.
+- Slicing across `:newline` or `:space` segments preserves segment integrity (the segments end up in the side they're indexed into; no segments dropped or duplicated).
 - Export `subprep` from TextMeasure.
 - Updated `CHANGELOG.md` entry.
 
@@ -106,7 +107,7 @@ New sibling package at `examples/Figlet/` with its own `Project.toml`. Standalon
 **Part 2 — TextMeasure backend container + extension.**
 - `src/backend_containers.jl` gains `FigletBackend` struct, alongside the existing `FreeTypeBackend` and `MakieBackend` containers (same in-tree pattern).
 - TextMeasure's `Project.toml` declares `Figlet` as a `[weakdeps]` and an `[extensions]` entry pointing to `TextMeasureFigletExt`.
-- `ext/TextMeasureFigletExt.jl` mirrors `ext/TextMeasureFreeTypeExt.jl` and `ext/TextMeasureMakieExt.jl`: provides the keyword constructor `FigletBackend(; font="small", letter_gap=0, font_data=nothing)` plus `TextMeasure.measure(::FigletBackend, ::AbstractString)` and `TextMeasure.font_metrics(::FigletBackend)`. Activated when the user does `using Figlet`.
+- `ext/TextMeasureFigletExt.jl` mirrors `ext/TextMeasureFreeTypeExt.jl` and `ext/TextMeasureMakieExt.jl`: provides the keyword constructor `FigletBackend(; font::Union{String,Figlet.FigletFont}="small", letter_gap=0)` (string → `Figlet.load_font(name)`; `FigletFont` → use directly — mirrors the `font` parameter pattern in the existing exts, no separate `font_data` escape hatch) plus `TextMeasure.measure(::FigletBackend, ::AbstractString)` and `TextMeasure.font_metrics(::FigletBackend)`. **Does not implement `measure_bounds`** — Figlet is plain monospace-cell text with no styled-text analog (unlike Makie's `RichText`), so the 2-D bounded primitive does not apply. Activated when the user does `using Figlet`.
 - Heavy commentary in `ext/TextMeasureFigletExt.jl` as a teaching artifact, explicitly framed as "the third example of the weakdep-extension backend pattern" (cross-referenced with the two existing exts). `AbstractMeasurementBackend`'s docstring points here.
 
 **License audit process (explicit).** Best-effort SPDX-tag review by the maintainer at the time of font bundling, recorded in `font_provenance.toml`. Fonts whose declared license is ambiguous, GPL-only, or otherwise MIT-incompatible are **excluded** from `src/fonts/` and documented in `LICENSES.md` with rationale. Lives in the `Figlet.jl` package, not TextMeasure. This is not a legal review; users are advised to verify before redistribution.
@@ -116,7 +117,7 @@ New sibling package at `examples/Figlet/` with its own `Project.toml`. Standalon
 - `LICENSES.md` exists in `examples/Figlet/`; each shipped font has a verified MIT-compatible license cited.
 - `font_provenance.toml` exists with the schema above; ambiguous-license fonts noted as excluded.
 - The extension is correctly registered: importing `Figlet` after `TextMeasure` activates the ext (verifiable via `Base.get_extension(TextMeasure, :TextMeasureFigletExt) !== nothing`).
-- `FigletBackend` passes backend conformance tests (cell-space measurement, integer widths, ascent/descent matches font header).
+- `FigletBackend` passes backend conformance tests (cell-space measurement, integer-valued widths returned as `Float64` to honor the `measure` return-type contract, ascent/descent matches font header).
 - The ext file's preamble explains the pattern; `AbstractMeasurementBackend` docstring cross-references all three exts.
 - CI matrix runs an integration test using `Pkg.develop` chain on both packages.
 
@@ -146,13 +147,15 @@ shape_pack(prep::Prepared, chord_fn; line_advance, min_chord_width=24,
 ```
 
 **`chord_fn` contract.**
-- `chord_fn(y::Real) -> Vector{Tuple{Float64,Float64}}` returns per-band horizontal intervals at the band whose **top** is `y` (block-top coord frame, matching `layout`).
+- `chord_fn(y_top::Real, y_bottom::Real) -> Vector{Tuple{Float64,Float64}}` returns the horizontal intervals **where text can be placed** in the band `[y_top, y_bottom]` (block-top coord frame, matching `layout`).
+- **Relationship to pretext.js.** Inspired by pretext's per-band scanline approach (`wrap-geometry.ts`) but **the signatures differ**: pretext's `getPolygonIntervalForBand` returns a single envelope `Interval | null` representing an OBSTACLE; pretext then subtracts obstacle envelopes from the base column via `carveTextLineSlots` to compute available slots. Our `chord_fn` returns available intervals directly, which lets the same primitive serve both text-INSIDE-shape (asteroid TUI, where the silhouette IS the available area) and text-AROUND-obstacle (DOIInfograph figure pillar, map feature, cover) use cases without the subtract step. Disjoint runs are preserved (a concave silhouette can have multiple runs within a band).
 - Returned `(left, right)` pairs are **sorted ascending and pairwise disjoint** (callers can assume non-overlapping runs).
-- An empty vector means no chord at this y (skip the band).
-- A typed callable `AbstractChordFn` with dispatched `chord_intervals(shape, y)` is **the preferred long-term API**; for milestone-1 a plain `Function` closure is acceptable, but the helper constructors below return typed wrappers to ease the future migration.
+- An empty vector means no chord intersects this band (skip the band).
+- **Multi-interval packing policy:** when a band has multiple disjoint intervals, `shape_pack` packs into the **widest** one and ignores the others; words are never split across disjoint intervals. Bands where the widest interval is below `min_chord_width` are skipped.
+- A typed callable `AbstractChordFn` with dispatched `chord_intervals(shape, y_top, y_bottom)` is **the preferred long-term API**; for milestone-1 a plain `Function` closure is acceptable, but the helper constructors below return typed wrappers to ease the future migration.
 
 **Two `chord_fn` constructors as helpers:**
-- `polygon_chord_fn(polygon::Vector{Point2}) :: PolygonChordFn` — scanline intersection of a 2-D polygon.
+- `polygon_chord_fn(polygon::Vector{GeometryBasics.Point2{Float64}}) :: PolygonChordFn` — scanline intersection of a 2-D polygon. (`Point2{Float64}` pinned to GeometryBasics for downstream interop with Makie's plotting types.)
 - `raster_chord_fn(raster::BitMatrix, cell_size::Real) :: RasterChordFn` — for cell-grid silhouettes (Tachikoma).
 
 **Overflow strategies:** `:widest_row` (default — render in the widest available row, accept overflow), `:skip` (drop the segment, add to `overflowed`), `:reject` (return empty `PackedLayout` with all subsequent segments in `overflowed`).
@@ -205,6 +208,8 @@ Three exports:
 
 **Cross-platform scope:** Linux and macOS only for v1. Windows is OOS due to ANSI / raw-mode / sigwinch fragility.
 
+**Julia compat:** Tachikoma.jl requires Julia 1.12+, which is higher than TextMeasure's 1.11 floor. Because each demo carries its own `Project.toml`/`Manifest.toml`, `examples/asteroid_tui/Project.toml` will set `julia = "1.12"` independently of TextMeasure proper. This does not affect TextMeasure's published compat.
+
 **Acceptance:**
 - Hit one asteroid, observe legible split into two shard-prose chunks (**"legible" defined operationally:** every glyph from the original prose appears in exactly one shard's render, in original order, with no character drops or duplicates).
 - ≥30fps on Linux/macOS in a 120×40 terminal during steady-state play with ~5 asteroids (measured via wall-clock between frame swaps).
@@ -218,10 +223,10 @@ Three exports:
 
 **Scope:** API clients for OpenAlex, CrossRef, Semantic Scholar; abstract reconstruction from OpenAlex's inverted index; opt-in `og:image` scraping; offline-cached responses for the acceptance DOIs.
 
-- `OpenAlexClient(; mailto::String)` — `HTTP.jl` + `JSON3.jl`. Reconstruct abstract from `abstract_inverted_index` (flatten, sort by position, join).
+- `OpenAlexClient(; mailto::String)` — `HTTP.jl` + `JSON3.jl`. Reconstruct abstract from `abstract_inverted_index`: emit one `(word, position)` pair per occurrence (handles multi-position words like `"of" → [2, 34, 49, …]`), sort globally by position, join with single spaces. Edge cases: **duplicate positions** (rare but observed) are resolved by stable sort with word order; **position gaps** (rare) are tolerated as missing words and yield extra inter-word spacing.
 - `CrossRefClient(; mailto)` — fallback metadata and references.
 - `SemanticScholarClient()` — for the `tldr` field.
-- `fetch_doi_metadata(doi; fetch_figure=false)` returns a `PaperMetadata` struct (title, authors, abstract, tldr, citation_count, citations_by_year, concepts, oa_status, oa_url, figure_url, pp, journal, year, doi).
+- `fetch_doi_metadata(doi; fetch_figure=false)` returns a `PaperMetadata` struct with fields: `title::String`, `authors::Vector{AuthorRef}` (where `AuthorRef` is a small struct with `given`, `family`, optional `affiliation`), `abstract::Union{String,Nothing}`, `tldr::Union{String,Nothing}`, `citation_count::Int`, `citations_by_year::Vector{Tuple{Int,Int}}` (year, count), `concepts::Vector{Tuple{String,Float64}}` (name, score), `oa_status::Symbol` (∈ `:gold, :green, :hybrid, :closed, :unknown`), `oa_url::Union{String,Nothing}`, `figure_url::Union{String,Nothing}` (`nothing` when `fetch_figure=false` or scrape failed), `pp::Union{String,Nothing}` (printed page range as a string, e.g., `"505–510"`; `nothing` if unavailable), `journal::Union{String,Nothing}`, `year::Union{Int,Nothing}`, `doi::String`.
 - `fetch_figure=false` by default — to respect publisher ToS. When opt-in, scrapes `og:image` from publisher page with explicit `User-Agent: TextMeasure.jl/<version> mailto=<user>` header.
 - **All six** acceptance DOIs (see #F3) have their JSON responses **cached to `examples/doi_infograph/data/cache/`** for offline + reproducible CI.
 
@@ -246,7 +251,7 @@ Three exports:
 - **Concept pill wrap** — pills measured as atomic segments; greedy fit into the pill strip width with row wrap.
 - **Citation sparkline** — Unicode block characters chosen so the sparkline's measured width matches the surrounding caption's measured width within ±1 glyph.
 
-Body justification uses greedy `layout` by default. If #K ships, opt into K-P via `infograph(doi; justification=:knuth_plass)`.
+Body justification uses greedy `layout` by default. If #K ships, opt into K-P via `infograph(doi; justification=:knuth_plass)`. If `:knuth_plass` is requested but #K is not shipped (i.e., `examples/layouts/knuth_plass.jl` is absent at runtime), silently fall back to greedy with a one-time `@warn` per Julia session. The valid `template` values are `:editorial` (default; the single composed-cover template described in this issue); other values are reserved for future templates and currently throw `ArgumentError`.
 
 **Acceptance:**
 - **Property test (synthetic):** generate 100 random titles of lengths in [10, 200] chars; for every one, title autoshrink terminates with a fontsize where the title fits in ≤ 2 lines at the title box width. No exceptions.
@@ -271,7 +276,7 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 - Pluto notebook (`Demo.jl`): paste a DOI, render single infograph, slider for page width drives layout reflow, "Export PDF" button.
 
 **Acceptance:**
-- The 6-up grid renders as a single composed figure that exports to a single multi-page PDF (one paper per page) and a single composite PNG for README hero. A high-resolution PDF version of the grid is also exported and linked from the README beside the PNG (small-PNG-in-README readability concern).
+- The 6-up grid renders as a single composed `CairoMakie.Figure` with the six panels in a 2×3 (or 3×2) grid. It exports to a **single-page composite PDF** (the grid as one page) and a **single composite PNG** (used as the README hero). The composite PDF is linked beside the PNG in the README for per-panel detail (small-PNG-in-README readability concern). For per-paper PDFs, callers loop `infograph(doi)` over the six DOIs and save each separately — that's a documented usage pattern, not a built-in grid_infograph option.
 - All six papers produce legible, composed infographics — no overlapping text, no clipped figures.
 - **Slot 6 (no abstract + no TLDR) graceful render:** the abstract/TLDR slot displays the concept pills strip enlarged + a small "abstract unavailable" caption in muted type. The page does not contain empty whitespace where the abstract would go. Explicit acceptance bullet — this case is not hand-waved.
 - Pluto slider reflows the layout within ~500ms of slider change (with CairoMakie's static render).
@@ -283,7 +288,9 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 
 **Reframed scope.** State silhouette is rendered as a **real cartographic map** (cities, POIs, capital, landmarks, geographic features). Editorial prose **wraps around the silhouette as an irregular obstacle** (the pretext.js *Dynamic Layout* pattern). National Geographic / Smithsonian state-feature spread aesthetic.
 
-`map_feature(state_polygon, stats::Dict, points_of_interest::Vector{POI}) -> CairoMakie.Figure`.
+`map_feature(state_polygon::Vector{GeometryBasics.Point2{Float64}}, stats::Dict{Symbol,Any}, points_of_interest::Vector{POI}) -> CairoMakie.Figure`.
+
+`POI` schema: `struct POI; name::String; coord::Tuple{Float64,Float64}; kind::Symbol; end` where `kind ∈ (:city, :capital, :landmark, :feature)` controls icon glyph + label weight.
 
 Layout:
 - State map fills the right ~55% of the page (silhouette + cartographic content inside).
