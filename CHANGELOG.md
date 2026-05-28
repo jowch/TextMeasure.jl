@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `measure_bounds(::MakieBackend, ::RichText) -> TextBounds`: pixel bounding box of Makie
+  `rich` text (per-span fonts/sizes, sub/superscript, `subsup`/`leftsubsup`, multi-line),
+  reproduced without a render pass and validated against Makie via a golden test. Plus the
+  pure `TextBounds` result type. Mirrors Makie 0.24.x layout constants.
 - `AbstractMeasurementBackend` contract: backends implement `measure` (advance width of
   one run in px, no kerning) and `font_metrics` (ascent/descent/line_advance).
 - `MonospaceBackend`: zero-dependency, deterministic backend; also used as the test backend.

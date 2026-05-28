@@ -1,4 +1,11 @@
 [deps]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 FreeTypeAbstraction = "663a7486-cb36-511b-a19d-713bb74d65c9"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
+
+[compat]
+FreeTypeAbstraction = "0.10"
+Makie = "0.24"
+Test = "<0.0.1, 1"
+julia = "1.11"

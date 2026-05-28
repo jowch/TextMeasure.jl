@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "julia"
+    directories:
+      - "/"        # root Project.toml (Makie/FreeTypeAbstraction are [weakdeps] here)
+      - "/test"    # test/Project.toml (Makie/FreeTypeAbstraction are regular [deps] here)
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
