@@ -100,8 +100,20 @@ function _seed_points(impact::P2, n::Int, span::Real)
                  impact[2] + span * sqrt((k + 0.5) / n) * sin(k * ga)) for k in 0:(n - 1)]
 end
 
-# Defined in full below (Task 5). Stub keeps the module loadable while the n≥3 path is built.
-_bisector_split(args...) = error("n_shards=2 implemented in Task 5")
+# n_shards == 2: the 2-site Voronoi diagram is the perpendicular bisector of p and q.
+# DelaunayTriangulation requires ≥3 generators, so we split analytically: clip the parent
+# against each of the two complementary half-planes (closer-to-p / closer-to-q) by Sutherland–
+# Hodgman. `dot(x - m, q - p) < 0` is the half closer to p.
+function _bisector_split(polygon::Vector{P2}, p::P2, q::P2)
+    m = P2((p[1] + q[1]) / 2, (p[2] + q[2]) / 2)
+    d = (q[1] - p[1], q[2] - p[2])
+    shards = Vector{Vector{P2}}()
+    for nrm in (d, (-d[1], -d[2]))
+        half = _clip_halfplane(polygon, m, nrm)   # parent ∩ half-plane
+        length(half) >= 3 && push!(shards, _orient_ccw(half))
+    end
+    return shards
+end
 
 """
     voronoi_shatter(polygon, impact; n_shards=4) -> Vector{Vector{Point2{Float64}}}

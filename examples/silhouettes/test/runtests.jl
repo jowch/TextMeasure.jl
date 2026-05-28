@@ -119,4 +119,21 @@ const P2 = GB.Point2{Float64}
         @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=1)
         @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=9)
     end
+
+    @testset "voronoi_shatter (n == 2)" begin
+        square = P2[(0,0), (10,0), (10,10), (0,10)]
+        shards = voronoi_shatter(square, P2(5.0, 5.0); n_shards=2)
+        @test length(shards) == 2
+        ug, pm = partition_quality(shards, square)
+        @test ug < 1e-6
+        @test pm < 1e-6
+
+        ast = asteroid_polygon(Xoshiro(11); n=16, lumpiness=0.5)
+        cx = sum(first, ast) / length(ast); cy = sum(last, ast) / length(ast)
+        s2 = voronoi_shatter(ast, P2(cx, cy); n_shards=2)
+        @test length(s2) >= 2
+        ug2, pm2 = partition_quality(s2, ast)
+        @test ug2 < 1e-6
+        @test pm2 < 1e-6
+    end
 end
