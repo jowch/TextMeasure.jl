@@ -56,4 +56,15 @@ end
         check(Makie.rich(Makie.rich("a\nb"), "c"))
         check(Makie.rich("pre ", Makie.rich("inner\nnext", fontsize = 18.0), " post"))
     end
+
+    @testset "degenerate inputs" begin
+        # rich("") — Makie crashes with a TypeError in GlyphCollection on this version,
+        # so we cannot use check(). Assert our own contract: finite (0,0) box.
+        let o = ours_wh(Makie.rich(""))
+            @test all(isfinite, o)
+            @test o == (0.0, 0.0)
+        end
+        check(Makie.rich(" "))                   # whitespace-only — matches Makie exactly
+        check(Makie.rich("a", Makie.rich("")))   # empty nested span — matches Makie exactly
+    end
 end
