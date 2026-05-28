@@ -50,6 +50,21 @@ end
     @test isapprox(iv[1][2], 100.0; atol=1e-9)
 end
 
+@testset "polygon_chord_fn: genuine concave gap is NOT merged" begin
+    # Converse of the vertex-merge guard: two real runs separated by a wide gap (≫ eps)
+    # must STAY two intervals — a future eps change must not silently merge real notches.
+    U = Point2{Float64}[
+        (0.0, 0.0), (30.0, 0.0), (30.0, 70.0), (70.0, 70.0),
+        (70.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0),
+    ]
+    cf = polygon_chord_fn(U)
+    iv = cf(34.0, 36.0)                    # band crossing both prongs; 40px gap between them
+    @test length(iv) == 2
+    @test iv[1] == (0.0, 30.0)
+    @test iv[2] == (70.0, 100.0)
+    @test iv[2][1] - iv[1][2] == 40.0      # the real gap survived normalization
+end
+
 @testset "polygon U-shape: slivers below min_chord_width dropped" begin
     # thin prongs (width 10) + solid base; min_chord_width=24 ⇒ prong bands skipped.
     U = Point2{Float64}[

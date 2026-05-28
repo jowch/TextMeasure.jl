@@ -87,7 +87,12 @@ horizontal bands of height `line_advance` from the top (y=0) downward. In each b
 or an [`AbstractChordFn`](@ref); both are called identically. Returned intervals must be
 sorted ascending and pairwise disjoint; an empty vector skips the band.
 
-`overflow_strategy` controls a word wider than its band's widest interval `W`:
+A word that is over-wide only mid-line (it fits no remaining room but is not the first
+word of the line) is not itself flagged — it simply breaks to the next band, where it is
+re-evaluated as that band's first word and handled by `overflow_strategy` below.
+
+`overflow_strategy` controls a word wider than its band's widest interval `W` (applied
+when the word is the first word of a line):
 - `:widest_row` (default) — place it at the interval's left edge, record it in
   `overflowed`, and end its line (the over-wide word gets its own line).
 - `:skip` — drop the word and record it in `overflowed`, then **continue filling the
