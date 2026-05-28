@@ -32,7 +32,9 @@
 - **Create** `examples/layouts/test/test_perf.jl` — perf baseline.
 - **Create** `examples/layouts/test/perf_baseline.txt` — committed baseline seconds (written on first run).
 - **Create** `examples/layouts/README.md` — what the package is, run command, migration note.
-- Already present (workspace setup): `examples/layouts/Project.toml`, `examples/layouts/Manifest.toml`.
+- Already present (workspace setup): `examples/layouts/Project.toml`. **`Manifest.toml` is intentionally NOT committed** — operator convention call (2026-05-28): per-demo manifests stay gitignored; reproducibility is `Pkg.instantiate()` at run/CI time.
+
+> **Gate fixes folded in (post-approval, verified at PR review, no re-gate):** (1) `polygon_chord_fn` scanline robustness — `_normalize_intervals` drops zero-width point-touches and merges abutting runs so a vertex exactly on the band-center scanline does not split an inside-run; regression test added. (2) `PackedLayout.overflowed` docstring tightened to the **local-band** semantics. (3) `:skip` back-fill documented + tested (a fitting word after a skipped over-wide word lands on the SAME baseline). (4) rectangle-equivalence baseline assertion indexes filtered non-blank lines; newline-free-only scope noted. Plus: the perf test's `2×` check is a non-fatal `@warn` (machine-specific wall-clock); the hard gate is the absolute ceiling, and #J's CI owns the authoritative regression gate.
 
 **Test run command** (the project env already has `TextMeasure`, `GeometryBasics`, `TextMeasureLayouts`; `Test` is stdlib):
 ```bash
