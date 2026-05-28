@@ -55,6 +55,20 @@ end
         check(Makie.rich(Makie.rich("x\n"), "y"))
         check(Makie.rich(Makie.rich("a\nb"), "c"))
         check(Makie.rich("pre ", Makie.rich("inner\nnext", fontsize = 18.0), " post"))
+        # leading newline — exercises the `drop` increment with no preceding glyph
+        check(Makie.rich("\nx"))
+    end
+
+    @testset "rejects unrenderable inputs" begin
+        # Makie itself errors on '\n' inside a subsup child; mirror that so a measure_bounds
+        # call fails identically to a text! render attempt.
+        b = MakieBackend(; font = RT_FONT, fontsize = RT_SIZE, px_per_unit = 1.0)
+        @test_throws ArgumentError measure_bounds(b, Makie.rich("x", Makie.subsup("a\nb", "c")))
+        @test_throws ArgumentError measure_bounds(b, Makie.rich("x", Makie.left_subsup("a", "b\n")))
+        # px_per_unit != 1 would mix scaled glyphs with the unscaled 20 px line drop.
+        @test_throws ArgumentError measure_bounds(
+            MakieBackend(; font = RT_FONT, fontsize = RT_SIZE, px_per_unit = 2.0),
+            Makie.rich("x"))
     end
 
     @testset "degenerate inputs" begin

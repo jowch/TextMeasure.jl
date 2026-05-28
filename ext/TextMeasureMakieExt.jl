@@ -92,6 +92,14 @@ function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sub})
     return _RTState(gs.x, gs.baseline - 0.25 * gs.size, size, font)
 end
 
+# Subsup children may not contain '\n' — Makie itself errors on this in text.jl
+# ("It is not allowed to include linebreaks in a subsup rich text element"). We
+# mirror that check so a measure_bounds call fails identically to a text! render
+# attempt; without this guard, a stray nested '\n' would silently mutate the
+# shared `drop` Ref and skew the bbox for sibling content.
+_rt_has_newline(s::AbstractString) = '\n' in s
+_rt_has_newline(rt::Makie.RichText) = any(_rt_has_newline, rt.children)
+
 # Emit StyledRuns for a string leaf, splitting at '\n'. On '\n', x resets to 0 and the GLOBAL
 # `drop[]` line counter increments — `gs.baseline` (sub/sup shift) is untouched. Each emitted
 # run's baseline is `gs.baseline - drop[]`, mirroring Makie's two-stage (process_rt_node! +
@@ -133,6 +141,8 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
     if t === :subsup || t === :leftsubsup
         length(rt.children) == 2 ||
             throw(ArgumentError("$t requires exactly 2 children (sub, super)"))
+        any(_rt_has_newline, rt.children) &&
+            throw(ArgumentError("$t may not contain '\\n' (matches Makie's restriction)"))
         # children laid out from the SAME parent x and baseline (child 1 = sub, 2 = super);
         # subsup node's :fontsize/:font flow to both children via `rt` → _rt_subsup
         e_sub = _rt_walk!(runs, drop, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
@@ -151,6 +161,11 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
 end
 
 function TextMeasure.measure_bounds(b::TextMeasure.MakieBackend, rt::Makie.RichText)
+    # _RT_LINE_DROP is a flat 20 px (Makie's apply_lineheight! stub), so it does not
+    # scale with px_per_unit; mixed-scale glyphs + unscaled line drops would silently
+    # skew bbox heights. The golden test also runs at px_per_unit = 1 (CLAUDE.md).
+    b.px_per_unit == 1.0 ||
+        throw(ArgumentError("measure_bounds requires MakieBackend(; px_per_unit=1.0); got $(b.px_per_unit)"))
     runs = TextMeasure.StyledRun[]
     drop = Ref(0.0)
     gs0  = _RTState(0.0, 0.0, _pixel_size(b), b.face)
