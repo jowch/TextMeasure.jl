@@ -15,7 +15,6 @@ import DelaunayTriangulation as DT
 import GeometryOps as GO
 import GeometryBasics as GB
 
-const GI = GO.GI
 const P2 = GB.Point2{Float64}
 
 export asteroid_polygon, voronoi_shatter, rasterize
@@ -47,7 +46,106 @@ function asteroid_polygon(rng::AbstractRNG; n::Int=12, lumpiness::Float64=0.4)
     return _orient_ccw(pts)
 end
 
-voronoi_shatter(::Vector{P2}, ::P2; n_shards::Int=4) = error("not implemented")
+# Sutherland–Hodgman clip of a (possibly concave) subject ring against the half-plane
+# { x : dot(x - m, nrm) < 0 }. The strict `<` keep predicate and crossing test are consistent,
+# so a vertex landing exactly on the boundary is never emitted twice. Returns an open ring
+# (possibly empty).
+function _clip_halfplane(poly::Vector{P2}, m::P2, nrm::NTuple{2,Float64})
+    out = P2[]
+    n = length(poly)
+    for i in 1:n
+        a = poly[i]; b = poly[mod1(i + 1, n)]
+        da = (a[1] - m[1]) * nrm[1] + (a[2] - m[2]) * nrm[2]
+        db = (b[1] - m[1]) * nrm[1] + (b[2] - m[2]) * nrm[2]
+        da < 0 && push!(out, a)
+        if (da < 0) != (db < 0)
+            t = da / (da - db)
+            push!(out, P2(a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])))
+        end
+    end
+    return out
+end
+
+# Clip a (possibly concave) subject ring against a CONVEX clip ring ⇒ subject ∩ clip.
+# Folds the half-plane clip over each directed edge of the CCW-oriented convex clip (interior is
+# to the left of each edge; inward normal of edge (ex,ey) is (ey,-ex) under our `< 0` convention).
+# Voronoi cells are convex, so this is exact — and it sidesteps GeometryOps 0.1.40's polygon
+# `intersection`, which silently drops overlapping cells and errors on edge-adjacency/containment.
+# Returns an open ring (possibly empty).
+function _clip_to_convex(subject::Vector{P2}, clip::Vector{P2})
+    cc = _orient_ccw(clip)
+    out = subject
+    nc = length(cc)
+    for i in 1:nc
+        a = cc[i]; b = cc[mod1(i + 1, nc)]
+        ex, ey = b[1] - a[1], b[2] - a[2]
+        out = _clip_halfplane(out, a, (ey, -ex))
+        isempty(out) && return out
+    end
+    return out
+end
+
+# Append (parent ∩ convex_region) to `shards` as an open CCW ring, when it has positive area.
+function _push_clipped!(shards::Vector{Vector{P2}}, parent_pts::Vector{P2}, region_pts::Vector{P2})
+    clipped = _clip_to_convex(parent_pts, region_pts)
+    length(clipped) >= 3 && push!(shards, _orient_ccw(clipped))
+    return shards
+end
+
+# Deterministic seed placement: golden-angle spiral within `span` of impact (pure ⇒ reproducible).
+# `sqrt((k+0.5)/n)` spreads seeds evenly over the disc rather than clustering them at the center.
+function _seed_points(impact::P2, n::Int, span::Real)
+    ga = π * (3 - sqrt(5))
+    return P2[P2(impact[1] + span * sqrt((k + 0.5) / n) * cos(k * ga),
+                 impact[2] + span * sqrt((k + 0.5) / n) * sin(k * ga)) for k in 0:(n - 1)]
+end
+
+# Defined in full below (Task 5). Stub keeps the module loadable while the n≥3 path is built.
+_bisector_split(args...) = error("n_shards=2 implemented in Task 5")
+
+"""
+    voronoi_shatter(polygon, impact; n_shards=4) -> Vector{Vector{Point2{Float64}}}
+
+Fracture `polygon` into `n_shards ∈ [2, 8]` shards via a Voronoi tessellation
+(`DelaunayTriangulation`) seeded near `impact`, with each convex cell clipped to
+the parent by Sutherland–Hodgman. Shards partition the parent:
+their union equals the parent and pairwise interiors are disjoint (within
+numerical tolerance). Each shard is an open CCW ring. Concave parents may split
+a cell into multiple pieces, so `length(result) ≥ n_shards` **when every seed's
+clipped Voronoi cell intersects the parent** (true for a centroid/interior impact
+with moderate lumpiness); a pathological concave parent with a far off-center
+impact can leave a seed's cell entirely outside the parent, yielding fewer shards.
+Seed placement is deterministic (golden-angle spiral within `min(w,h)/4` of
+`impact`), so the result is reproducible for given arguments.
+"""
+function voronoi_shatter(polygon::Vector{P2}, impact::P2; n_shards::Int=4)
+    2 <= n_shards <= 8 || throw(ArgumentError("n_shards must be in [2, 8], got $n_shards"))
+    xs = first.(polygon); ys = last.(polygon)
+    w = maximum(xs) - minimum(xs); h = maximum(ys) - minimum(ys)
+    seeds = _seed_points(impact, n_shards, min(w, h) / 4)   # within min(w,h)/4 of impact
+    return n_shards == 2 ?
+        _bisector_split(polygon, seeds[1], seeds[2]) :
+        _voronoi_clip(polygon, seeds)
+end
+
+function _voronoi_clip(polygon::Vector{P2}, seeds::Vector{P2})
+    tri = DT.triangulate([(p[1], p[2]) for p in seeds])
+    xs = first.(polygon); ys = last.(polygon)
+    pad = max(maximum(xs) - minimum(xs), maximum(ys) - minimum(ys))
+    bx0, bx1 = minimum(xs) - pad, maximum(xs) + pad
+    by0, by1 = minimum(ys) - pad, maximum(ys) + pad
+    clip_pts = [(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1)]   # CONVEX bbox ⇒ finite cells
+    clip_nodes = [1, 2, 3, 4, 1]                                  # CCW
+    vorn = DT.voronoi(tri; clip=true, clip_polygon=(clip_pts, clip_nodes))
+    shards = Vector{Vector{P2}}()
+    for i in DT.each_polygon_index(vorn)
+        cs = DT.get_polygon_coordinates(vorn, i)
+        cell = P2[P2(c[1], c[2]) for c in cs]
+        length(cell) > 1 && cell[1] == cell[end] && pop!(cell)
+        _push_clipped!(shards, polygon, cell)   # clip parent against this convex cell
+    end
+    return shards
+end
 """
     rasterize(polygon, cell_size) -> BitMatrix
 

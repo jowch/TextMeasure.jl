@@ -61,4 +61,62 @@ const P2 = GB.Point2{Float64}
         @test_throws ArgumentError rasterize(unit, 0.0)
         @test_throws ArgumentError rasterize(unit, -1.0)
     end
+
+    # Close an open ring (first == last) — GeometryOps 0.1.40's boolean ops error on edge-adjacent
+    # OPEN rings; closing them makes intersection/difference tolerate adjacency.
+    _close(p) = (length(p) > 1 && p[1] == p[end]) ? p : vcat(p, [p[1]])
+
+    # Returns (rel_union_gap, rel_pairwise_max), both / area(parent).
+    # rel_union_gap is a robust upper-bound proxy for area(symdiff(⋃shards, parent))/area(parent):
+    # `outside` = Σ area(shard ∖ parent) is the spill term; when the (separately asserted) pairwise
+    # overlap is ~0 the shards don't double-count, so area(symdiff) == |area(parent) - Σarea(shard)| +
+    # 2*outside exactly. We do NOT assume shards ⊆ parent — the +2*outside term captures any spill.
+    # Uses GeometryOps union/intersection/difference/area (per the #D acceptance), substituting
+    # the difference-based symdiff area since GeometryOps 0.1.40 has no `symmetric_difference`.
+    function partition_quality(shards, parent_pts)
+        parent = GB.Polygon(_close(parent_pts))
+        parea = GO.area(parent)
+        polys = [GB.Polygon(_close(s)) for s in shards]
+        total = sum(GO.area, polys)
+        outside = 0.0
+        for p in polys
+            d = GO.difference(p, parent; target=GI.PolygonTrait())
+            outside += isempty(d) ? 0.0 : sum(GO.area, d)
+        end
+        union_gap = (abs(parea - total) + 2 * outside) / parea
+        pair = 0.0
+        for i in 1:length(polys), j in (i + 1):length(polys)
+            inter = GO.intersection(polys[i], polys[j]; target=GI.PolygonTrait())
+            a = isempty(inter) ? 0.0 : sum(GO.area, inter)
+            pair = max(pair, a / parea)
+        end
+        return (union_gap, pair)
+    end
+
+    @testset "voronoi_shatter (n ≥ 3)" begin
+        square = P2[(0,0), (10,0), (10,10), (0,10)]
+        for n in (3, 4, 5, 8)
+            shards = voronoi_shatter(square, P2(5.0, 5.0); n_shards=n)
+            @test shards isa Vector{Vector{P2}}
+            @test length(shards) == n                          # convex parent ⇒ exact count
+            ug, pm = partition_quality(shards, square)
+            @test ug < 1e-6                                    # union(shards) == parent within tol
+            @test pm < 1e-6                                    # pairwise intersections zero-measure
+        end
+
+        # default n_shards == 4
+        @test length(voronoi_shatter(square, P2(5.0, 5.0))) == 4
+
+        # concave (asteroid) parent: floor on count, partition still exact
+        ast = asteroid_polygon(Xoshiro(3); n=14, lumpiness=0.45)
+        cx = sum(first, ast) / length(ast); cy = sum(last, ast) / length(ast)
+        shards = voronoi_shatter(ast, P2(cx, cy); n_shards=5)
+        @test length(shards) >= 5
+        ug, pm = partition_quality(shards, ast)
+        @test ug < 1e-6
+        @test pm < 1e-6
+
+        @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=1)
+        @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=9)
+    end
 end
