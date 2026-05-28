@@ -13,4 +13,11 @@ using Test, TextMeasure
     # Keyword constructors require the extension; absent it, they error.
     @test_throws MethodError FreeTypeBackend(; font="Inter")
     @test_throws MethodError MakieBackend(; fontsize=12)
+
+    # FigletBackend: opaque font, Int letter_gap (deliberate departure — cell counts, not px)
+    fig = FigletBackend("FONT", 2)
+    @test fig isa AbstractMeasurementBackend
+    @test fig.font == "FONT" && fig.letter_gap === 2
+    # keyword constructor requires the FIGlet extension; absent it, it errors.
+    @test_throws MethodError FigletBackend(; letter_gap=0)
 end

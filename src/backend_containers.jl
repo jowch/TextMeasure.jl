@@ -24,3 +24,21 @@ struct MakieBackend{F} <: AbstractMeasurementBackend
     fontsize    :: Float64
     px_per_unit :: Float64
 end
+
+"""
+    FigletBackend(font, letter_gap)
+
+Container holding an opaque FIGlet font (`font::F`; a `FIGlet.FIGletFont` once the ext
+loads). The keyword constructor `FigletBackend(; font, letter_gap)` and the
+`measure`/`font_metrics` methods are provided by the FIGlet extension —
+`using FIGlet` to enable.
+
+Two deliberate departures from `FreeTypeBackend`/`MakieBackend`: there is **no
+`fontsize` field** (FIGlet glyphs live on a fixed integer cell grid — `measure` returns
+cell counts, not pixels), and `letter_gap` is an **`Int`** (a count of cells between
+glyphs), not a `Float64`.
+"""
+struct FigletBackend{F} <: AbstractMeasurementBackend
+    font       :: F
+    letter_gap :: Int
+end

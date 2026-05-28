@@ -4,7 +4,7 @@ using Unicode: graphemes
 
 export prepare, layout, line_top, measure_bounds, subprep
 export Prepared, Layout, Line, FontMetrics, TextBounds
-export AbstractMeasurementBackend, MonospaceBackend, FreeTypeBackend, MakieBackend
+export AbstractMeasurementBackend, MonospaceBackend, FreeTypeBackend, MakieBackend, FigletBackend
 
 include("types.jl")
 include("backend.jl")
