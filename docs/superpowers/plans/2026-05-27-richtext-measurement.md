@@ -507,8 +507,8 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
             cur = _rt_walk!(runs, cur, child)
         end
         # Advance x; restore sub/sup baseline shift + size/font to the parent.
-        # (Line position is threaded globally via the line-drop Ref added in Task 5,
-        # so a `\n` inside this child correctly persists after we return.)
+        # (No `\n` handling at this task; Task 5 will introduce a `drop::Ref{Float64}`
+        # so that newlines nested in a child persist across this return.)
         return _RTState(cur.x, gs.baseline, gs.size, gs.font)
     end
 end
@@ -743,8 +743,12 @@ git commit -m "docs: changelog for RichText measure_bounds"
 - Core seam `StyledRun`/`TextBounds`/`bounds` + `measure_bounds` stub → Task 1.
 - Per-span font/size/offset inheritance, plain + mixed font → Task 2.
 - `0.66`/`+0.40`/`−0.25` sub/superscript → Task 3.
-- `subsup`/`leftsubsup` (max-width advance; left/right align noted irrelevant to AABB) → Task 4.
-- Multi-line `\n` at the `20`px stub → Task 5.
+- `subsup`/`leftsubsup` (max-width advance; left/right align noted irrelevant to AABB);
+  **`:fontsize`/`:font` set on the subsup node itself, applied to both children via
+  `_rt_subsup` reading `rt.attributes`** → Task 4.
+- Multi-line `\n` at the `20`px stub, **including newlines nested inside spans —
+  persistence across span returns via a global, monotonic `drop::Ref{Float64}` counter
+  (mirrors Makie's two-stage `process_rt_node!` + `apply_lineheight!`)** → Task 5.
 - Degenerate empty/whitespace inputs + golden samples → Task 6.
 - Golden test vs `boundingbox(plot, :pixel)`, sizes only, real Scene, validated-version note → Task 2 (harness) + all tasks.
 - Export `measure_bounds` + `TextBounds` only; `StyledRun`/`bounds` internal → Task 1.
@@ -760,6 +764,11 @@ diagnostic guidance, not deferred work. The one genuinely empirical value (Makie
 `TextBounds(origin, size)` are used identically in Task 1's implementation, Task 1's tests, and
 the extension (`_rt_string!`, `measure_bounds`). `_RTState(x, baseline, size, font)`,
 `_rt_child`, `_rt_subsup`, `_rt_walk!`, `_rt_string!`, `_pixel_size`, and
-`measure_bounds(::MakieBackend, ::RichText)` are named consistently across Tasks 2–6. `_rt_child`
-is fully replaced (not patched) in Task 3; `_rt_walk!` fully replaced in Task 4; `_rt_string!`
-fully replaced in Task 5 — each shown in full to avoid out-of-order drift.
+`measure_bounds(::MakieBackend, ::RichText)` are named consistently across Tasks 2–6. Functions
+that get fully replaced (not patched), shown in full to avoid out-of-order drift:
+`_rt_child` in Task 3; `_rt_walk!` in Task 4 (subsup branch added); `_rt_subsup` is **added** in
+Task 4 and takes the subsup node to read its `:fontsize`/`:font`; in Task 5, **three** functions
+are atomically replaced — `_rt_string!`, `_rt_walk!`, and `measure_bounds` — to thread the
+`drop::Ref{Float64}` line-drop counter. `_rt_subsup` is unchanged in Task 5 (it constructs a
+state, doesn't recurse). Between Task 4's commit and Task 5's, all four functions are
+mutually compatible (none takes `drop`); Task 5 swaps the three in one commit.
