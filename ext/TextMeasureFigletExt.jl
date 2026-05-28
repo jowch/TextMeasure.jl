@@ -20,11 +20,25 @@ module TextMeasureFigletExt
 using TextMeasure
 using FIGlet
 
-# String → readfont(name); FIGletFont → use directly. FIGlet.readfont(io) already handles
+# Cross-platform font resolution. FIGlet.jl bundles its .flf files lowercased
+# (e.g. `standard.flf`) yet `FIGlet.DEFAULTFONT == "Standard"`, and `getfontpath` is
+# case-sensitive — so `readfont("Standard")` (and the default `FigletBackend()`) throws
+# `FontNotFoundError` on case-sensitive filesystems (Linux, CI). Retry lowercased so the
+# documented default works everywhere; non-name errors (malformed .flf) still propagate.
+function _readfont(name::AbstractString)
+    try
+        return FIGlet.readfont(String(name))
+    catch e
+        e isa FIGlet.FontNotFoundError || rethrow()
+        return FIGlet.readfont(lowercase(String(name)))
+    end
+end
+
+# String → _readfont(name); FIGletFont → use directly. FIGlet.readfont(io) already handles
 # user-supplied streams, so no separate `font_data` escape hatch is needed.
 function TextMeasure.FigletBackend(; font::Union{AbstractString,FIGlet.FIGletFont}=FIGlet.DEFAULTFONT,
                                    letter_gap::Int=0)
-    f = font isa FIGlet.FIGletFont ? font : FIGlet.readfont(String(font))
+    f = font isa FIGlet.FIGletFont ? font : _readfont(font)
     return TextMeasure.FigletBackend(f, letter_gap)
 end
 
