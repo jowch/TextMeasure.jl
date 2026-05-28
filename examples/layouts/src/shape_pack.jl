@@ -203,3 +203,69 @@ function shape_pack(prep::Prepared, chord_fn;
 
     return PackedLayout(placements, overflowed, m)
 end
+
+# Normalize raw inside-runs: drop (near) zero-width runs and merge runs that abut/overlap
+# within `eps`. This makes scanline output robust to a polygon vertex landing exactly on
+# the sample line (which yields coincident crossings that naive pairing would otherwise
+# split into two abutting half-width intervals).
+function _normalize_intervals(runs::Vector{Tuple{Float64,Float64}}; eps::Float64=1e-9)
+    isempty(runs) && return runs
+    sort!(runs; by=first)
+    out = Tuple{Float64,Float64}[]
+    cl, cr = runs[1]
+    for k in 2:length(runs)
+        l, r = runs[k]
+        if l <= cr + eps          # abuts or overlaps the current run → merge
+            cr = max(cr, r)
+        else
+            push!(out, (cl, cr)); cl, cr = l, r
+        end
+    end
+    push!(out, (cl, cr))
+    return [iv for iv in out if (iv[2] - iv[1]) > eps]   # drop point-touch (zero-width) runs
+end
+
+"""
+    PolygonChordFn(polygon)
+
+`AbstractChordFn` from a closed 2-D polygon (`Vector{Point2{Float64}}`, block-top frame).
+Each band's available intervals are the inside-runs of a single scanline at the band's
+vertical center, normalized (zero-width point-touches dropped, abutting runs merged).
+"""
+struct PolygonChordFn <: AbstractChordFn
+    polygon :: Vector{Point2{Float64}}
+end
+
+"""
+    polygon_chord_fn(polygon::Vector{GeometryBasics.Point2{Float64}}) -> PolygonChordFn
+
+Scanline intersection of a 2-D polygon. Returns the inside intervals where text can be
+placed in each band.
+"""
+polygon_chord_fn(polygon::Vector{Point2{Float64}}) = PolygonChordFn(polygon)
+
+function chord_intervals(f::PolygonChordFn, y_top::Real, y_bottom::Real)
+    poly = f.polygon
+    n = length(poly)
+    n < 3 && return Tuple{Float64,Float64}[]
+    yc = (Float64(y_top) + Float64(y_bottom)) / 2
+    xs = Float64[]
+    @inbounds for i in 1:n
+        x1, y1 = poly[i][1], poly[i][2]
+        j = i == n ? 1 : i + 1
+        x2, y2 = poly[j][1], poly[j][2]
+        # half-open crossing test avoids double-counting shared vertices
+        if (y1 <= yc) != (y2 <= yc)
+            t = (yc - y1) / (y2 - y1)
+            push!(xs, x1 + t * (x2 - x1))
+        end
+    end
+    sort!(xs)
+    runs = Tuple{Float64,Float64}[]
+    k = 1
+    while k + 1 <= length(xs)
+        push!(runs, (xs[k], xs[k+1]))    # inside runs are consecutive crossing pairs
+        k += 2
+    end
+    return _normalize_intervals(runs)
+end
