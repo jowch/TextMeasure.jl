@@ -5,7 +5,7 @@
 ## Scope
 
 - `grid_infograph(dois::Vector{String}) -> CairoMakie.Figure` composes a 2×3 (or 3×2) grid of infographs for six canonical demonstration DOIs. The actual DOI list lives at `examples/doi_infograph/data/canonical_dois.toml` (the file is the source of truth; the spec commits slots 1–2 by exact DOI and slots 3–6 by selection criterion):
-  1. **`10.1038/s41586-019-1666-5`** — Sycamore quantum supremacy (Nature, hybrid OA, long title, 78 authors).
+  1. **`10.1038/s41586-019-1666-5`** — Sycamore quantum supremacy (Nature, hybrid OA, long title, >50 authors — exact count varies by source: Nature lists 77, Semantic Scholar 76).
   2. **`10.48550/arXiv.1706.03762`** — Attention Is All You Need (arXiv preprint of the NeurIPS paper, green OA, short title, 8 authors).
   3. *Criterion: PLOS ONE OA paper with CC-BY license and abstract reliably present via OpenAlex or CrossRef.* Implementation picks a specific DOI and records it in `canonical_dois.toml`.
   4. *Criterion: arXiv preprint with title length ≥ 80 characters and no journal-deposited abstract* (low or zero citation count is fine — this slot stresses title autoshrink and no-abstract degradation).

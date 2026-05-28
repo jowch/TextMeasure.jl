@@ -51,9 +51,11 @@ The three acceptance fixture files (`cover-v1.toml`, `cover-v2.toml`, `cover-v3.
 ## Acceptance
 
 - The demo ships with three `cover-v{1,2,3}.toml` files where the SVG inset is at different positions/sizes. All three produce visually composed PDFs with no manual layout code changes between renders.
-- **Property test (random insets, catches author-tuned-TOML blind spots):** generate 20 random SVG inset positions within the page bounds (inset width/height also randomized within reasonable ranges). For each, render the cover and verify the "no manual offsets" invariants hold: (a) drop cap baseline aligns with paragraph baseline within ±0.5px, (b) pull-quote callouts do not overlap body text or the SVG inset (bbox intersection check), (c) body wrap honors the inset boundary at every line. If any of the 20 fail, the test fails.
-- Drop cap's baseline aligns with paragraph baseline within ±0.5px (measured from rendered PDF).
-- Pull-quote callouts do not overlap body text or the SVG inset (verified by bbox intersection check on rendered PDF).
+- **Property test (random insets, catches author-tuned-TOML blind spots):** generate 20 random SVG inset positions within the page bounds (inset width/height also randomized within reasonable ranges). For each, render the cover and verify the "no manual offsets" invariants hold: (a) drop cap baseline aligns with paragraph baseline within ±0.5px **at the computed-layout level (not extracted from the rendered PDF)**, (b) pull-quote callouts do not overlap body text or the SVG inset (bbox intersection check **on the computed `PackedLayout` placements**, before rendering), (c) body wrap honors the inset boundary at every line. If any of the 20 fail, the test fails.
+
+  *Why layout-time, not PDF-extraction-time:* CairoMakie's PDF output does not guarantee that text-run coordinates round-trip through `pdftotext`/`pdfminer` at sub-pixel precision (those tools return text content, not baseline coords). Verifying at layout time gives a deterministic check that the **measurement pipeline** is correct — which is what this exhibit is supposed to prove. The rendered PDF is checked separately for selectable text presence, not for coordinate fidelity.
+- Drop cap's computed baseline aligns with paragraph baseline within ±0.5px (asserted from the `PackedLayout` returned by `shape_pack`, not from PDF inspection).
+- Pull-quote callouts do not overlap body text or the SVG inset (verified by bbox intersection check on the computed `PackedLayout`).
 - SVG inset is rendered as native CairoMakie vector content, not a bitmap.
 - PDF text is selectable (font embedding verified).
 

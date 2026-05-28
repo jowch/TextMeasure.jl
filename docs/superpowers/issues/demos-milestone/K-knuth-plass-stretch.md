@@ -7,7 +7,12 @@
 Two pieces:
 
 1. **`examples/layouts/knuth_plass.jl`** — port of pretext.js's `kp.ts`. Consumes `Prepared.segments`; emits optimal line breaks minimizing total badness. Same input as `layout` and `shape_pack`; different output algorithm.
-2. **`examples/justification/`** — separate demo: three columns of the same paragraph (greedy from `layout`, greedy with hyphenation off, K-P), with river visualizers overlaid. Direct port of pretext.js's `justification-comparison` demo.
+2. **`examples/justification/`** — separate demo: three columns of the same paragraph, with river visualizers overlaid. Direct port of pretext.js's `justification-comparison` demo. Columns:
+   - **Greedy, wide column** (`layout` at a generous `max_width`) — baseline algorithm, comfortable measure.
+   - **Greedy, narrow column** (`layout` at a deliberately tight `max_width`, e.g., ~0.5× wide column) — same algorithm, harder constraint; shows where greedy creates rivers.
+   - **K-P, narrow column** (`knuth_plass` at the same tight `max_width` as column 2) — direct comparison against the narrow-greedy baseline; shows K-P's win on the same constraint.
+
+   *Hyphenation is explicitly out of TextMeasure's scope per `CLAUDE.md`; the original pretext demo's hyphenation-off column would degenerate into a duplicate of greedy here. Substituting a narrow-greedy vs narrow-K-P comparison preserves the demo's point (showing where badness-minimization helps) without inventing hyphenation we don't have.*
 
 ### Decoupling from #F/#H
 

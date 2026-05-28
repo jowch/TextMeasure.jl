@@ -11,7 +11,7 @@ Cross-cutting integration work:
 - `examples/README.md` as the gallery index — each demo with one-line pitch, screenshot, run instructions.
 - Each `examples/<demo>/README.md` exists with run instructions and a `Project.toml` / `Manifest.toml` ready for `julia --project=. -e 'using Pkg; Pkg.instantiate()'`.
 - `CHANGELOG.md` updated with one entry per shipped issue.
-- Documenter.jl integration: a `docs/` build (basic — landing page + each public API page + link to the gallery). GitHub Pages deploy workflow optional.
+- Documenter.jl integration: a **minimal skeleton** `docs/` build only — `docs/make.jl` plus a landing `index.md`, an `api.md` listing the public API symbols via `@autodocs`, and a `gallery.md` linking to each demo's README. Public API symbols to document: `prepare`, `layout`, `line_top`, `measure_bounds`, `subprep` (#A), `AbstractMeasurementBackend`, `MonospaceBackend`, `FreeTypeBackend`, `MakieBackend`, `FigletBackend`, `FontMetrics`, `Segment`, `Prepared`, `Line`, `Layout`. GitHub Pages deploy workflow **deferred to a follow-up issue** — this issue only ensures `docs/build/` succeeds locally and in CI.
 - License headers on every file in `examples/`. Match parent (MIT) unless a sibling package needs a different license.
 - Version bump to 0.2.0 with summary in CHANGELOG.
 

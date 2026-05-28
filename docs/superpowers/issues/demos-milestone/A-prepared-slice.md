@@ -10,11 +10,15 @@ Motivation: the asteroid demo's word-boundary fracture mechanic (#E) needs sub-`
 
 ## Acceptance
 
-- `Prepared(; segments=s, metrics=m).segments == s` and `.metrics == m`.
-- `subprep(prep, 1:length(prep.segments)) == prep` semantically.
+- `Prepared(; segments=s, metrics=m).segments === s` (or `==` field-by-field) and `.metrics === m`.
+- **`subprep(prep, 1:length(prep.segments))` is field-equivalent to `prep`** — defined as `result.metrics == prep.metrics && all(result.segments[i] == prep.segments[i] for i in 1:length(prep.segments))`. (Direct `==` on `Prepared` may default to identity for mutable fields; the test uses field-by-field comparison.)
 - Slicing at a word boundary, calling `layout` on both halves, confirms widths sum back correctly.
 - Slicing across `:newline` or `:space` segments preserves segment integrity (the segments end up in the side they're indexed into; no segments dropped or duplicated).
 - Export `subprep` from TextMeasure.
+- The kwargs constructor is added as an **outer constructor method** (not an inner one), so the auto-generated positional `Prepared(segments, metrics)` continues to work. The implementation is one line:
+  ```julia
+  Prepared(; segments, metrics) = Prepared(segments, metrics)
+  ```
 - `CHANGELOG.md` entry under "Added."
 
 ## Depends on / Blocks

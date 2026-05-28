@@ -14,16 +14,20 @@ Wire TextMeasure to the existing **`FIGlet.jl`** package (kdheepak, MIT, on Juli
   ```julia
   struct FigletBackend{F} <: AbstractMeasurementBackend
       font       :: F          # opaque; FIGlet.FIGletFont once the ext loads
-      letter_gap :: Int
+      letter_gap :: Int        # deliberately Int, not Float64 — see below
   end
   ```
   The container does NOT name `FIGlet.FIGletFont` — it's parametric over `F`, matching the existing `FreeTypeBackend{F}` / `MakieBackend{F}` pattern.
 
-- **`Project.toml`**: add `FIGlet` under `[weakdeps]` and `TextMeasureFigletExt = "FIGlet"` under `[extensions]`. Pin `FIGlet = "0.2"` lower bound under `[compat]`.
+  **Deliberate departures from FreeType/Makie backend conventions** (call these out in the ext file's preamble docstring so reviewers don't flag them as bugs):
+  1. **No `fontsize` field.** FreeType/Makie return widths in pixels scaled by `fontsize`. FIGlet characters live on a fixed-size cell grid — width and height are integer cell counts intrinsic to the font, not scalable. `measure` returns widths in **character cells, not pixels**. Downstream consumers (`#E` asteroid TUI, `#C` `shape_pack` with raster chord function) work in cell coordinates and treat `FontMetrics` values as cell counts.
+  2. **`letter_gap :: Int`.** FreeType/Makie use `Float64` for all fields. `letter_gap` is a count of integer cells between glyphs; `Float64` would be misleading.
+
+- **`Project.toml`**: add `FIGlet = "3064a664-84fe-4d92-92c7-ed492f3d8fae"` under `[weakdeps]` and `TextMeasureFigletExt = "FIGlet"` under `[extensions]`. Pin `FIGlet = "0.2"` lower bound under `[compat]` (current published version is 0.2.2).
 
 - **`ext/TextMeasureFigletExt.jl`** mirrors `ext/TextMeasureFreeTypeExt.jl` / `ext/TextMeasureMakieExt.jl`:
   - Keyword constructor `FigletBackend(; font::Union{String,FIGlet.FIGletFont}=FIGlet.DEFAULTFONT, letter_gap::Int=0)` — `String` → `FIGlet.readfont(name)`; `FIGletFont` → use directly. No separate `font_data` escape hatch needed because `FIGlet.readfont(io)` already handles user-supplied data.
-  - `TextMeasure.measure(b::FigletBackend, text::AbstractString) -> Float64` summing per-character widths from `size(b.font.font_characters[c].thechar, 2)` for each `c in text`, plus `letter_gap * (length(text) - 1)`. Integer-valued, returned as `Float64` to honor the `measure` return-type contract.
+  - `TextMeasure.measure(b::FigletBackend, text::AbstractString) -> Float64` summing per-character widths from `size(get(b.font.font_characters, c, b.font.font_characters[' ']).thechar, 2)` for each `c in text`, plus `letter_gap * (length(text) - 1)`. Integer-valued, returned as `Float64` to honor the `measure` return-type contract. Missing-glyph fallback to the space-cell width matches the bundled `Standard` font's behavior. **Unit: character cells, NOT pixels.**
   - `TextMeasure.font_metrics(b::FigletBackend) -> FontMetrics` derived from `b.font.header.height` (line advance) and `b.font.header.baseline` (ascent; descent = height − baseline).
   - **Does NOT implement `measure_bounds`** — Figlet is plain monospace-cell text with no styled-text analog (unlike Makie's `RichText`).
   - Heavy preamble commentary explicitly framing this as "the third example of the canonical weakdep-extension backend pattern" with cross-references to `TextMeasureFreeTypeExt.jl` and `TextMeasureMakieExt.jl`.
@@ -35,7 +39,7 @@ Wire TextMeasure to the existing **`FIGlet.jl`** package (kdheepak, MIT, on Juli
 - `FigletBackend` passes backend conformance tests (cell-space measurement, integer-valued widths returned as `Float64`, ascent/descent matches `FIGletHeader` fields).
 - `Project.toml`'s `[compat]` block pins a `FIGlet = "0.2"` lower bound.
 - The ext file's preamble explains the pattern; `AbstractMeasurementBackend`'s docstring cross-references all three exts.
-- CI runs an integration test against the actual published `FIGlet.jl`.
+- CI runs an integration test against the actual published `FIGlet.jl`. **This test lives in a SEPARATE CI job** (e.g., `ext_tests.yml`) triggered on changes to `ext/`, NOT in the main `Pkg.test()` suite — so the main suite stays fast on every PR.
 - `CHANGELOG.md` entry under "Added."
 
 ## Depends on / Blocks
@@ -51,7 +55,14 @@ Wire TextMeasure to the existing **`FIGlet.jl`** package (kdheepak, MIT, on Juli
   - `ext/TextMeasureMakieExt.jl` — second reference (also has `measure_bounds` — not needed for Figlet).
   - `src/backend_containers.jl` — where `FigletBackend` struct goes.
   - `Project.toml` — current `[weakdeps]` and `[extensions]` blocks.
-- **External dependency:** [`FIGlet.jl`](https://github.com/kdheepak/FIGlet.jl) — read `src/FIGlet.jl` for the exact API surface (`readfont`, `FIGletFont`, `FIGletChar.thechar`, `FIGletHeader.height/baseline`).
+- **External dependency:** [`FIGlet.jl`](https://github.com/kdheepak/FIGlet.jl), UUID `3064a664-84fe-4d92-92c7-ed492f3d8fae`, v0.2.2, Julia 1.10+, MIT. The API surface used here (verified at https://github.com/kdheepak/FIGlet.jl/blob/main/src/FIGlet.jl):
+  - `const FONTSDIR` — absolute path to bundled fonts artifact (`FIGletFonts-0.5.0`).
+  - `const DEFAULTFONT = "Standard"`.
+  - `readfont(s::AbstractString)::FIGletFont` — resolves by name against `FONTSDIR` or absolute path; also `readfont(io::IO)` for user-supplied streams.
+  - `struct FIGletHeader` — fields used: `height::Int`, `baseline::Int`.
+  - `struct FIGletChar` — fields used: `thechar::Matrix{Char}` (constructed as `Matrix{Char}(undef, height, width)` — so **`size(thechar, 1)` is height, `size(thechar, 2)` is width**, confirmed).
+  - `struct FIGletFont` — fields used: `header::FIGletHeader`, `font_characters::Dict{Char,FIGletChar}`.
+  - **Missing-glyph handling:** `font_characters` is keyed by `Char`; not every glyph is guaranteed present (especially for non-ASCII). The `measure` implementation must use `get(b.font.font_characters, c, nothing)` and fall back to a zero-width contribution (or to a known-present sentinel like `' '`) for missing keys — do NOT bare-`[c]` index, which would throw `KeyError` mid-render.
 - **Conventions:** `CLAUDE.md` — "Adding a backend = subtype `AbstractMeasurementBackend` + implement the two methods. If it needs a heavy dep, add it as a weakdep…"
 
 ## Suggested labels

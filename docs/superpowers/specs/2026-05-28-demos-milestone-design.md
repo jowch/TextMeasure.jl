@@ -96,11 +96,11 @@ Add `Prepared(; segments, metrics)` kwargs constructor and `subprep(prep, r)` na
 
 A single, tight piece of work: wire TextMeasure to the existing `FIGlet.jl` package via the canonical ext pattern.
 
-- `src/backend_containers.jl` gains a `FigletBackend` struct alongside `FreeTypeBackend` and `MakieBackend`. Shape: `struct FigletBackend{F} <: AbstractMeasurementBackend; font::F; letter_gap::Int; end` where `F` is opaque to TextMeasure (it's `FIGlet.FIGletFont` once the ext is loaded, but the container doesn't name the type).
-- TextMeasure's `Project.toml` adds `FIGlet` under `[weakdeps]` and `TextMeasureFigletExt = "FIGlet"` under `[extensions]`.
+- `src/backend_containers.jl` gains a `FigletBackend` struct alongside `FreeTypeBackend` and `MakieBackend`. Shape: `struct FigletBackend{F} <: AbstractMeasurementBackend; font::F; letter_gap::Int; end` where `F` is opaque to TextMeasure (it's `FIGlet.FIGletFont` once the ext is loaded, but the container doesn't name the type). **Two deliberate departures from FreeType/Makie conventions:** no `fontsize` field (FIGlet glyphs live on a fixed integer cell grid — `measure` returns cell counts, not pixels); `letter_gap :: Int` not `Float64` (integer cell counts). The ext preamble documents both.
+- TextMeasure's `Project.toml` adds `FIGlet = "3064a664-84fe-4d92-92c7-ed492f3d8fae"` under `[weakdeps]` and `TextMeasureFigletExt = "FIGlet"` under `[extensions]`.
 - `ext/TextMeasureFigletExt.jl` provides:
   - Keyword constructor `FigletBackend(; font::Union{String,FIGlet.FIGletFont}=FIGlet.DEFAULTFONT, letter_gap::Int=0)` — string → `FIGlet.readfont(name)`; `FIGletFont` → use directly. Mirrors the `font` parameter pattern in the existing exts; no separate `font_data` escape hatch needed because `FIGlet.readfont(io)` already handles user-supplied data.
-  - `TextMeasure.measure(b::FigletBackend, text::AbstractString) -> Float64` summing per-character widths derived from `size(b.font.font_characters[c].thechar, 2)` for each `c in text`, plus `letter_gap * (length(text) - 1)`. Integer-valued, returned as `Float64` to honor the `measure` return-type contract.
+  - `TextMeasure.measure(b::FigletBackend, text::AbstractString) -> Float64` summing per-character widths using `get(b.font.font_characters, c, b.font.font_characters[' '])` (missing-glyph fallback to space-width — `font_characters` is a `Dict{Char,FIGletChar}` and non-ASCII glyphs may be absent) and reading width from `size(thechar, 2)` (`thechar` is constructed as `Matrix{Char}(undef, height, width)`, so dim-2 is width — confirmed from `src/FIGlet.jl`). Plus `letter_gap * (length(text) - 1)`. Integer-valued cell counts, returned as `Float64` to honor the `measure` return-type contract.
   - `TextMeasure.font_metrics(b::FigletBackend) -> FontMetrics` derived from `b.font.header.height` (line advance) and `b.font.header.baseline` (ascent; descent = height − baseline).
   - **Does not implement `measure_bounds`** — Figlet is plain monospace-cell text with no styled-text analog (unlike Makie's `RichText`), so the 2-D bounded primitive does not apply.
   - Heavy commentary as a teaching artifact, explicitly framed as "the third example of the canonical weakdep-extension backend pattern" with cross-references to the existing two exts.
@@ -217,18 +217,20 @@ Three exports:
 
 ### #F1 — DOIInfograph data layer (`examples/doi_infograph/data/`)
 
-**Scope:** API clients for OpenAlex, CrossRef, Semantic Scholar; abstract reconstruction from OpenAlex's inverted index; opt-in `og:image` scraping; offline-cached responses for the acceptance DOIs.
+**Scope:** API clients for OpenAlex and CrossRef; thin wrapper over the existing `SemanticScholar.jl` for the `tldr` field; abstract reconstruction from OpenAlex's inverted index; opt-in `og:image` scraping; offline-cached responses for the acceptance DOIs.
 
-- `OpenAlexClient(; mailto::String)` — `HTTP.jl` + `JSON3.jl`. Reconstruct abstract from `abstract_inverted_index`: emit one `(word, position)` pair per occurrence (handles multi-position words like `"of" → [2, 34, 49, …]`), sort globally by position, join with single spaces. Edge cases: **duplicate positions** (rare but observed) are resolved by stable sort with word order; **position gaps** (rare) are tolerated as missing words and yield extra inter-word spacing.
-- `CrossRefClient(; mailto)` — fallback metadata and references.
-- `SemanticScholarClient()` — for the `tldr` field.
+**Existing packages we depend on** (verified directly against JuliaRegistries / GitHub at design time): `SemanticScholar.jl` (tmthyln, registered, UUID `f2f2c3a1-78ca-4323-b152-8442c77f9dcc`, v1.0.0) is the existing client for Semantic Scholar — **we depend on it directly rather than wrapping S2 ourselves**. `Pitaya` (naustica, GitHub-only, UUID `0b12f483-…`, stale 2021) is the only existing Julia CrossRef client; cited as prior art but we still write our own thin `CrossRefClient` against current HTTP.jl. No `OpenAlex.jl` exists.
+
+- `OpenAlexClient(; mailto::String)` — `HTTP.jl` + `JSON3.jl`. Reconstruct abstract from `abstract_inverted_index`: emit one `(word, position)` pair per occurrence (handles multi-position words like `"of" → [2, 34, 49, …]`), sort globally by position, join with single spaces. Edge cases: **duplicate positions** (rare but observed) are resolved by stable sort with word order; **position gaps** (rare) are tolerated as missing words and yield extra inter-word spacing. **Reconstruction is content-equivalent, not byte-equivalent** — the inverted index drops case-folding info, mangles entities, and removes some punctuation; exact-bytes recovery is not achievable.
+- `CrossRefClient(; mailto)` — fallback metadata and references. Mirrors Pitaya's `works(doi="…")` API shape on current HTTP.jl.
+- Semantic Scholar `tldr` comes from **`SemanticScholar.jl`** directly — `fetch_doi_metadata` adapts its `Paper`/`fetch` response into our `PaperMetadata`'s `tldr` field. **Coverage caveat:** S2 product docs note TLDRs are "currently limited to computer science and biomedical domains." Slot-3 (PLOS ONE general OA) and slot-6 (no-abstract) may legitimately lack `tldr`; the data layer surfaces this as `tldr::Nothing`.
 - `fetch_doi_metadata(doi; fetch_figure=false)` returns a `PaperMetadata` struct with fields: `title::String`, `authors::Vector{AuthorRef}` (where `AuthorRef` is a small struct with `given`, `family`, optional `affiliation`), `abstract::Union{String,Nothing}`, `tldr::Union{String,Nothing}`, `citation_count::Int`, `citations_by_year::Vector{Tuple{Int,Int}}` (year, count), `concepts::Vector{Tuple{String,Float64}}` (name, score), `oa_status::Symbol` (∈ `:gold, :green, :hybrid, :closed, :unknown`), `oa_url::Union{String,Nothing}`, `figure_url::Union{String,Nothing}` (`nothing` when `fetch_figure=false` or scrape failed), `pp::Union{String,Nothing}` (printed page range as a string, e.g., `"505–510"`; `nothing` if unavailable), `journal::Union{String,Nothing}`, `year::Union{Int,Nothing}`, `doi::String`.
 - `fetch_figure=false` by default — to respect publisher ToS. When opt-in, scrapes `og:image` from publisher page with explicit `User-Agent: TextMeasure.jl/<version> mailto=<user>` header.
 - **All six** acceptance DOIs (see #F3) have their JSON responses **cached to `examples/doi_infograph/data/cache/`** for offline + reproducible CI.
 
 **Acceptance:**
 - All six acceptance DOIs round-trip via offline cache.
-- Abstract reconstruction from OpenAlex inverted index matches the canonical published text on the three DOIs that have abstracts.
+- Abstract reconstruction from OpenAlex inverted index is **content-equivalent** to the canonical published text on the three DOIs that have abstracts (every non-stop-word token appears in order; whitespace/punctuation differences tolerated).
 - `fetch_figure=false` is the default; opt-in path documented in the demo README with publisher-ToS note.
 - Rate-limit handling: 429 → exponential backoff with `Retry-After` honored.
 
@@ -239,10 +241,10 @@ Three exports:
 **Scope:** the measurement work. Given a `PaperMetadata` and a CairoMakie `Figure` (with a fixed page size), produce a composed page.
 
 **Adaptive primitives (each is a measurement-driven choice the spec calls out by name):**
-- **Title autoshrink** — binary search over `fontsize` such that `measure(b, title, fontsize) ≤ title_box_width` and line count ≤ 2.
+- **Title autoshrink** — binary search **over backends constructed at different fontsizes** (NOT via a third arg to `measure`, which doesn't exist — `measure(b, text)` returns px at the backend's own baked-in fontsize). Bounds: `fs_min = 14.0`, `fs_max = 48.0`; ~6 iterations to ±0.5 px. Constraint: `measure(b_fs, title) ≤ title_box_width` and line count ≤ 2 from `layout(prepare(b_fs, title); max_width=title_box_width)`.
 - **Author overflow** — accumulate measured author widths until next would exceed the row; append "et al." atomically.
-- **TLDR autosize** — fontsize chosen so measured line-count × line-advance fills (not exceeds) the TLDR box height.
-- **Drop cap** — T-glyph measured to know wrap offset for the first paragraph's first three lines.
+- **TLDR autosize** — fontsize chosen so measured line-count × line-advance fills (not exceeds) the TLDR box height. **Bounds:** `fs_min = 9.0`, `fs_max = 14.0` (body-text range; never grows into display sizes even if TLDR is one short sentence).
+- **Drop cap** — uses a SEPARATE `MakieBackend` at `dropcap_fontsize ≈ 3 × body_fontsize` (display-size, distinct from body backend). Wrap offset = `measure(dropcap_backend, first_letter)` + configurable gutter (default 4 px) for the first paragraph's first three lines.
 - **Body text wrap around figure pillar** — text column on the left at fixed width; figure pillar on the right at full body height.
 - **Concept pill wrap** — pills measured as atomic segments; greedy fit into the pill strip width with row wrap.
 - **Citation sparkline** — Unicode block characters chosen so the sparkline's measured width matches the surrounding caption's measured width within ±1 glyph.
@@ -253,7 +255,7 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 - **Property test (synthetic):** generate 100 random titles of lengths in [10, 200] chars; for every one, title autoshrink terminates with a fontsize where the title fits in ≤ 2 lines at the title box width. No exceptions.
 - **Integration test against #F1 cached fixtures:** run `infograph` end-to-end against the six cached `PaperMetadata` objects produced by #F1; verify each renders without error and yields a `CairoMakie.Figure`. This catches regressions at the #F1↔#F2 seam (e.g., inverted-index sort stability) that the synthetic test misses.
 - **Comparative test:** Sycamore renders smaller than Attention in the same title box (verifiable assertion on fontsize delta).
-- **Author overflow test:** Sycamore (78 authors) emits "et al."; Attention (8 authors) fits all eight.
+- **Author overflow test:** Sycamore (>50 authors — exact count varies by source) emits "et al."; Attention (8 authors) fits all eight.
 - Sparkline length matches measured caption width within ±1 glyph across all three acceptance DOIs that have citation timelines.
 
 **Depends:** #F1, #C.
@@ -263,7 +265,7 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 **Scope:** the gif-able / README-hero exhibit.
 
 - `grid_infograph(dois::Vector{String}) -> CairoMakie.Figure` composes a 2×3 (or 3×2) grid of infographs for six canonical demonstration DOIs. The actual DOI list lives at `examples/doi_infograph/data/canonical_dois.toml` (the file is the source of truth; the spec commits slots 1–2 by exact DOI and slots 3–6 by selection criterion):
-  1. **`10.1038/s41586-019-1666-5`** — Sycamore quantum supremacy (Nature, hybrid OA, long title, 78 authors).
+  1. **`10.1038/s41586-019-1666-5`** — Sycamore quantum supremacy (Nature, hybrid OA, long title, >50 authors — Nature lists 77, Semantic Scholar 76).
   2. **`10.48550/arXiv.1706.03762`** — Attention Is All You Need (arXiv preprint of the NeurIPS paper, green OA, short title, 8 authors).
   3. *Criterion: PLOS ONE OA paper with CC-BY license and abstract reliably present via OpenAlex or CrossRef.* Implementation picks a specific DOI and records it in `canonical_dois.toml`.
   4. *Criterion: arXiv preprint with title length ≥ 80 characters and no journal-deposited abstract* (low or zero citation count is fine — this slot stresses title autoshrink and no-abstract degradation).
@@ -290,16 +292,15 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 
 Layout:
 - State map fills the right ~55% of the page (silhouette + cartographic content inside).
-- Editorial prose wraps around the silhouette on the left (uses `shape_pack` with the state polygon as an obstacle, so the body flows in the negative space around the state shape).
+- Editorial prose wraps around the silhouette on the left using `shape_pack` driven by a `complement_chord_fn(polygon, page_bounds)` helper (NOT `polygon_chord_fn` — that returns intervals INSIDE the polygon, which would pack text into the state shape). `complement_chord_fn` returns `[page_left, polygon_left_edge] ∪ [polygon_right_edge, page_right]` per band. Owned by `#G`'s source tree, shared with `#H`. Polygon coordinates passed in must already be in page-pixel space; the CRS reprojection (TIGER lat/lon → Albers/Mercator pixels via GeoMakie) happens before `shape_pack` is called.
 - Magazine masthead at top, byline at bottom.
 - Sidebar callouts (population, GDP, capital) as big-number stats.
 
 **Data layer:**
-- US Census Tiger/Line shapefiles (state polygons) — public-domain US gov't data.
-- **A minimal Vermont shapefile is bundled in-repo** (`examples/map_feature/data/vermont.shp` + sidecar files, ~50KB) so the demo's quickstart is runnable without any network round-trip. This addresses the "Census API down at first run" failure mode.
-- For other states, fetched at first run via the Census's TIGER API; cached to `~/.julia/scratchspaces/...` to avoid repo bloat. Mirror fallback URL documented in the README.
+- US Census Tiger/Line shapefiles (state polygons) — public-domain US gov't data, accessed via **`CensusACS.jl`** (registered, UUID `5cdc1628-db7d-4f1a-9a42-d0831b0d3a5e`, v0.1.0). That package provides both shapefile download (2023 state/county 500k geographies) and `get_acs(...)` state stats — covers both our shapefile and sidebar-callout needs without building a TIGER client from scratch.
+- **A minimal Vermont shapefile is bundled in-repo** (`examples/map_feature/data/vermont.shp` + sidecar files, ~50KB) as a fast-path fallback so the demo's quickstart is runnable even if `CensusACS.jl`'s download endpoint is unreachable.
+- For other states, fetched on first run via `CensusACS.jl`; cached to `~/.julia/scratchspaces/...`.
 - POIs from a curated `examples/map_feature/data/pois.toml`. **Target depth: 8–15 POIs per acceptance state**, drawn from the state's Wikipedia article and hand-edited for typography. Composition per state: 1 capital + 3–5 cities (population-ranked) + 2–4 landmarks (natural + cultural) + 1–2 geographic features (mountain range, lake, river).
-- Census API for state stats (cached for offline CI).
 
 **Acceptance:**
 - Vermont (quickstart) renders entirely from bundled data, no network required.
@@ -463,7 +464,7 @@ The minimum value-proof subset that still demonstrates measure-once-layout-many:
 
 **R1. `pick()` per-glyph behavior on Makie `text!` plots.** Not actually needed by the asteroid TUI (Tachikoma handles input directly), so this risk is closed for the milestone but flagged for any future Makie-based asteroid variant.
 
-**R2. CrossRef abstract availability.** DOIInfograph relies on OpenAlex `abstract_inverted_index`. Graceful degradation when OpenAlex also lacks one — Semantic Scholar TLDR promoted to the abstract slot at enlarged size. Slot 6 of the 6-up grid (no abstract + no TLDR) has its own explicit graceful render path (concept pills enlarged + "abstract unavailable" caption); see #F3 acceptance.
+**R2. CrossRef abstract availability + Semantic Scholar TLDR coverage.** DOIInfograph relies on OpenAlex `abstract_inverted_index`. Graceful degradation when OpenAlex also lacks one — Semantic Scholar TLDR promoted to the abstract slot at enlarged size, **fetched via the existing registered `SemanticScholar.jl` package, not a bespoke wrapper.** S2's TLDR coverage is limited to CS + biomedical domains per their docs; slot 3 (general OA) and slot 6 (no-abstract) may legitimately lack `tldr`. Slot 6 of the 6-up grid (no abstract + no TLDR) has its own explicit graceful render path (concept pills enlarged + "abstract unavailable" caption); see #F3 acceptance.
 
 **R3. K-P implementation effort.** Stretch status preserved; #F/#H decoupled.
 
@@ -479,7 +480,7 @@ The minimum value-proof subset that still demonstrates measure-once-layout-many:
 
 **R9. API rate limits.** Mitigated by offline caching of acceptance-DOI responses in #F1. Live use respects `Retry-After`; uses `mailto=` polite pool.
 
-**R10. US Census Tiger/Line shapefile distribution.** #G bundles a minimal Vermont shapefile in-repo for first-run robustness even if the Census TIGER API is down. Other states fetched on demand and cached to `~/.julia/scratchspaces/`. Mirror fallback URL documented in `examples/map_feature/README.md`.
+**R10. US Census Tiger/Line shapefile distribution.** #G fetches state shapefiles + ACS stats via the registered **`CensusACS.jl`** (UUID `5cdc1628-…`, v0.1.0) — that package handles the TIGER download endpoint. #G additionally bundles a minimal Vermont shapefile in-repo as a fast-path fallback if CensusACS's endpoint is unreachable. Other states fetched on demand via `CensusACS.jl` and cached to `~/.julia/scratchspaces/`.
 
 **R11. PDF text selectability vs outlined paths.** Acceptance criteria in #F3, #G, #H explicitly verify text selectability by extracting text from the exported PDF and matching against input strings.
 
@@ -493,7 +494,29 @@ The minimum value-proof subset that still demonstrates measure-once-layout-many:
 
 - **#K go/no-go.** Decide after #A–#J land.
 - **Sibling-package promotion timing.** `TextMeasureLayouts.jl` registers on JuliaRegistries when? Probably post-milestone, gated on demand.
-- **Documenter.jl hosting.** GitHub Pages from the docs build? Add a deploy workflow in #I, or defer?
+- **Documenter.jl hosting.** GitHub Pages from the docs build? `#I` ships skeleton only; deploy workflow deferred to a follow-up.
+
+## External Julia packages this milestone depends on (verified)
+
+Quick reference, with UUIDs and roles. Every entry was verified against its GitHub Project.toml during the round-4 reviewer pass:
+
+| Package              | UUID                                       | Where               | Role                                                                |
+|----------------------|--------------------------------------------|---------------------|---------------------------------------------------------------------|
+| `FIGlet`             | `3064a664-84fe-4d92-92c7-ed492f3d8fae`     | `#B` weakdep        | `.flf` parser + bundled `FIGletFonts-0.5.0` Artifact                |
+| `SemanticScholar`    | `f2f2c3a1-78ca-4323-b152-8442c77f9dcc`     | `#F1` regular dep   | TLDR field — used directly, NOT re-wrapped                          |
+| `CensusACS`          | `5cdc1628-db7d-4f1a-9a42-d0831b0d3a5e`     | `#G` regular dep    | TIGER shapefile download + ACS state stats                          |
+| `Tachikoma`          | (Kahli Burke / kahliburke, registered)     | `#E` regular dep    | Pure-Julia TUI substrate (primary; Plan B = `REPL.Terminals`)       |
+| `CoherentNoise`      | (lazarusA, registered)                     | `#D` regular dep    | Perlin noise for `asteroid_polygon`                                 |
+| `DelaunayTriangulation` | (JuliaGeometry, registered)             | `#D` regular dep    | Voronoi for `voronoi_shatter`                                       |
+| `GeometryOps`        | (JuliaGeo, registered)                     | `#D`, `#G` reg dep  | Pure-Julia polygon clipping / union / intersection / area           |
+| `Shapefile`          | (JuliaGeo, registered)                     | `#G` regular dep    | Parsing bundled Vermont fixture                                     |
+| `GeoMakie`           | (MakieOrg, registered)                     | `#G` regular dep    | CRS projection (TIGER → Albers/Mercator pixels)                     |
+| `CairoMakie`         | (MakieOrg, registered)                     | `#F3`,`#G`,`#H` dep | PDF render target                                                   |
+| `Pluto`              | (registered)                               | `#F3` regular dep   | Slider-driven reflow demo                                           |
+
+**Prior art we cite but don't depend on:**
+- `Pitaya` (naustica, GitHub-only, UUID `0b12f483-…`, stale 2021) — the only existing Julia CrossRef client. Stale; we write our own thin client against current HTTP.jl.
+- `AsteroidShapeModels.jl` (Astroshaper, registered) — loads 3D OBJ asteroid meshes for thermophysical simulation. Unrelated to our procedural 2-D `asteroid_polygon`; flagged for disambiguation only.
 
 ## Next steps
 

@@ -43,7 +43,7 @@ Tachikoma.jl requires Julia 1.12+, higher than TextMeasure's 1.11 floor. Because
 - ≥30fps on Linux/macOS in a 120×40 terminal during steady-state play with ~5 asteroids (measured via wall-clock between frame swaps).
 - Debug overlay correctly highlights every measured word.
 - Respawn flash + invulnerability works as described.
-- Headless tick-loop test in CI (no actual terminal needed): boot game, run 60 ticks of a scripted scenario, snapshot the cell buffer, checksum against a committed golden.
+- Headless tick-loop test in CI (no actual terminal needed): boot game, run 60 ticks of a scripted scenario, snapshot the cell buffer, checksum against a committed golden. **Mechanism:** the game core writes to a renderer-agnostic `CellBuffer` (`Matrix{Char}` + ANSI color metadata). Both Tachikoma and Plan B's raw-ANSI renderer drain `CellBuffer`. The CI test never instantiates a renderer — it constructs a `CellBuffer`, drives 60 ticks of the game loop against a scripted input sequence, and checksums the resulting `Matrix{Char}` plus color metadata. This avoids depending on Tachikoma's event-loop API (which is not yet pinned in our spec) for the test path.
 - `examples/asteroid_tui/README.md` and `examples/asteroid_tui/Project.toml` exist; demo runs via `julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.instantiate(); include("examples/asteroid_tui/run.jl")'`.
 
 ## Depends on / Blocks

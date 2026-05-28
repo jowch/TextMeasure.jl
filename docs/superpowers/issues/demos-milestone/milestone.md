@@ -11,19 +11,25 @@ The library gains one small addition (`Prepared` segment-slice helper) plus a `F
 ## Dependency graph
 
 ```
-#A ─→ #E
-#B ─→ #E
-#D ─→ #E
-                      ┌──→ #E
-#C ─→ ┬──→ #F2 → #F3 ─┤
-      ├──→ #G ────────┤
-      └──→ #H ────────┤
-                      ├──→ #I (all completed demos)
-                      └──→ #J (all completed demos)
-#F1 ─→ #F2
+Wave 1 unblockers          Wave 2 demos                 Wave 3 integration
+─────────────────          ────────────                 ──────────────────
 
-#K (stretch) ──optional consumer──→ #F2, #H
+#A ─────────────────────→ #E (asteroid TUI)
+#B ─────────────────────→ #E
+#D ─────────────────────→ #E
+#C ─────────────────────→ #E
+
+#C ─→ #F2 ──→ #F3 (DOIInfograph grid)        ┐
+#F1 ─→ #F2                                   │
+                                             ├──→ #I (README/gallery/v0.2.0)
+#C ─→ #G  (Map Feature Page)                 │
+                                             ├──→ #J (demo-health CI)
+#C ─→ #H  (Newer Yorker cover)               ┘
+
+#K [stretch] ── optional consumer ──→ #F2, #H
 ```
+
+**Reading the graph:** `#E`, `#F3`, `#G`, `#H` are the four shipping demos and have no dependencies on each other. `#I` and `#J` both depend on *all four completed demos*. `#F3` does NOT block `#E` — they're independent demos in the same wave.
 
 ## Waves
 

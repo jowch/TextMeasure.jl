@@ -8,9 +8,15 @@ Reusable shape-conforming layout. Algorithm: per-band scanline, inspired by pret
 
 ```julia
 struct Placement
-    segment_index :: Int          # index into the source Prepared.segments
-    x             :: Float64
-    y             :: Float64       # block-top coord frame (matches `layout`)
+    segment_index :: Int          # absolute index into the source Prepared.segments
+                                  # (counts across :word, :space, :newline — same
+                                  # indexing as prep.segments itself)
+    x             :: Float64      # left edge of the segment, in the same coord
+                                  # frame as chord_fn's outputs
+    y             :: Float64      # baseline y of the segment, block-top frame
+                                  # (block top = 0, increasing downward — matches
+                                  # the value `line_top(lay, ln) + ascent` would
+                                  # produce in src/layout.jl)
 end
 
 struct PackedLayout
@@ -23,9 +29,14 @@ shape_pack(prep::Prepared, chord_fn; line_advance, min_chord_width=24,
            overflow_strategy::Symbol=:widest_row) -> PackedLayout
 ```
 
+**Which segments get placed.** `shape_pack` walks `prep.segments` in order and places `:word` segments. `:space` and `:newline` segments influence break decisions (just like `layout()`) but are NOT emitted as `Placement`s — they have no rendered glyphs in the output. `segment_index` therefore identifies a `:word` segment in `prep.segments` by its absolute position, *not* a word-only ordinal. Downstream consumers reconstruct the rendered text by iterating `placements` (already in left-to-right, top-to-bottom order).
+
+**`:widest_row` overflow placement.** When a `:word` segment is wider than any chord in any band, `:widest_row` places it at the **left edge of the widest chord** in the band where it would have been placed by greedy progress. Its `Placement.x` is the left edge of that widest chord; `y` is the band's baseline. The segment is added to `overflowed`. (Callers can choose to render it clipped or as an overflow indicator.)
+
 ### `chord_fn` contract
 
 - `chord_fn(y_top::Real, y_bottom::Real) -> Vector{Tuple{Float64,Float64}}` returns the horizontal intervals **where text can be placed** in the band `[y_top, y_bottom]` (block-top coord frame, matching `layout`).
+- **Coordinate system.** `chord_fn`'s outputs and `Placement.x/y` are in **the same coordinate space** as `line_advance` and `Prepared.metrics` — typically pixels at the backend's fontsize, but cell counts for `FigletBackend`. Callers must reproject any polygon or raster they pass to `chord_fn` constructors so that polygon coordinates and `line_advance` share units. `shape_pack` does NOT introspect or normalize CRS.
 - **Relationship to pretext.js.** Inspired by pretext's per-band scanline approach, but **the signatures differ**: pretext's `getPolygonIntervalForBand` returns a single envelope `Interval | null` representing an OBSTACLE; pretext subtracts envelopes from the base column via `carveTextLineSlots`. Our `chord_fn` returns available intervals directly — uniform across text-INSIDE-shape (asteroid TUI) and text-AROUND-obstacle (DOIInfograph figure pillar, map feature, cover). Disjoint runs are preserved for concave silhouettes.
 - Returned `(left, right)` pairs are **sorted ascending and pairwise disjoint**.
 - An empty vector means no chord intersects this band (skip).
@@ -49,7 +60,7 @@ shape_pack(prep::Prepared, chord_fn; line_advance, min_chord_width=24,
 - Pack into circle (smoke test on known font + text).
 - Pack into concave U-shape; slivers below `min_chord_width` are dropped.
 - `overflowed` correctly populated when a word exceeds the widest available chord.
-- Coord-frame consistency: `placements[i].y` matches the corresponding `layout` baseline calculation for rectangular packs (within floating tolerance).
+- Coord-frame consistency: `placements[i].y` equals the baseline-y that `layout` would compute for the same segment under a rectangle of the same width — i.e., `line_top(lay, ln) + ascent` for the line `ln` containing that segment, within floating tolerance.
 - **Relative perf baseline:** packing Vermont's state polygon at 300 DPI (~600 scanlines × ~30 edges) produces a `PackedLayout` and the wall-clock is recorded as a committed timing baseline. Subsequent CI runs flag regressions of >2× against this baseline. Absolute target intentionally unspecified — the baseline is comparative.
 
 ## Depends on / Blocks
