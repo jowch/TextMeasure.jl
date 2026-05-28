@@ -32,3 +32,6 @@ test-logs/
 
 # Ad-hoc research transcripts pulled into the working tree during investigation
 reference-conversation.md
+
+# Visual-companion brainstorming session artifacts (per-session HTML mockups)
+.superpowers/
