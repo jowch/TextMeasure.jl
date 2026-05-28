@@ -10,4 +10,5 @@ using Test
     include("test_integration.jl")
     include("test_freetype.jl")   # extension loads via test/Project.toml deps
     include("test_makie.jl")
+    include("test_richtext.jl")
 end
