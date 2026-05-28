@@ -6,7 +6,7 @@
 
 ## Summary
 
-Four demos — one terminal action game and three CairoMakie print artifacts — plus two cross-cutting issues (demo health CI; an optional Knuth–Plass stretch). Together they exercise TextMeasure.jl's `prepare`/`layout` split across multiple backends and downstream layout consumers. The library gains one small addition (`Prepared` segment-slice helper). The figlet backend ships as a sibling package (`examples/TextMeasureFiglet/`) rather than in-tree — honoring CLAUDE.md's weakdep/sibling pattern. Shared utilities (`shape_pack`, silhouettes) live in `examples/` with a documented migration path to `TextMeasureLayouts.jl`. Per-demo `Project.toml`/`Manifest.toml` keep TextMeasure's own dependency graph clean.
+Four demos — one terminal action game and three CairoMakie print artifacts — plus two cross-cutting issues (demo health CI; an optional Knuth–Plass stretch). Together they exercise TextMeasure.jl's `prepare`/`layout` split across multiple backends and downstream layout consumers. The library gains one small addition (`Prepared` segment-slice helper) plus a `FigletBackend` shipped as a weakdep extension (the third instance of the established `FreeTypeBackend` / `MakieBackend` pattern), with the supporting `Figlet.jl` parser+fonts as a standalone sibling package in this repo. Shared utilities (`shape_pack`, silhouettes) live in `examples/` with a documented migration path to `TextMeasureLayouts.jl`. Per-demo `Project.toml`/`Manifest.toml` keep TextMeasure's own dependency graph clean.
 
 ## Motivation
 
@@ -50,7 +50,15 @@ A kwargs constructor (low risk, no positional ambiguity) plus a named `subprep` 
 
 ### Sibling packages (this repo, registerable later)
 
-**`examples/TextMeasureFiglet/`** — a proper Julia package with its own `Project.toml`, depending on TextMeasure via path. Implements the `FigletBackend` (#B). Bundled figlet fonts live here (not in TextMeasure's published assets). The package's source file is the exemplary teaching artifact for "how to write a backend in a sibling package." Registerable on JuliaRegistries post-milestone if there's demand. The asteroid demo (#E) uses `Pkg.develop(path="../TextMeasureFiglet")`.
+**`examples/Figlet/`** — a standalone Julia package: pure-Julia `.flf` parser + bundled figlet fonts + license bookkeeping. Does **not** depend on TextMeasure; it's usable on its own for plain figlet-style ASCII art. Fonts and `font_provenance.toml` live here, not in TextMeasure's published assets. Registerable on JuliaRegistries post-milestone (subject to name conflict check).
+
+**`FigletBackend` ships as a weakdep extension of TextMeasure**, mirroring the existing `FreeTypeBackend` and `MakieBackend` pattern exactly:
+
+- Container struct `FigletBackend` added to `src/backend_containers.jl` alongside the existing two.
+- `Figlet` declared as a weakdep in TextMeasure's `Project.toml`.
+- `ext/TextMeasureFigletExt.jl` provides the keyword constructor + `TextMeasure.measure` + `TextMeasure.font_metrics`, activating when the user does `using Figlet`.
+
+This makes FigletBackend the **third example of the canonical weakdep-extension backend pattern** that CLAUDE.md describes — the most-replicated pattern in the codebase, now with three concrete instances for backend authors to learn from. The asteroid demo (#E) does `Pkg.develop(path="../..")` for TextMeasure and `Pkg.develop(path="../Figlet")` for the parser package; `using TextMeasure, Figlet` triggers the ext.
 
 **Migration path flag for `examples/layouts/`.** `shape_pack` (#C) and (stretch) `knuth_plass` (#K) are the most-reused utilities across demos. For the milestone they live in `examples/layouts/` as a shared module loaded by per-demo Project.tomls via `Pkg.develop`. The intended long-term home is a separate registered package **`TextMeasureLayouts.jl`** — flagged here as a known migration so downstream users have an install path. Defer the actual extraction to a post-milestone task. During the milestone, downstream consumers install via `Pkg.develop(path=…)` against a path inside this repo.
 
@@ -83,27 +91,34 @@ Add `Prepared(; segments, metrics)` kwargs constructor and `subprep(prep, r)` na
 
 **Blocks:** #E only (#C uses `prep.segments` directly).
 
-### #B — `TextMeasureFiglet.jl` sibling package (`examples/TextMeasureFiglet/`)
+### #B — `Figlet.jl` sibling package + `TextMeasureFigletExt` weakdep extension
 
-New sibling package at `examples/TextMeasureFiglet/` with its own `Project.toml` depending on TextMeasure via `path = "../.."`. Contains:
+Two coupled pieces of work, shipped together:
 
-- `src/TextMeasureFiglet.jl` — the package module, exporting `FigletBackend`.
-- `src/figlet_parser.jl` — pure-Julia `.flf` parser handling hardblanks, smushing rules, comment headers, codetag fonts.
-- `src/backend.jl` — `FigletBackend` struct, keyword constructor `FigletBackend(; font="small", letter_gap=0)`, `TextMeasure.measure`, `TextMeasure.font_metrics`.
-- `src/fonts/` — bundled `.flf` files. Only fonts with MIT-compatible licenses ship; other fonts are user-supplied at construction (`FigletBackend(; font_data=read("custom.flf", String))`).
+**Part 1 — `examples/Figlet/` standalone package.**
+New sibling package at `examples/Figlet/` with its own `Project.toml`. Standalone: does not depend on TextMeasure. Contains:
+- `src/Figlet.jl` — the package module exporting a `FigletFont` type and `parse_flf(io)` / `load_font(name)` API.
+- `src/parser.jl` — pure-Julia `.flf` parser handling hardblanks, smushing rules, comment headers, codetag fonts.
+- `src/fonts/` — bundled `.flf` files. Only fonts with MIT-compatible licenses ship; other fonts are user-supplied at runtime.
 - `LICENSES.md` — per-font license documentation.
-- `font_provenance.toml` — machine-readable provenance for each shipped font: source URL, declared license, SPDX tag, audit date, and audit notes.
-- Heavy commentary in `src/TextMeasureFiglet.jl` as the canonical "how to write a backend in a sibling package" teaching artifact, referenced from `AbstractMeasurementBackend`'s docstring.
+- `font_provenance.toml` — machine-readable provenance for each shipped font: source URL, declared license, SPDX tag, audit date, audit notes.
 
-**License audit process (explicit).** Best-effort SPDX-tag review by the maintainer at the time of font bundling, recorded in `font_provenance.toml`. Fonts whose declared license is ambiguous, GPL-only, or otherwise MIT-incompatible are **excluded** from `src/fonts/` and documented in `LICENSES.md` with rationale. This is not a legal review; users are advised to verify before redistribution.
+**Part 2 — TextMeasure backend container + extension.**
+- `src/backend_containers.jl` gains `FigletBackend` struct, alongside the existing `FreeTypeBackend` and `MakieBackend` containers (same in-tree pattern).
+- TextMeasure's `Project.toml` declares `Figlet` as a `[weakdeps]` and an `[extensions]` entry pointing to `TextMeasureFigletExt`.
+- `ext/TextMeasureFigletExt.jl` mirrors `ext/TextMeasureFreeTypeExt.jl` and `ext/TextMeasureMakieExt.jl`: provides the keyword constructor `FigletBackend(; font="small", letter_gap=0, font_data=nothing)` plus `TextMeasure.measure(::FigletBackend, ::AbstractString)` and `TextMeasure.font_metrics(::FigletBackend)`. Activated when the user does `using Figlet`.
+- Heavy commentary in `ext/TextMeasureFigletExt.jl` as a teaching artifact, explicitly framed as "the third example of the weakdep-extension backend pattern" (cross-referenced with the two existing exts). `AbstractMeasurementBackend`'s docstring points here.
+
+**License audit process (explicit).** Best-effort SPDX-tag review by the maintainer at the time of font bundling, recorded in `font_provenance.toml`. Fonts whose declared license is ambiguous, GPL-only, or otherwise MIT-incompatible are **excluded** from `src/fonts/` and documented in `LICENSES.md` with rationale. Lives in the `Figlet.jl` package, not TextMeasure. This is not a legal review; users are advised to verify before redistribution.
 
 **Acceptance:**
-- Deterministic test widths for known strings against each bundled font.
-- `LICENSES.md` exists; each shipped font has a verified MIT-compatible license cited.
+- Deterministic test widths for known strings against each bundled font via `using TextMeasure, Figlet; measure(FigletBackend(font="small"), "hello")`.
+- `LICENSES.md` exists in `examples/Figlet/`; each shipped font has a verified MIT-compatible license cited.
 - `font_provenance.toml` exists with the schema above; ambiguous-license fonts noted as excluded.
-- Passes backend conformance tests (cell-space measurement, integer widths, ascent/descent matches font header).
-- The sibling package's README explains the pattern; `AbstractMeasurementBackend` docstring points here.
-- CI matrix includes a test for this sibling package using `Pkg.develop`.
+- The extension is correctly registered: importing `Figlet` after `TextMeasure` activates the ext (verifiable via `Base.get_extension(TextMeasure, :TextMeasureFigletExt) !== nothing`).
+- `FigletBackend` passes backend conformance tests (cell-space measurement, integer widths, ascent/descent matches font header).
+- The ext file's preamble explains the pattern; `AbstractMeasurementBackend` docstring cross-references all three exts.
+- CI matrix runs an integration test using `Pkg.develop` chain on both packages.
 
 **Blocks:** #E.
 
@@ -312,7 +327,7 @@ Hand-set editorial cover: title in display type, body text flowing around an SVG
 
 Cross-cutting integration work:
 - README hero: the **6-up DOIInfograph grid PNG** (committed binary). A **high-resolution PDF version of the same grid is linked beside the PNG** so users can inspect per-panel detail that GitHub's PNG rendering may shrink.
-- README's "Backends" section updated to include `TextMeasureFiglet.jl` sibling package with install path.
+- README's "Backends" section updated to include `FigletBackend` (activated by `using Figlet`) with install path for `Figlet.jl`.
 - `examples/README.md` as the gallery index — each demo with one-line pitch, screenshot, run instructions.
 - Each `examples/<demo>/README.md` exists with run instructions and a `Project.toml` / `Manifest.toml` ready for `julia --project=. -e 'using Pkg; Pkg.instantiate()'`.
 - `CHANGELOG.md` updated with one entry per shipped issue.
@@ -346,7 +361,7 @@ New cross-cutting issue addressing the "demos rot silently" failure mode. Withou
   - Autoshrink property test (from #F2): 100 random title lengths all fit.
   - Cover random-inset property test (from #H): 20 random insets all uphold invariants.
   - `shape_pack` invariants (from #C): every `Placement.segment_index ∈ [1, length(prep.segments)]`; placements per band do not exceed band's chord intervals; overflowed segments do not have placements.
-- **License audit gate** in regular CI: every file in `examples/` has a license header; `TextMeasureFiglet`'s `LICENSES.md` and `font_provenance.toml` exist and reference each shipped font.
+- **License audit gate** in regular CI: every file in `examples/` has a license header; `examples/Figlet/LICENSES.md` and `examples/Figlet/font_provenance.toml` exist and reference each shipped font.
 
 **Acceptance:**
 - Weekly health-check workflow at `.github/workflows/demo_health.yml`; runs successfully against all four demos.
@@ -438,7 +453,7 @@ The minimum value-proof subset that still demonstrates measure-once-layout-many:
 ## Open questions
 
 - **#K go/no-go.** Decide after #A–#J land.
-- **Sibling-package promotion timing.** `TextMeasureFiglet.jl` and `TextMeasureLayouts.jl` register on JuliaRegistries when? Probably post-milestone, gated on demand.
+- **Sibling-package promotion timing.** `Figlet.jl` and `TextMeasureLayouts.jl` register on JuliaRegistries when? Probably post-milestone, gated on demand. (For `Figlet.jl`: also subject to a JuliaRegistries name-conflict check — if taken, fall back to e.g. `FigletFonts.jl`.)
 - **Documenter.jl hosting.** GitHub Pages from the docs build? Add a deploy workflow in #I, or defer?
 
 ## Next steps
