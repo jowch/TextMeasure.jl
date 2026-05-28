@@ -10,6 +10,10 @@ implement two methods (neither is exported — define them as `TextMeasure.measu
     font_metrics(backend)::FontMetrics                # ascent/descent/line_advance, px
 
 A run's width is the sum of glyph advances with NO kerning (matches Makie exactly).
+
+The three shipped extension backends are the canonical examples of this pattern:
+`FreeTypeBackend` (`ext/TextMeasureFreeTypeExt.jl`), `MakieBackend`
+(`ext/TextMeasureMakieExt.jl`), and `FigletBackend` (`ext/TextMeasureFigletExt.jl`).
 """
 abstract type AbstractMeasurementBackend end
 
