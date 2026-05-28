@@ -2,7 +2,7 @@ module TextMeasure
 
 using Unicode: graphemes
 
-export prepare, layout, line_top, measure_bounds
+export prepare, layout, line_top, measure_bounds, subprep
 export Prepared, Layout, Line, FontMetrics, TextBounds
 export AbstractMeasurementBackend, MonospaceBackend, FreeTypeBackend, MakieBackend
 
