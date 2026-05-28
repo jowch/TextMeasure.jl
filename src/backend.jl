@@ -15,3 +15,13 @@ abstract type AbstractMeasurementBackend end
 
 function measure end
 function font_metrics end
+
+"""
+    measure_bounds(backend, text) -> TextBounds
+
+2-D analog of [`measure`](@ref) for styled text (e.g. Makie's `RichText`). Returns an
+axis-aligned [`TextBounds`](@ref) in the backend's coordinate space. Not implemented
+in the base package — each extension adds a method for its own styled type. `backend`
+must be an [`AbstractMeasurementBackend`](@ref).
+"""
+function measure_bounds end
