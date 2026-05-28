@@ -186,7 +186,7 @@ Three exports:
 
 **Crayons.jl is not used.** Tachikoma handles ANSI colors natively in its own renderer.
 
-**Plan B for Tachikoma.** If Tachikoma proves unworkable (API churn, abandonment, fundamental fit issue), fall back to a manual game-loop substrate: **`TermInterface.jl` + `Base.RawFD` + `termios` ioctl + manual ANSI escape codes**, double-buffered into a cell raster. The demo's core (`shape_pack` against a cell raster + FigletBackend measurement) is renderer-agnostic; only the event loop and draw plumbing would need rework. (`REPL.TerminalMenus` is **not** the Plan B — it's a blocking menu API, not a raw-mode-polling game-loop substrate.)
+**Plan B for Tachikoma.** Tachikoma is the primary substrate. If it proves unworkable (upstream API churn, abandonment, fundamental fit issue), the fallback is a manual game-loop built on **`REPL.Terminals`** (stdlib — `TTYTerminal`, raw-mode toggle) **+ `Base.RawFD` + `termios` ioctl + manual ANSI escape codes**, double-buffered into a cell raster. The demo's core (`shape_pack` against a cell raster + FigletBackend measurement) is renderer-agnostic; only the event loop and draw plumbing would need rework. (`REPL.TerminalMenus` is **not** the Plan B — it's a blocking menu API, not a raw-mode-polling game-loop substrate. `TermInterface.jl` is unrelated — it's the JuliaSymbolics expression-interface package, not a terminal library.)
 
 **Cross-platform scope:** Linux and macOS only for v1. Windows is OOS due to ANSI / raw-mode / sigwinch fragility.
 
@@ -415,7 +415,7 @@ The minimum value-proof subset that still demonstrates measure-once-layout-many:
 
 **R4. `og:image` scraping legality + reliability.** `fetch_figure=false` default in #F1; geometric placeholder fallback; opt-in path documented with explicit ToS note.
 
-**R5. Tachikoma maturity.** Pin a specific version in #E's `Project.toml`; **Plan B documented in #E:** `TermInterface.jl` + `Base.RawFD` + `termios` + manual ANSI as the actual fallback substrate (not REPL.TerminalMenus).
+**R5. Tachikoma maturity.** Pin a specific version in #E's `Project.toml`; **Plan B documented in #E:** `REPL.Terminals` (stdlib) + `Base.RawFD` + `termios` + manual ANSI as the actual fallback substrate (not REPL.TerminalMenus, and not TermInterface.jl which is a symbolic-expression package).
 
 **R6. Tachikoma upstream churn beyond version pin.** A 4-month-old TUI framework will not have a long support window. #J's weekly health-check workflow catches breakage within a week; the maintainer issue is auto-filed (and auto-closes on next green).
 
