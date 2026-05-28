@@ -269,3 +269,49 @@ function chord_intervals(f::PolygonChordFn, y_top::Real, y_bottom::Real)
     end
     return _normalize_intervals(runs)
 end
+
+"""
+    RasterChordFn(raster, cell_size)
+
+`AbstractChordFn` from a cell-grid silhouette. `raster[row, col]` is `true` for cells
+inside the shape; `row` indexes y (down), `col` indexes x. Cell `(row,col)` covers
+`x ∈ [(col-1)·cell_size, col·cell_size]`, `y ∈ [(row-1)·cell_size, row·cell_size]`.
+"""
+struct RasterChordFn <: AbstractChordFn
+    raster    :: BitMatrix
+    cell_size :: Float64
+end
+
+"""
+    raster_chord_fn(raster::BitMatrix, cell_size::Real) -> RasterChordFn
+
+Chord function for cell-grid silhouettes (e.g. the Tachikoma asteroid). A band's
+available intervals are the maximal runs of `true` cells in the row containing the
+band's vertical center.
+"""
+function raster_chord_fn(raster::BitMatrix, cell_size::Real)
+    cell_size > 0 || throw(ArgumentError("cell_size must be > 0; got $cell_size"))
+    return RasterChordFn(raster, Float64(cell_size))
+end
+
+function chord_intervals(f::RasterChordFn, y_top::Real, y_bottom::Real)
+    cs = f.cell_size
+    yc = (Float64(y_top) + Float64(y_bottom)) / 2
+    row = floor(Int, yc / cs) + 1
+    (row < 1 || row > size(f.raster, 1)) && return Tuple{Float64,Float64}[]
+    out = Tuple{Float64,Float64}[]
+    ncol = size(f.raster, 2)
+    c = 1
+    @inbounds while c <= ncol
+        if f.raster[row, c]
+            c0 = c
+            while c <= ncol && f.raster[row, c]
+                c += 1
+            end
+            push!(out, ((c0 - 1) * cs, (c - 1) * cs))   # cols c0..c-1 ⇒ [(c0-1)cs, (c-1)cs]
+        else
+            c += 1
+        end
+    end
+    return out
+end

@@ -63,3 +63,28 @@ end
     @test !isempty(pk.placements)
     @test all(p -> p.y >= 70.0, pk.placements)   # only the solid base (y>=70) holds text
 end
+
+@testset "raster_chord_fn: runs from a BitMatrix row" begin
+    # rows = y (down), cols = x. cell_size = 10.
+    raster = falses(3, 6)
+    raster[2, 2:3] .= true            # one run cols 2..3
+    raster[2, 5:6] .= true            # second run cols 5..6
+    cf = raster_chord_fn(raster, 10.0)
+    @test cf isa AbstractChordFn
+    iv = cf(10.0, 20.0)               # band center y=15 ⇒ row 2
+    @test iv == [(10.0, 30.0), (40.0, 60.0)]   # cols 2..3 -> (10,30); cols 5..6 -> (40,60)
+    @test isempty(cf(0.0, 10.0))      # row 1 all false
+    @test isempty(cf(100.0, 110.0))   # out of raster range
+    @test_throws ArgumentError raster_chord_fn(raster, 0.0)
+end
+
+@testset "raster_chord_fn: drives shape_pack" begin
+    raster = falses(5, 12)
+    raster[2:4, 1:12] .= true         # a solid 3-row band
+    cf = raster_chord_fn(raster, 10.0)
+    b = MonospaceBackend()
+    prep = prepare(b, "aa bb cc dd")
+    pk = shape_pack(prep, cf; line_advance=10.0, min_chord_width=0.0)
+    @test !isempty(pk.placements)
+    @test all(p -> 0.0 <= p.x <= 120.0, pk.placements)
+end
