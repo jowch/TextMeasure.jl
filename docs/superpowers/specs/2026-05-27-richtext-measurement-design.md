@@ -33,23 +33,19 @@ match Makie exactly.
 ## Scope
 
 In scope:
-- Single-line `RichText` with arbitrary nesting of spans.
+- `RichText` with arbitrary nesting of spans, **including embedded `\n` (multi-line)**.
 - Per-span `font`, `fontsize`, `offset` resolution with inheritance from the parent/default.
 - `subscript` / `superscript` baseline shifts and `0.66` scale (Makie's hardcoded constants).
+- `subsup` / `leftsubsup` — stacked two-child sub+super spans (the consumer uses these).
 - Mixed fonts (bold / italic) — these are simply spans with a different `:font`/`:fontsize`,
   so they fall out of the same tree walk for free.
 
 Out of scope (v1):
-- **Multi-line `RichText`.** Makie 0.24.x's rich-text `lineheight` is a hardcoded stub
-  (`(i-1)*20` px), not metrics-driven, so multi-line vertical spacing in Makie itself is
-  unreliable. Repel labels are typically single-line. v1 detects an embedded `\n` in the
-  `RichText` and throws a clear `ArgumentError`; multi-line is a documented follow-up.
 - Line-breaking / wrapping of rich text at a `max_width`. Rich text never re-layouts at
   varying widths in the known consumer, so the measure-once / layout-many split adds no value
-  here — a single one-shot function is used instead.
+  here — a single one-shot function is used instead. (Multi-line via *explicit* `\n` is in
+  scope; *automatic* wrapping is not.)
 - Color, justification, rotation (not needed for an AABB).
-- `subsup` / `leftsubsup` stacked two-child spans — deferred unless the golden test set needs
-  them; if added later they slot into the same walk.
 
 ## Architecture
 
@@ -120,12 +116,22 @@ A new file (e.g. `src/bounds.jl`) adds:
     a fraction of the span's fontsize.
   - Apply the hardcoded type constants: `:sup` → size `× 0.66`, baseline `+ 0.40·parent_size`;
     `:sub` → size `× 0.66`, baseline `− 0.25·parent_size`; `:span` → unchanged.
+  - `:subsup` / `:leftsubsup` — stacked two-child spans (exactly two children: sub, super).
+    Both children are laid out from the **same parent x and baseline**, the sub shifted down
+    and the super up (same offsets as `:sub`/`:sup`); x then advances by the **max** of the two
+    children's widths. `:subsup` is left-aligned at the shared start x; `:leftsubsup` is
+    right-aligned (Makie's `right_align!`). Makie forbids internal line breaks here. Exact
+    horizontal placement is pinned by the golden test.
   - For each character in a string leaf, advance `x` by `hadvance(get_extent(font, char))
     × size`, using `find_font_for_char` fallback when the span's font lacks the glyph (mirror
     Makie). Sum advances with **no kerning**.
-  - Emit one `StyledRun` per contiguous styled run (a string leaf under one glyph state),
-    with `ascent`/`descent` from that run's resolved font/size.
-  - Throw `ArgumentError` if a `\n` is encountered (out of scope, see above).
+  - On `\n` in a string leaf, reset `x = 0` and drop the baseline by Makie's per-line spacing.
+    **Note:** Makie 0.24.x's `apply_lineheight!` is a hardcoded stub — a flat `20` px per line
+    (`oy - (i-1)*20`), independent of fontsize or `lineheight`, marked `# TODO: Lineheight` in
+    Makie. We mirror that `20` px to match Makie's current bbox. This is the most fragile
+    constant we depend on; the golden test guards it (see Risks).
+  - Emit one `StyledRun` per contiguous styled run (a string leaf under one glyph state, on one
+    line), with `ascent`/`descent` from that run's resolved font/size.
 
   Then delegate to core `bounds(runs)`.
 
@@ -154,25 +160,47 @@ bounding box (`Makie.boundingbox(plot, :pixel)` / `full_boundingbox` — exact c
 implementation), and assert `measure_bounds(MakieBackend(...), rt).size` matches Makie's
 `(width, height)` within a small absolute tolerance.
 
-Sample set (single-line):
+Sample set:
 - plain `rich("Hello")`
 - bold span, italic span (different `:font`)
 - mixed `:fontsize` span
 - `superscript`, `subscript`
+- `subsup` and `leftsubsup` (stacked sub+super)
+- multi-line: a `RichText` containing `\n` (pins the 20px line-spacing stub)
 - a nested combination (e.g. `rich("x", superscript("2"), " + ", rich("y"; font=:bold))`)
 
-This pins the version-fragile Makie constants (`0.66`, `+0.40`, `−0.25`, lineheight stub) and
-catches drift if a future Makie version changes them. Document the Makie version the constants
-are validated against.
+This pins the version-fragile Makie constants (`0.66`, `+0.40`, `−0.25`, the `20`px line-spacing
+stub) and catches drift if a future Makie version changes them. Document the Makie version the
+constants are validated against.
+
+### CI and version-drift detection
+
+There is currently **no CI** in this repo (no `.github/`). The golden test only protects
+locally until CI exists, so this feature adds CI infrastructure:
+
+- **`.github/workflows/CI.yml`** — run `Pkg.test()` on supported Julia versions (compat floor
+  1.11 and latest stable). The golden test runs against whatever Makie the compat bounds allow.
+- **`.github/workflows/CompatHelper.yml`** — [CompatHelper.jl](https://github.com/JuliaRegistries/CompatHelper.jl),
+  Julia's Dependabot equivalent. On a new Makie release it opens a PR widening `[compat]`; CI on
+  that PR resolves the new Makie and runs the golden test. If Makie changed any mirrored constant
+  (`0.66` / `0.40` / `0.25` / `20`px line spacing), the golden test fails on the compat-bump PR —
+  turning silent geometry drift into a red PR at the moment of adoption. CompatHelper must be
+  configured to manage **both** the root `[compat]` (Makie/FreeType are weakdeps) and the
+  `test/` subdir; `test/Project.toml` currently has no `[compat]`, so add one and let CompatHelper
+  maintain it for reproducibility.
+- **Optional canary** — a weekly scheduled job that `Pkg.update()`s to the latest Makie and runs
+  the golden test as `continue-on-error`, for early warning *before* a compat bump.
 
 ## Risks
 
-- **Version fragility.** The `0.66`/`+0.40`/`−0.25` constants are unexported Makie internals
-  and could change across versions. Mitigation: the golden test fails loudly on drift; the
-  pinned/validated Makie version is documented.
+- **Version fragility.** The `0.66`/`+0.40`/`−0.25` sub/sup constants and especially the `20`px
+  multi-line spacing are unexported Makie internals and could change across versions; the `20`px
+  stub is explicitly `# TODO`-marked in Makie and is the likeliest to change. Mitigation: the
+  golden test fails loudly on drift, and CompatHelper + CI surface it on the Makie compat-bump PR
+  (see CI section). The validated Makie version is documented in the test.
 - **Per-glyph vs per-run metrics.** Resolved empirically by the golden test (see above).
-- **Multi-line.** Explicitly out of scope and guarded by an `ArgumentError`, so it cannot fail
-  silently.
+- **No CI exists yet.** Until the workflows land, the golden test only runs locally and the
+  drift-detection story above is inert. CI setup is therefore part of this feature's work.
 
 ## Files touched
 
@@ -181,5 +209,9 @@ are validated against.
   (and `measure_bounds` stub/generic declaration so the extension can add a method).
 - `ext/TextMeasureMakieExt.jl` — new `measure_bounds(::MakieBackend, ::RichText)` method.
 - `test/test_richtext.jl` — new golden test; registered in `test/runtests.jl`.
+- `test/Project.toml` — add `[compat]` for Makie/FreeTypeAbstraction (for reproducibility +
+  CompatHelper management).
+- `.github/workflows/CI.yml`, `.github/workflows/CompatHelper.yml` — new CI + version-drift bot
+  (and optional weekly canary job).
 - `CHANGELOG.md` — note the new capability.
 ```
