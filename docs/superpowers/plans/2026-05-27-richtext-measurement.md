@@ -338,6 +338,8 @@ Expected: PASS for the `plain & mixed font/size` testset (all `check(...)` withi
 
 ```bash
 git add ext/TextMeasureMakieExt.jl test/test_richtext.jl test/runtests.jl
+# If Step 0's spike forced the CairoMakie fallback, also stage the test deps change:
+#   git add test/Project.toml
 git commit -m "feat: measure_bounds for plain/mixed-font RichText (single line)"
 ```
 
@@ -416,11 +418,31 @@ git commit -m "feat: RichText sub/superscript measurement (0.66 scale, ±baselin
 - Modify: `ext/TextMeasureMakieExt.jl` (add subsup branch to `_rt_walk!`, add `_rt_subsup`)
 - Modify: `test/test_richtext.jl` (add golden cases)
 
-**Note:** For the AABB, `:subsup` and `:leftsubsup` are equivalent — both children occupy the
-same x-extent of width `max(sub_width, sup_width)`, so left-vs-right alignment shifts the smaller
-child *within* that width without changing the union box. We therefore treat them identically and
-let the golden test confirm. (If `:leftsubsup` ever fails the golden test, the cause is Makie's
-ink-edge `right_align!`; only then implement ink-based alignment.)
+**Note:** For the AABB, `:subsup` and `:leftsubsup` are expected to be equivalent — both children
+occupy the same x-extent of width `max(sub_width, sup_width)`, so left-vs-right alignment shifts
+the smaller child *within* that width without changing the union box. The spec, however, records
+that `:leftsubsup` aligns by the **ink** right edge (not advance), which could perturb the box by a
+side-bearing. Step 0 pre-verifies the equivalence bet before we rely on it.
+
+- [ ] **Step 0: Spike — pre-verify the leftsubsup AABB-invariance bet**
+
+After Task 3 is in place (so `_rt_child` handles sub/sup), but before implementing the subsup
+branch, run in a REPL (`julia --project=test`) using the helpers from `test/test_richtext.jl`:
+
+```julia
+using Test, TextMeasure, Makie
+include("test/test_richtext.jl")   # brings in makie_wh / ours_wh / RT_FONT / RT_SIZE
+# subsup currently throws, so check Makie's own numbers for the two variants:
+@show makie_wh(Makie.rich("M", Makie.subsup("a", "b"), "z"))
+@show makie_wh(Makie.rich("M", Makie.left_subsup("a", "b"), "z"))
+```
+
+Expected: the two widths are equal (or differ only by a sub-pixel side-bearing < the test's
+`atol = 0.5`). **If they differ by more than the tolerance**, the ink-alignment matters: implement
+it in Step 2's `_rt_walk!` leftsubsup branch — measure both children's runs, find the right
+child's ink right edge via `FTA.get_extent(font, lastchar).ink_bounding_box`, and shift the
+narrower child so their ink right edges coincide — instead of the simple `max(...)` advance. Record
+the spike's outcome in the commit message.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -443,6 +465,9 @@ Add this helper next to `_rt_child` in `ext/TextMeasureMakieExt.jl`:
 ```julia
 # sub/sup child state for subsup children. NOTE: Makie does NOT apply the span `offset`
 # to subsup children (unlike :sub/:sup), so none is added here.
+# v1 gap (not exercised by supported labels): a `:fontsize`/`:font` set directly on the
+# `subsup`/`leftsubsup` node itself is ignored here — Makie reads it from the node's own
+# attributes. Document, don't fix, until a consumer needs it.
 _rt_subsup(gs::_RTState, ::Val{:sup}) =
     _RTState(gs.x, gs.baseline + 0.40 * gs.size, 0.66 * gs.size, gs.font)
 _rt_subsup(gs::_RTState, ::Val{:sub}) =
@@ -469,6 +494,11 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
         for child in rt.children
             cur = _rt_walk!(runs, cur, child)
         end
+        # Advance x; restore baseline/size/font to the parent. v1 limitation: this discards
+        # any line-drop a `\n` introduced *inside* this child, so a newline nested in a span
+        # followed by more outer-span text (e.g. rich(rich("a\nb"), "c")) would mis-place the
+        # trailing text. Supported labels put `\n` at the top level, so this is not exercised;
+        # documented rather than handled in v1.
         return _RTState(cur.x, gs.baseline, gs.size, gs.font)
     end
 end
@@ -658,7 +688,7 @@ git commit -m "docs: changelog for RichText measure_bounds"
 - Export `measure_bounds` + `TextBounds` only; `StyledRun`/`bounds` internal → Task 1.
 - `StyledRun` +y-up vs `Layout` y-down documented → Task 1 docstring.
 - Plain path untouched → no task edits `types.jl`/`layout.jl`/`prepare.jl`.
-- CI/CompatHelper → separate plan (`2026-05-27-ci-prerequisite.md`), not here. ✔ decomposed.
+- CI/Dependabot → separate plan (`2026-05-27-ci-prerequisite.md`), not here. ✔ decomposed.
 
 **Placeholder scan:** none — every code step shows complete code; "if it fails" notes are
 diagnostic guidance, not deferred work. The one genuinely empirical value (Makie's box for

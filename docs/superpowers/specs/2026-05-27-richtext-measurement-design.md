@@ -235,26 +235,26 @@ documented here because the drift-detection motivation is specific to this featu
 The prerequisite CI plan delivers:
 
 - **`.github/workflows/CI.yml`** — run `Pkg.test()` on supported Julia versions (compat floor
-  1.11 and latest stable).
-- **`.github/workflows/CompatHelper.yml`** — [CompatHelper.jl](https://github.com/JuliaRegistries/CompatHelper.jl),
-  Julia's Dependabot equivalent. On a new Makie release it opens a PR widening `[compat]`; CI on
-  that PR runs the golden test against the new Makie. If Makie changed any mirrored constant
-  (`0.66` / `0.40` / `0.25` / `20`px line spacing), the test fails on the compat-bump PR —
-  turning silent geometry drift into a red PR at the moment of adoption.
-- The actual trip-wire is the **test-environment** Makie version. The golden test runs in the
-  `test/` env, so `test/Project.toml`'s `[compat]` (currently absent — add it) is what must be
-  widened for CI to exercise the new Makie. Bumping the *root* weakdep `[compat]` alone does not
-  re-run the golden test against the new version. CompatHelper must manage **both** the root
-  `[compat]` and the `test/` subdir, but the `test/` compat is the binding constraint.
-- **Optional canary** — a weekly scheduled job that `Pkg.update()`s to the latest Makie and runs
-  the golden test as `continue-on-error`, for early warning *before* a compat bump.
+  1.11 and latest stable). No `xvfb`/backend: the suite only measures.
+- **`.github/dependabot.yml`** — [Dependabot](https://github.blog/changelog/2025-12-16-dependabot-version-updates-now-support-julia/)
+  (ecosystem `julia`, GA 2025-12), chosen over CompatHelper (now in maintenance mode). On a new
+  Makie release it opens a PR widening `[compat]`; **Dependabot PRs trigger CI natively** (no SSH
+  deploy key), so the golden test runs against the new Makie automatically. If Makie changed any
+  mirrored constant (`0.66` / `0.40` / `0.25` / `20`px line spacing), the test fails on the bump
+  PR — turning silent geometry drift into a red PR at the moment of adoption.
+- **Both** the root `Project.toml` and `test/Project.toml` `[compat]` must widen: the golden test
+  runs in the `test/` env, but the *root weakdep* `[compat]` also caps the test-env resolution, so
+  a `test/`-only bump would leave the golden test on the old Makie. Dependabot's `directories:
+  ["/", "/test"]` covers both. The one unverified link — whether Dependabot widens the root
+  **`[weakdeps]`** bound (Makie is a weakdep there) — is an explicit verification checkpoint in the
+  plan, with a CompatHelper-deploy-key fallback for the root file only if it fails.
 
 ## Risks
 
 - **Version fragility.** The `0.66`/`+0.40`/`−0.25` sub/sup constants and especially the `20`px
   multi-line spacing are unexported Makie internals and could change across versions; the `20`px
   stub is explicitly `# TODO`-marked in Makie and is the likeliest to change. Mitigation: the
-  golden test fails loudly on drift, and CompatHelper + CI surface it on the Makie compat-bump PR
+  golden test fails loudly on drift, and Dependabot + CI surface it on the Makie compat-bump PR
   (see CI section). The validated Makie version is documented in the test.
 - **Per-glyph vs per-run metrics.** Resolved: per-run is sufficient (see "Resolved" section).
 - **No CI exists yet.** Until the workflows land, the golden test only runs locally and the
@@ -274,6 +274,6 @@ The prerequisite CI plan delivers:
 - `CHANGELOG.md` — note the new capability.
 
 **Separate prerequisite CI plan (landed first):**
-- `.github/workflows/CI.yml`, `.github/workflows/CompatHelper.yml` (and optional weekly canary).
+- `.github/workflows/CI.yml`, `.github/dependabot.yml` (julia + github-actions ecosystems).
 - `test/Project.toml` — add `[compat]` for Makie/FreeTypeAbstraction (the binding drift
-  trip-wire + CompatHelper management).
+  trip-wire + something for Dependabot to widen).
