@@ -45,4 +45,15 @@ end
         check(Makie.rich("x", Makie.subsup("i", "2"; fontsize = 30.0)))
         check(Makie.rich("x", Makie.subsup("i", "2"; font = "TeX Gyre Heros Makie Bold")))
     end
+
+    @testset "multi-line" begin
+        # top-level newlines
+        check(Makie.rich("line one\nline two"))
+        check(Makie.rich("a\nbb\nccc"))
+        check(Makie.rich("top\n", Makie.superscript("x")))
+        # newlines nested inside spans — the line drop must persist across the span boundary
+        check(Makie.rich(Makie.rich("x\n"), "y"))
+        check(Makie.rich(Makie.rich("a\nb"), "c"))
+        check(Makie.rich("pre ", Makie.rich("inner\nnext", fontsize = 18.0), " post"))
+    end
 end

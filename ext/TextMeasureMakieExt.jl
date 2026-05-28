@@ -36,6 +36,11 @@ end
 # constants (0.66, +0.40, −0.25, 20px) are pinned to Makie 0.24.x and guarded by
 # test/test_richtext.jl. measure_bounds is called with px_per_unit = 1 (CLAUDE.md).
 
+# Line-drop is threaded as a Ref{Float64} (not a field of _RTState) so that a `\n` nested
+# inside a child span persists across the span's return — exactly mirroring Makie's
+# two-stage (process_rt_node! / apply_lineheight!) layout. See _rt_walk! and _rt_string!.
+const _RT_LINE_DROP = 20.0   # Makie 0.24.x apply_lineheight! stub: flat 20px/line (# TODO in Makie)
+
 # Per-span state during the walk. `size` is the resolved fontsize in px.
 struct _RTState
     x        :: Float64
@@ -87,25 +92,42 @@ function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sub})
     return _RTState(gs.x, gs.baseline - 0.25 * gs.size, size, font)
 end
 
-# Emit StyledRuns for a string leaf; return the advanced state.
-function _rt_string!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, s::AbstractString)
+# Emit StyledRuns for a string leaf, splitting at '\n'. On '\n', x resets to 0 and the GLOBAL
+# `drop[]` line counter increments — `gs.baseline` (sub/sup shift) is untouched. Each emitted
+# run's baseline is `gs.baseline - drop[]`, mirroring Makie's two-stage (process_rt_node! +
+# apply_lineheight!) layout.
+function _rt_string!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
+                     gs::_RTState, s::AbstractString)
     asc  =  FTA.ascender(gs.font)  * gs.size
     desc = -FTA.descender(gs.font) * gs.size
     x = gs.x; seg_start = gs.x; seg_w = 0.0; nonempty = false
     for ch in s
-        bestfont = Makie.find_font_for_char(ch, gs.font)
-        adv = FTA.hadvance(FTA.get_extent(bestfont, ch)) * gs.size
-        seg_w += adv; x += adv; nonempty = true
+        if ch == '\n'
+            # flush current segment FIRST (it belongs to the line being closed → uses pre-increment drop[])
+            if nonempty
+                push!(runs, TextMeasure.StyledRun(seg_start, gs.baseline - drop[], seg_w, asc, desc))
+            end
+            drop[] += _RT_LINE_DROP        # global, monotonic — persists across node returns
+            # absolute left edge: Makie places each new line at x=0, ignoring parent x-offset
+            x = 0.0; seg_start = 0.0; seg_w = 0.0; nonempty = false
+        else
+            bestfont = Makie.find_font_for_char(ch, gs.font)
+            adv = FTA.hadvance(FTA.get_extent(bestfont, ch)) * gs.size
+            seg_w += adv; x += adv; nonempty = true
+        end
     end
     if nonempty
-        push!(runs, TextMeasure.StyledRun(seg_start, gs.baseline, seg_w, asc, desc))
+        push!(runs, TextMeasure.StyledRun(seg_start, gs.baseline - drop[], seg_w, asc, desc))
     end
     return _RTState(x, gs.baseline, gs.size, gs.font)
 end
 
 # Walk a node (String or RichText), pushing StyledRuns; return the advanced state.
-function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
-    node isa AbstractString && return _rt_string!(runs, gs, node)
+# `drop` is a shared, monotonic line-drop counter — threaded through all recursive calls
+# and NEVER restored on node return (so nested \n persists across span boundaries).
+function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
+                   gs::_RTState, node)
+    node isa AbstractString && return _rt_string!(runs, drop, gs, node)
     rt = node::Makie.RichText
     t  = rt.type
     if t === :subsup || t === :leftsubsup
@@ -113,26 +135,26 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
             throw(ArgumentError("$t requires exactly 2 children (sub, super)"))
         # children laid out from the SAME parent x and baseline (child 1 = sub, 2 = super);
         # subsup node's :fontsize/:font flow to both children via `rt` → _rt_subsup
-        e_sub = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
-        e_sup = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sup)), rt.children[2])
+        e_sub = _rt_walk!(runs, drop, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
+        e_sup = _rt_walk!(runs, drop, _rt_subsup(gs, rt, Val(:sup)), rt.children[2])
         # AABB advances by the wider child; alignment doesn't change the union box
         return _RTState(max(e_sub.x, e_sup.x), gs.baseline, gs.size, gs.font)
     else
         cur = _rt_child(gs, rt)
         for child in rt.children
-            cur = _rt_walk!(runs, cur, child)
+            cur = _rt_walk!(runs, drop, cur, child)
         end
         # advance x; restore baseline/size/font to the parent
-        # (No `\n` handling at this task; Task 5 will introduce a `drop::Ref{Float64}`
-        # so that newlines nested in a child persist across this return.)
+        # drop is a Ref — shared across the whole walk; NOT restored here
         return _RTState(cur.x, gs.baseline, gs.size, gs.font)
     end
 end
 
 function TextMeasure.measure_bounds(b::TextMeasure.MakieBackend, rt::Makie.RichText)
     runs = TextMeasure.StyledRun[]
+    drop = Ref(0.0)
     gs0  = _RTState(0.0, 0.0, _pixel_size(b), b.face)
-    _rt_walk!(runs, gs0, rt)
+    _rt_walk!(runs, drop, gs0, rt)
     return TextMeasure.bounds(runs)
 end
 
