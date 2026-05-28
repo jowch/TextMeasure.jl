@@ -1,0 +1,30 @@
+name: ext-tests
+on:
+  push:
+    branches: [main]
+    paths: ['ext/**', 'test/figlet/**', '.github/workflows/ext_tests.yml']
+  pull_request:
+    paths: ['ext/**', 'test/figlet/**', '.github/workflows/ext_tests.yml']
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  figlet-ext:
+    name: FIGlet ext - Julia ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.11', '1']   # compat floor + latest stable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v3
+      - name: Run isolated FIGlet integration test
+        run: |
+          julia --project=test/figlet -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+          julia --project=test/figlet test/figlet/runtests.jl
