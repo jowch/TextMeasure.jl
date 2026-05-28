@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `subprep(prep, r)` + `Prepared(; segments, metrics)` kwargs constructor: slice a
+  `Prepared` over a segment sub-range, reusing measured widths (no re-measurement).
 - `measure_bounds(::MakieBackend, ::RichText) -> TextBounds`: pixel bounding box of Makie
   `rich` text (per-span fonts/sizes, sub/superscript, `subsup`/`leftsubsup`, multi-line),
   reproduced without a render pass and validated against Makie via a golden test. Plus the
