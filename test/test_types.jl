@@ -14,4 +14,12 @@ import TextMeasure: FontMetrics, Segment, Prepared, Line, Layout
     ln = Line("ab", 12.0, 0.0, 8.0)
     lay = Layout([ln], (12.0, 10.0), m)
     @test lay.size == (12.0, 10.0) && lay.metrics === m
+
+    # kwargs constructor (outer method) round-trips to the positional one
+    s2 = Segment("cd", 6.0, :word)
+    pk = Prepared(; segments=[s2], metrics=m)
+    @test pk.segments == [s2] && pk.metrics === m
+    # positional constructor still works (auto-generated, not shadowed)
+    pp = Prepared([s2], m)
+    @test pp.segments == [s2] && pp.metrics === m
 end

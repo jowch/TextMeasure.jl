@@ -40,3 +40,13 @@ function prepare(backend::AbstractMeasurementBackend, text::AbstractString)::Pre
     _flush!(segs, buf, bufclass, backend)
     return Prepared(segs, metrics)
 end
+
+"""
+    subprep(prep::Prepared, r::AbstractUnitRange) -> Prepared
+
+Return a `Prepared` over the segment sub-range `r`, reusing the already-measured
+segment widths and echoing `prep.metrics` — no re-measurement. Motivates #E's
+word-boundary fracture (re-pack halves of a measured paragraph). No `Base.getindex`
+override: `prep[i]` should still yield a `Segment`, the contained element type.
+"""
+subprep(prep::Prepared, r::AbstractUnitRange) = Prepared(prep.segments[r], prep.metrics)

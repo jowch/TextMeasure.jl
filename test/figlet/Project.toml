@@ -1,0 +1,9 @@
+[deps]
+FIGlet = "3064a664-84fe-4d92-92c7-ed492f3d8fae"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
+
+[compat]
+FIGlet = "0.2"
+Test = "<0.0.1, 1"
+julia = "1.11"
