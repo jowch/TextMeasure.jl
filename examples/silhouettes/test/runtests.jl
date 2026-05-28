@@ -37,4 +37,28 @@ const P2 = GB.Point2{Float64}
         @test_throws ArgumentError asteroid_polygon(Xoshiro(1); lumpiness=-0.1)
         @test_throws ArgumentError asteroid_polygon(Xoshiro(1); lumpiness=1.1)
     end
+
+    @testset "rasterize" begin
+        unit = P2[(0,0), (1,0), (1,1), (0,1)]
+        @test rasterize(unit, 0.5) == trues(2, 2)
+        @test rasterize(unit, 0.25) == trues(4, 4)
+        @test rasterize(unit, 1.0) == trues(1, 1)
+        @test rasterize(unit, 0.5) isa BitMatrix
+
+        # convention test: L-shape with the notch at TOP-RIGHT proves row1=top, col1=left.
+        # Bottom strip x∈[0,2] y∈[0,1] full; left column x∈[0,1] y∈[1,2] full; top-right missing.
+        L = P2[(0,0), (2,0), (2,1), (1,1), (1,2), (0,2)]
+        r = rasterize(L, 0.5)
+        @test size(r) == (4, 4)
+        expected = BitMatrix([
+            1 1 0 0     # row 1 = TOP: notch on the right
+            1 1 0 0
+            1 1 1 1     # rows 3-4 = bottom strip: full
+            1 1 1 1
+        ])
+        @test r == expected
+
+        @test_throws ArgumentError rasterize(unit, 0.0)
+        @test_throws ArgumentError rasterize(unit, -1.0)
+    end
 end
