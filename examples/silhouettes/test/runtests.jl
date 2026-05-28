@@ -108,11 +108,12 @@ const P2 = GB.Point2{Float64}
         # default n_shards == 4
         @test length(voronoi_shatter(square, P2(5.0, 5.0))) == 4
 
-        # concave (asteroid) parent: floor on count, partition still exact
+        # concave (asteroid) parent, centroid impact: every cell meets the parent ⇒ exactly n
+        # shards (S-H emits ≤ 1 ring per cell — see voronoi_shatter docstring count semantics).
         ast = asteroid_polygon(Xoshiro(3); n=14, lumpiness=0.45)
         cx = sum(first, ast) / length(ast); cy = sum(last, ast) / length(ast)
         shards = voronoi_shatter(ast, P2(cx, cy); n_shards=5)
-        @test length(shards) >= 5
+        @test length(shards) == 5
         @test all(s -> GO.signed_area(GB.Polygon(s)) > 0, shards)   # every shard open CCW
         ug, pm = partition_quality(shards, ast)
         @test ug < 1e-6
@@ -120,6 +121,16 @@ const P2 = GB.Point2{Float64}
 
         @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=1)
         @test_throws ArgumentError voronoi_shatter(square, P2(5.0,5.0); n_shards=9)
+
+        # m5: degenerate / zero-area parent fails loudly rather than returning []
+        @test_throws ArgumentError voronoi_shatter(P2[(0,0),(1,0),(2,0),(3,0)], P2(1.0,0.0))
+
+        # M1: reproducible AND no global-RNG side effect.
+        @test voronoi_shatter(square, P2(5.0,5.0); n_shards=4) ==
+              voronoi_shatter(square, P2(5.0,5.0); n_shards=4)   # deterministic
+        Random.seed!(1); a = rand()
+        Random.seed!(1); voronoi_shatter(square, P2(5.0,5.0); n_shards=4); b = rand()
+        @test a == b                                            # global stream untouched
     end
 
     @testset "voronoi_shatter (n == 2)" begin
@@ -134,7 +145,7 @@ const P2 = GB.Point2{Float64}
         ast = asteroid_polygon(Xoshiro(11); n=16, lumpiness=0.5)
         cx = sum(first, ast) / length(ast); cy = sum(last, ast) / length(ast)
         s2 = voronoi_shatter(ast, P2(cx, cy); n_shards=2)
-        @test length(s2) >= 2
+        @test length(s2) == 2
         @test all(s -> GO.signed_area(GB.Polygon(s)) > 0, s2)       # every shard open CCW
         ug2, pm2 = partition_quality(s2, ast)
         @test ug2 < 1e-6

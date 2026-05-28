@@ -9,7 +9,7 @@ utility; depended on via `Pkg.develop` by `examples/asteroid_tui/`.
 """
 module Silhouettes
 
-using Random: AbstractRNG
+using Random: AbstractRNG, Xoshiro
 import CoherentNoise as CN
 import DelaunayTriangulation as DT
 import GeometryOps as GO
@@ -131,28 +131,44 @@ end
 
 Fracture `polygon` into `n_shards ∈ [2, 8]` shards via a Voronoi tessellation
 (`DelaunayTriangulation`) seeded near `impact`, with each convex cell clipped to
-the parent by Sutherland–Hodgman. Shards partition the parent:
-their union equals the parent and pairwise interiors are disjoint (within
-numerical tolerance). Each shard is an open CCW ring. Concave parents may split
-a cell into multiple pieces, so `length(result) ≥ n_shards` **when every seed's
-clipped Voronoi cell intersects the parent** (true for a centroid/interior impact
-with moderate lumpiness); a pathological concave parent with a far off-center
-impact can leave a seed's cell entirely outside the parent, yielding fewer shards.
+the parent by Sutherland–Hodgman. Shards partition the parent: their union equals
+the parent and pairwise interiors are disjoint (within numerical tolerance). Each
+shard is an open CCW ring.
+
+**Count semantics:** each Voronoi cell yields **at most one** shard (a cell whose
+intersection with the parent is empty is dropped), so `length(result) ≤ n_shards`
+— in practice `== n_shards` for an interior/centroid `impact` where every cell
+meets the parent (e.g. a convex parent, or `asteroid_polygon`'s star-shaped
+silhouettes). **Precondition:** `cell ∩ parent` is assumed *connected*. This holds
+for the demo's asteroids (`asteroid_polygon` is star-shaped/simple and seeds
+cluster near the centroid). A strongly-concave parent whose `cell ∩ parent` is
+disconnected would be merged by Sutherland–Hodgman into a single degenerate
+self-touching ring; per-component splitting is out of scope for this demo.
+
 Seed placement is deterministic (golden-angle spiral within `min(w,h)/4` of
-`impact`), so the result is reproducible for given arguments.
+`impact`), and the Delaunay triangulation uses a *local* RNG derived from the
+arguments — so the result is reproducible and **no global RNG state is touched**.
 """
 function voronoi_shatter(polygon::Vector{P2}, impact::P2; n_shards::Int=4)
     2 <= n_shards <= 8 || throw(ArgumentError("n_shards must be in [2, 8], got $n_shards"))
+    abs(GO.signed_area(GB.Polygon(polygon))) > 0 ||
+        throw(ArgumentError("polygon must have positive area (got a degenerate/zero-area ring)"))
     xs = first.(polygon); ys = last.(polygon)
     w = maximum(xs) - minimum(xs); h = maximum(ys) - minimum(ys)
     seeds = _seed_points(impact, n_shards, min(w, h) / 4)   # within min(w,h)/4 of impact
-    return n_shards == 2 ?
-        _bisector_split(polygon, seeds[1], seeds[2]) :
-        _voronoi_clip(polygon, seeds)
+    if n_shards == 2
+        return _bisector_split(polygon, seeds[1], seeds[2])
+    end
+    # Local, input-derived RNG: DelaunayTriangulation randomizes its insertion order off
+    # Random.default_rng() by default (the Voronoi *output* is unique, but advancing the global
+    # stream is a side effect that would perturb #E's downstream game RNG). Xoshiro(hash(args))
+    # makes this reproducible AND global-state-free.
+    rng = Xoshiro(hash((n_shards, impact, polygon)))
+    return _voronoi_clip(polygon, seeds, rng)
 end
 
-function _voronoi_clip(polygon::Vector{P2}, seeds::Vector{P2})
-    tri = DT.triangulate([(p[1], p[2]) for p in seeds])
+function _voronoi_clip(polygon::Vector{P2}, seeds::Vector{P2}, rng::AbstractRNG)
+    tri = DT.triangulate([(p[1], p[2]) for p in seeds]; rng=rng)
     xs = first.(polygon); ys = last.(polygon)
     pad = max(maximum(xs) - minimum(xs), maximum(ys) - minimum(ys))
     bx0, bx1 = minimum(xs) - pad, maximum(xs) + pad
