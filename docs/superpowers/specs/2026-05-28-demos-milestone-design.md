@@ -100,7 +100,7 @@ Two coupled pieces of work, shipped together:
 New sibling package at `examples/Figlet/` with its own `Project.toml`. Standalone: does not depend on TextMeasure. Contains:
 - `src/Figlet.jl` — the package module exporting a `FigletFont` type and `parse_flf(io)` / `load_font(name)` API.
 - `src/parser.jl` — pure-Julia `.flf` parser handling hardblanks, smushing rules, comment headers, codetag fonts.
-- `src/fonts/` — bundled `.flf` files. Only fonts with MIT-compatible licenses ship; other fonts are user-supplied at runtime.
+- `src/fonts/` — bundled `.flf` files, **subject to per-font license audit** (see License audit process below). Candidate fonts (likely to pass based on standard figlet packaging practice): `small.flf`, `mini.flf`, `standard.flf`, `banner.flf`, `slant.flf`, `block.flf`, `big.flf`. **Acceptance floor: at least 2 fonts must ship.** If the audit excludes all candidates, #B blocks until 2+ MIT-compatible fonts are sourced. Other fonts are user-supplied at runtime via `FigletBackend(font=Figlet.load_font(custom_data))`.
 - `LICENSES.md` — per-font license documentation.
 - `font_provenance.toml` — machine-readable provenance for each shipped font: source URL, declared license, SPDX tag, audit date, audit notes.
 
@@ -173,9 +173,10 @@ shape_pack(prep::Prepared, chord_fn; line_advance, min_chord_width=24,
 ### #D — `examples/silhouettes/`
 
 Three exports:
-- `asteroid_polygon(rng; n=12, lumpiness=0.4)` — polar Perlin noise (CoherentNoise.jl).
-- `voronoi_shatter(polygon, impact; n_shards)` — DelaunayTriangulation.jl seeded near impact, clipped to parent with GeometryOps.jl.
-- `rasterize(polygon, cell_size)` — for the TUI demo.
+
+- `asteroid_polygon(rng::AbstractRNG; n::Int=12, lumpiness::Float64=0.4) -> Vector{GeometryBasics.Point2{Float64}}` — polar Perlin noise (CoherentNoise.jl). `n ∈ [6, 32]` controls vertex count around the polar circle (default 12 yields chunky asteroid shapes). `lumpiness ∈ [0.0, 1.0]` is the fractional radius noise amplitude — `0.0` = perfect circle, `1.0` = wildly irregular star-shape. Returns CCW-ordered vertices.
+- `voronoi_shatter(polygon::Vector{Point2{Float64}}, impact::Point2{Float64}; n_shards::Int=4) -> Vector{Vector{Point2{Float64}}}` — DelaunayTriangulation.jl seeded near `impact` (jittered seeds within `min(width, height) / 4` of impact), clipped to parent with GeometryOps.jl. `n_shards ∈ [2, 8]`; default 4.
+- `rasterize(polygon::Vector{Point2{Float64}}, cell_size::Real) -> BitMatrix` — `cell_size > 0` is the width and height of one terminal cell in polygon-coordinate units. Returns a BitMatrix with `true` indicating cells inside the polygon (point-in-polygon test on each cell center).
 
 **Acceptance:**
 - Shape validity smoke tests (CCW orientation, simple polygons, no self-intersections).
@@ -266,13 +267,13 @@ Body justification uses greedy `layout` by default. If #K ships, opt into K-P vi
 
 **Scope:** the gif-able / README-hero exhibit.
 
-- `grid_infograph(dois::Vector{String}) -> CairoMakie.Figure` composes a 2×3 (or 3×2) grid of infographs for the six canonical demonstration DOIs:
-  1. Sycamore quantum supremacy (Nature, hybrid OA, long title, 78 authors)
-  2. Attention Is All You Need (NeurIPS, green OA, short title, 8 authors)
-  3. PLOS ONE OA paper (CC BY, abstract present)
-  4. A long-title math preprint (arXiv, no journal abstract, very long title)
-  5. A genome-wide association study (Nature Genetics, 80+ authors)
-  6. A paper with no available abstract AND no Semantic Scholar TLDR (CrossRef has only title + authors)
+- `grid_infograph(dois::Vector{String}) -> CairoMakie.Figure` composes a 2×3 (or 3×2) grid of infographs for six canonical demonstration DOIs. The actual DOI list lives at `examples/doi_infograph/data/canonical_dois.toml` (the file is the source of truth; the spec commits slots 1–2 by exact DOI and slots 3–6 by selection criterion):
+  1. **`10.1038/s41586-019-1666-5`** — Sycamore quantum supremacy (Nature, hybrid OA, long title, 78 authors).
+  2. **`10.48550/arXiv.1706.03762`** — Attention Is All You Need (arXiv preprint of the NeurIPS paper, green OA, short title, 8 authors).
+  3. *Criterion: PLOS ONE OA paper with CC-BY license and abstract reliably present via OpenAlex or CrossRef.* Implementation picks a specific DOI and records it in `canonical_dois.toml`.
+  4. *Criterion: arXiv preprint with title length ≥ 80 characters and no journal-deposited abstract* (low or zero citation count is fine — this slot stresses title autoshrink and no-abstract degradation).
+  5. *Criterion: Nature Genetics or similar GWAS paper with ≥ 80 authors* — exercises author-overflow.
+  6. *Criterion: paper with no OpenAlex `abstract_inverted_index` AND no Semantic Scholar `tldr`* (CrossRef has only title + authors). This slot tests the deepest graceful-degradation path; #F3's slot-6 acceptance bullet covers the visual render.
 - Pluto notebook (`Demo.jl`): paste a DOI, render single infograph, slider for page width drives layout reflow, "Export PDF" button.
 
 **Acceptance:**
@@ -302,7 +303,7 @@ Layout:
 - US Census Tiger/Line shapefiles (state polygons) — public-domain US gov't data.
 - **A minimal Vermont shapefile is bundled in-repo** (`examples/map_feature/data/vermont.shp` + sidecar files, ~50KB) so the demo's quickstart is runnable without any network round-trip. This addresses the "Census API down at first run" failure mode.
 - For other states, fetched at first run via the Census's TIGER API; cached to `~/.julia/scratchspaces/...` to avoid repo bloat. Mirror fallback URL documented in the README.
-- POIs from a curated `examples/map_feature/data/pois.toml` (small handcrafted dataset for the 3–5 acceptance states).
+- POIs from a curated `examples/map_feature/data/pois.toml`. **Target depth: 8–15 POIs per acceptance state**, drawn from the state's Wikipedia article and hand-edited for typography. Composition per state: 1 capital + 3–5 cities (population-ranked) + 2–4 landmarks (natural + cultural) + 1–2 geographic features (mountain range, lake, river).
 - Census API for state stats (cached for offline CI).
 
 **Acceptance:**
@@ -319,6 +320,42 @@ Layout:
 **Reframed pitch.** The demo whose job is to **prove the library is correct**, not just gif-able. The honest acceptance test is **"no manual offsets"** — change the SVG inset's position by 3 pixels, re-render, every other element re-aligns correctly because every offset was measurement-derived, not hardcoded.
 
 Hand-set editorial cover: title in display type, body text flowing around an SVG illustration inset (uses `shape_pack`), drop cap, pull-quote callouts. No data ingest; static content from `cover.toml`. Body justification uses greedy `layout` (or K-P if #K shipped).
+
+**`cover.toml` schema:**
+
+```toml
+[meta]
+title    = "..."             # display title
+subtitle = "..."             # optional
+byline   = "..."             # author/credit line
+
+[layout]
+page_size = "letter"         # "letter" | "a4" | "tabloid"
+margin_px = 36               # uniform page margin
+
+[inset]
+svg_path   = "data/x.svg"    # path relative to the cover.toml file
+x_px       = 240             # top-left corner in page coords (excl. margin)
+y_px       = 120
+width_px   = 200
+height_px  = 280
+
+[[body]]                     # array-of-tables — paragraphs in order
+paragraph = """..."""
+dropcap   = true             # optional; applies only to the FIRST paragraph
+
+[[body]]
+paragraph = """..."""
+
+[[pull_quote]]               # array-of-tables — zero or more callouts
+text         = "..."
+attribution  = "..."         # optional
+x_px         = 60
+y_px         = 480
+width_px     = 180
+```
+
+The three acceptance fixture files (`cover-v1.toml`, `cover-v2.toml`, `cover-v3.toml`) vary the `inset` block (position + size) while keeping `meta` and `body` similar enough to verify the layout adapts without manual code changes.
 
 **Acceptance:**
 - The demo ships with three `cover-v1.toml`, `cover-v2.toml`, `cover-v3.toml` files where the SVG inset is at different positions/sizes. All three produce visually composed PDFs with no manual layout code changes between renders.
