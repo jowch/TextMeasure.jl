@@ -26,11 +26,20 @@ using FIGlet
 # `FontNotFoundError` on case-sensitive filesystems (Linux, CI). Retry lowercased so the
 # documented default works everywhere; non-name errors (malformed .flf) still propagate.
 function _readfont(name::AbstractString)
+    s = String(name)
     try
-        return FIGlet.readfont(String(name))
+        return FIGlet.readfont(s)
     catch e
         e isa FIGlet.FontNotFoundError || rethrow()
-        return FIGlet.readfont(lowercase(String(name)))
+        lower = lowercase(s)
+        lower == s && rethrow()                # already lowercase — nothing new to try
+        try
+            return FIGlet.readfont(lower)
+        catch e2
+            e2 isa FIGlet.FontNotFoundError || rethrow()
+            # report BOTH attempted names so a truly-missing font is diagnosable.
+            throw(FIGlet.FontNotFoundError("Cannot find font `$s` (also tried `$lower`)."))
+        end
     end
 end
 
@@ -51,6 +60,11 @@ function TextMeasure.measure(b::TextMeasure.FigletBackend, text::AbstractString)
     chars = b.font.font_characters
     fallback = get(chars, ' ', nothing)
     w = 0
+    # Iterate per CODEPOINT (Char), not per grapheme cluster (cf. MonospaceBackend, which
+    # uses `graphemes`). FIGlet's `font_characters` is a `Dict{Char,FIGletChar}` keyed by
+    # single codepoints, so codepoint iteration is the correct lookup granularity; a
+    # multi-codepoint cluster looks up each codepoint separately (combining marks, absent
+    # from any FIGfont, take the space-cell fallback).
     for c in text
         glyph = get(chars, c, fallback)
         glyph === nothing && continue          # no glyph and no space fallback → 0-width

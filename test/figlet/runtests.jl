@@ -50,4 +50,15 @@ const PIN_SMALL_HELLO = 27.0
     # accept a FIGletFont object directly (not just a name)
     bf = FigletBackend(; font=FIGlet.readfont("standard"))
     @test TextMeasure.measure(bf, "hello") == PIN_STD_HELLO
+
+    # a genuinely-missing font reports BOTH attempted names (original + lowercased),
+    # so the case-insensitive retry doesn't hide which names were tried.
+    err = try
+        FigletBackend(; font="NoSuchFont")
+        nothing
+    catch e
+        e
+    end
+    @test err isa FIGlet.FontNotFoundError
+    @test occursin("NoSuchFont", err.msg) && occursin("nosuchfont", err.msg)
 end
