@@ -44,16 +44,30 @@ struct _RTState
     font                  # FTFont
 end
 
-# Child state for a :span node (font/size/offset inheritance; offset is a fraction
-# of the span's own fontsize, applied to both x and baseline — matches Makie).
+# Child state for :span/:sup/:sub. For :sup/:sub the default size is 0.66·parent and
+# the baseline shifts by +0.40·parent (sup) / −0.25·parent (sub); the span `offset`
+# (a fraction of the child's fontsize) applies on top, to both x and baseline.
 function _rt_child(gs::_RTState, rt::Makie.RichText)
     att = rt.attributes
-    rt.type === :span ||
-        throw(ArgumentError("unsupported RichText span type: $(rt.type)"))
-    size = Float64(get(att, :fontsize, gs.size))
-    off  = get(att, :offset, (0.0, 0.0))
-    font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
-    return _RTState(gs.x + off[1] * size, gs.baseline + off[2] * size, size, font)
+    t   = rt.type
+    off = get(att, :offset, (0.0, 0.0))
+    if t === :span
+        size = Float64(get(att, :fontsize, gs.size))
+        font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+        return _RTState(gs.x + off[1] * size, gs.baseline + off[2] * size, size, font)
+    elseif t === :sup
+        size = Float64(get(att, :fontsize, 0.66 * gs.size))
+        font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+        return _RTState(gs.x + off[1] * size,
+                        gs.baseline + 0.40 * gs.size + off[2] * size, size, font)
+    elseif t === :sub
+        size = Float64(get(att, :fontsize, 0.66 * gs.size))
+        font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+        return _RTState(gs.x + off[1] * size,
+                        gs.baseline - 0.25 * gs.size + off[2] * size, size, font)
+    else
+        throw(ArgumentError("unsupported RichText span type: $t"))
+    end
 end
 
 # Emit StyledRuns for a string leaf; return the advanced state.

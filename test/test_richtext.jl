@@ -31,4 +31,10 @@ end
         check(Makie.rich("big ", Makie.rich("small"; fontsize = 12.0)))
         check(Makie.rich("plain ", Makie.rich("other"; font = "TeX Gyre Heros Makie Bold")))
     end
+
+    @testset "sub/superscript" begin
+        check(Makie.rich("x", Makie.superscript("2")))
+        check(Makie.rich("H", Makie.subscript("2"), "O"))
+        check(Makie.rich("e", Makie.superscript("iπ"), " + 1"))
+    end
 end
