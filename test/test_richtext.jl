@@ -37,4 +37,12 @@ end
         check(Makie.rich("H", Makie.subscript("2"), "O"))
         check(Makie.rich("e", Makie.superscript("iπ"), " + 1"))
     end
+
+    @testset "subsup / leftsubsup" begin
+        check(Makie.rich("x", Makie.subsup("i", "2")))           # sub="i", super="2"
+        check(Makie.rich("M", Makie.left_subsup("a", "b"), "z"))
+        # node-level :fontsize / :font on the subsup node itself (must be read from rt.attributes)
+        check(Makie.rich("x", Makie.subsup("i", "2"; fontsize = 30.0)))
+        check(Makie.rich("x", Makie.subsup("i", "2"; font = "TeX Gyre Heros Makie Bold")))
+    end
 end

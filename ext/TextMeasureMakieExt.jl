@@ -70,6 +70,23 @@ function _rt_child(gs::_RTState, rt::Makie.RichText)
     end
 end
 
+# sub/sup child state for subsup children. Reads :fontsize/:font from the SUBSUP NODE's
+# own attributes (default 0.66·parent / parent font), matching Makie's new_glyphstate for
+# :subsup_sub/:subsup_sup. NOTE: Makie does NOT apply the span `offset` to subsup children
+# (unlike :sub/:sup), so none is added here. The baseline shift constants stay parent-based.
+function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sup})
+    att  = rt.attributes
+    size = Float64(get(att, :fontsize, 0.66 * gs.size))
+    font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+    return _RTState(gs.x, gs.baseline + 0.40 * gs.size, size, font)
+end
+function _rt_subsup(gs::_RTState, rt::Makie.RichText, ::Val{:sub})
+    att  = rt.attributes
+    size = Float64(get(att, :fontsize, 0.66 * gs.size))
+    font = haskey(att, :font) ? Makie.to_font(att[:font]) : gs.font
+    return _RTState(gs.x, gs.baseline - 0.25 * gs.size, size, font)
+end
+
 # Emit StyledRuns for a string leaf; return the advanced state.
 function _rt_string!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, s::AbstractString)
     asc  =  FTA.ascender(gs.font)  * gs.size
@@ -90,12 +107,26 @@ end
 function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, gs::_RTState, node)
     node isa AbstractString && return _rt_string!(runs, gs, node)
     rt = node::Makie.RichText
-    cur = _rt_child(gs, rt)
-    for child in rt.children
-        cur = _rt_walk!(runs, cur, child)
+    t  = rt.type
+    if t === :subsup || t === :leftsubsup
+        length(rt.children) == 2 ||
+            throw(ArgumentError("$t requires exactly 2 children (sub, super)"))
+        # children laid out from the SAME parent x and baseline (child 1 = sub, 2 = super);
+        # subsup node's :fontsize/:font flow to both children via `rt` → _rt_subsup
+        e_sub = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sub)), rt.children[1])
+        e_sup = _rt_walk!(runs, _rt_subsup(gs, rt, Val(:sup)), rt.children[2])
+        # AABB advances by the wider child; alignment doesn't change the union box
+        return _RTState(max(e_sub.x, e_sup.x), gs.baseline, gs.size, gs.font)
+    else
+        cur = _rt_child(gs, rt)
+        for child in rt.children
+            cur = _rt_walk!(runs, cur, child)
+        end
+        # advance x; restore baseline/size/font to the parent
+        # (No `\n` handling at this task; Task 5 will introduce a `drop::Ref{Float64}`
+        # so that newlines nested in a child persist across this return.)
+        return _RTState(cur.x, gs.baseline, gs.size, gs.font)
     end
-    # advance x; restore baseline/size/font to the parent
-    return _RTState(cur.x, gs.baseline, gs.size, gs.font)
 end
 
 function TextMeasure.measure_bounds(b::TextMeasure.MakieBackend, rt::Makie.RichText)
