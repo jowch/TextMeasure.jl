@@ -69,9 +69,20 @@ end
 # Clip a (possibly concave) subject ring against a CONVEX clip ring ⇒ subject ∩ clip.
 # Folds the half-plane clip over each directed edge of the CCW-oriented convex clip (interior is
 # to the left of each edge; inward normal of edge (ex,ey) is (ey,-ex) under our `< 0` convention).
-# Voronoi cells are convex, so this is exact — and it sidesteps GeometryOps 0.1.40's polygon
-# `intersection`, which silently drops overlapping cells and errors on edge-adjacency/containment.
 # Returns an open ring (possibly empty).
+#
+# DEVIATION from issue #D ("clipped to parent with GeometryOps.jl"): we do NOT use
+# GeometryOps for the cell-clip. GeometryOps 0.1.40's polygon `intersection` is unreliable
+# for clipping Voronoi cells to a polygon, verified against the live env:
+#   • silently DROPS genuinely-overlapping cells (square parent, n_shards=4 → only 3 shards);
+#   • throws `convert` MethodError on edge-adjacent OPEN rings and on full containment;
+#   • `difference` threw a BoundsError on some asteroid shards.
+# 0.1.40 is the LATEST registered GeometryOps (no 0.1.41/0.2.x exists), so there is no
+# upstream fix or upgrade path. Voronoi cells are guaranteed CONVEX, so Sutherland–Hodgman
+# (convex clip region, arbitrary simple subject) is exact, self-contained, and avoids a
+# dep bump that would cascade into #C/#G's coordinated GeometryOps/GeometryBasics pins.
+# GeometryOps is still used for orientation (`signed_area`), point-in-polygon (`contains`),
+# and the acceptance partition check (with closed rings, which dodge the adjacency errors).
 function _clip_to_convex(subject::Vector{P2}, clip::Vector{P2})
     cc = _orient_ccw(clip)
     out = subject
