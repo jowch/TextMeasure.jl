@@ -38,7 +38,10 @@ const NARROW_PX = 260.0 * SCALE
 const LEAD      = 1.5            # render leading (visual breathing room; not a layout input)
 const RIVER_COL = RGBf(0.86, 0.21, 0.18)   # warm red for river channels
 
-# Render baseline of line i with display leading (block-top frame, y increasing down).
+# Block-top-frame baseline of line i with display leading (y increasing DOWN: line 1 small,
+# line N large). We render in Makie's native y-UP axis, so every y is NEGATED at draw time
+# (`-b`) — that puts line 1 (smallest baseline) at the visual TOP and the prose reads
+# top→bottom. (Using yreversed instead double-flipped the content; see git history.)
 _baseline(prep, i) = prep.metrics.ascent + (i - 1) * prep.metrics.line_advance * LEAD
 
 # Draw one justified column into `ax` (data units = px; block-top frame via yreversed).
@@ -56,27 +59,28 @@ function _draw_column!(ax, prep, lay::JustifiedLayout, colwidth; show_rivers::Bo
             xs = [x for (_, x) in r.points]
             lns = [ln for (ln, _) in r.points]
             xbar = sum(xs) / length(xs)
-            y_top = _baseline(prep, minimum(lns)) - prep.metrics.ascent
-            y_bot = _baseline(prep, maximum(lns)) + prep.metrics.descent
+            # block-top y of the channel's top/bottom, then negate for the y-up axis.
+            yb_top = _baseline(prep, minimum(lns)) - prep.metrics.ascent
+            yb_bot = _baseline(prep, maximum(lns)) + prep.metrics.descent
             bandw = 0.85 * FONTSIZE          # em-based so the channel reads boldly
-            poly!(ax, Rect2f(xbar - bandw / 2, y_top, bandw, y_bot - y_top);
+            poly!(ax, Rect2f(xbar - bandw / 2, -yb_bot, bandw, yb_bot - yb_top);
                   color=(RIVER_COL, 0.30))
-            lines!(ax, [xbar, xbar], [y_top, y_bot]; color=(RIVER_COL, 0.9),
+            lines!(ax, [xbar, xbar], [-yb_top, -yb_bot]; color=(RIVER_COL, 0.9),
                    linewidth=2.4 * SCALE)
         end
     end
 
-    # Words.
+    # Words (y negated ⇒ line 1 at the top, reading top→bottom).
     xs = Float64[]; ys = Float64[]; strs = String[]
     for (i, l) in enumerate(lay.lines), (j, wi) in enumerate(l.words)
-        push!(xs, l.word_x[j]); push!(ys, _baseline(prep, i))
+        push!(xs, l.word_x[j]); push!(ys, -_baseline(prep, i))
         push!(strs, prep.segments[wi].str)
     end
     text!(ax, xs, ys; text=strs, align=(:left, :baseline), font=BODY_FONT,
           fontsize=FONTSIZE, markerspace=:data, color=:black)
 
     # Faint measure rule at the right edge of the column.
-    lines!(ax, [colwidth, colwidth], [-0.3 * FONTSIZE, total_h];
+    lines!(ax, [colwidth, colwidth], [0.3 * FONTSIZE, -total_h];
            color=(:gray, 0.35), linewidth=1, linestyle=:dash)
     return total_h
 end
@@ -105,10 +109,11 @@ function render_comparison(outpath::AbstractString=joinpath(@__DIR__, "compariso
                 "$(nr) river" * (nr == 1 ? "" : "s")
         total_h = _baseline(prep, length(lay.lines)) + prep.metrics.descent
         xlo, xhi = -8.0, w + 14.0
-        ylo, yhi = -0.9 * FONTSIZE, total_h + 0.7 * FONTSIZE
+        # y-up axis: top = +0.9·FONTSIZE (just above line-1 baseline), bottom = -(total_h+pad).
+        ylo, yhi = -(total_h + 0.7 * FONTSIZE), 0.9 * FONTSIZE
         ax = Axis(fig[1, c]; title=title, titlefont=LABEL_FONT, titlesize=11 * SCALE,
                   titlegap=6, titlecolor=(c == 3 ? RGBf(0.13, 0.40, 0.20) : :black),
-                  backgroundcolor=:white, yreversed=true, valign=:top,
+                  backgroundcolor=:white, valign=:top,
                   width=xhi - xlo, height=yhi - ylo)
         hidedecorations!(ax); hidespines!(ax)
         _draw_column!(ax, prep, lay, w; show_rivers=show_rivers)
