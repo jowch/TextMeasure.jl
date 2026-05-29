@@ -26,7 +26,9 @@ const CM = CairoMakie
 export AuthorRef, PaperMetadata
 export OpenAlexClient, CrossRefClient, SemanticScholarClient
 export fetch_doi_metadata, reconstruct_abstract, cache_path, load_cached, canonical_dois
-export title_autoshrink, infograph, grid_infograph, export_pdf, export_png
+# adaptive measurement primitives (public API — each is a measurement-driven layout choice)
+export title_autoshrink, fit_authors, tldr_autosize, dropcap_offset, wrap_pills, citation_sparkline
+export infograph, grid_infograph, export_pdf, export_png
 
 include("data.jl")
 include("layout.jl")

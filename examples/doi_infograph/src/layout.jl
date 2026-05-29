@@ -345,28 +345,37 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
     _rect!(sc, f, M, y, cw, 1.0; color=_RULE)
     y += 12
 
-    # --- body region: abstract (drop-capped, shape_pack) OR tldr OR graceful fallback ---
-    body_top    = y
-    pills_h     = 0.0
-    figure_w    = 0.34cw
-    body_col_w  = cw - figure_w - 10
-    body_h      = H - body_top - M - 64          # leave room for pills + sparkline footer
+    # --- region geometry ---
+    body_top = y
+    body     = meta.abstract === nothing ? meta.tldr : meta.abstract
+    has_body = body !== nothing && !isempty(strip(body))
+    footer_h = 14.0                                   # DOI provenance line at the very bottom
 
-    # figure pillar placeholder (right), full body height
-    _rect!(sc, f, M + cw - figure_w, body_top, figure_w, body_h; color=CM.RGBf(0.95,0.95,0.97),
-           strokecolor=_RULE, strokewidth=1.0)
-    _text!(sc, f, M + cw - figure_w + 8, body_top + body_h/2, meta.figure_url === nothing ?
-           "figure" : "og:image"; fontsize=8, color=_MUTED)
+    figure_w   = 0.34cw
+    body_col_w = cw - figure_w - 12
 
-    body = meta.abstract === nothing ? meta.tldr : meta.abstract
-    if body !== nothing && !isempty(strip(body))
+    # concept pills: a small 2-row band beneath the body region (abstract cards only)
+    pb_fs = 9.0; pb_step = pb_fs + 12.0
+    pb    = _backend(SANS, pb_fs)
+    pill_names = isempty(meta.concepts) ? String[] : String[c[1] for c in meta.concepts[1:min(end, 8)]]
+    pill_rows  = isempty(pill_names) ? Vector{String}[] :
+                 wrap_pills(pill_names, pb; strip_width=cw, pad=8.0, gap=6.0)
+    band_rows  = length(pill_rows) > 2 ? pill_rows[1:2] : pill_rows
+    band_h     = (has_body && !isempty(band_rows)) ? length(band_rows) * pb_step + 4.0 : 0.0
+
+    body_h = H - body_top - M - footer_h - band_h - 10
+
+    # figure region (right): a REAL citations-per-year chart / stat block — never an empty box.
+    _draw_figure_panel!(sc, f, M + cw - figure_w, body_top, figure_w, body_h, meta)
+
+    if has_body
         body_fs = tldr_autosize(body; box_width=body_col_w, box_height=body_h, fs_min=9.0, fs_max=12.0)
         bb   = _backend(SERIF, body_fs)
         prep = prepare(bb, body)
         la   = prep.metrics.line_advance
         dco  = dropcap_offset(body; body_fontsize=body_fs)
         notch_h = 3 * la
-        # chord_fn: left column with a drop-cap notch in the first 3 lines; empty beyond body_h
+        # chord_fn: left text column with a drop-cap notch in the first 3 lines; empty beyond body_h
         chord = (yt, yb) -> begin
             yt >= body_h && return Tuple{Float64,Float64}[]
             left = yb <= notch_h ? dco : 0.0
@@ -381,42 +390,66 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
         dcfs = 3 * body_fs
         _text!(sc, f, M, body_top + la + prep.metrics.ascent, string(first(strip(body)));
                fontsize=dcfs, font=SERIF, color=_ACCENT, align=(:left, :baseline))
-        y = body_top + body_h + 10
+        _draw_pills!(sc, f, pb, band_rows, pb_fs, pb_step, M, body_top + body_h + 8)
     else
-        # graceful degradation (slot 6): enlarged pills + muted "abstract unavailable"
-        _text!(sc, f, M, body_top + 14, "abstract unavailable"; fontsize=11, font=SANS, color=_MUTED)
-        pills_h = body_h                     # pills get the whole region below
-        y = body_top + 24
+        # graceful degradation (slot 6): muted caption + ENLARGED pills fill the left column
+        # (no empty whitespace where the abstract would be); figure panel still on the right.
+        _text!(sc, f, M, body_top + 18, "abstract unavailable"; fontsize=12, font=SANS, color=_MUTED)
+        big_fs = 12.0
+        bigpb  = _backend(SANS, big_fs)
+        rows6  = isempty(pill_names) ? Vector{String}[] :
+                 wrap_pills(pill_names, bigpb; strip_width=body_col_w, pad=9.0, gap=7.0)
+        _draw_pills!(sc, f, bigpb, rows6, big_fs, big_fs + 14.0, M, body_top + 36)
     end
 
-    # --- concept pills ---
-    if !isempty(meta.concepts)
-        pill_fs = (meta.abstract === nothing && meta.tldr === nothing) ? 11.0 : 9.0
-        pb = _backend(SANS, pill_fs)
-        names = String[c[1] for c in meta.concepts[1:min(end, 8)]]
-        rows = wrap_pills(names, pb; strip_width=cw, pad=8.0, gap=6.0)
-        py = y
-        for row in rows
-            px = M
-            for name in row
-                pw = measure(pb, name) + 16
-                _rect!(sc, f, px, py, pw, pill_fs + 8; color=_PILLBG)
-                _text!(sc, f, px + 8, py + pill_fs + 1, name; fontsize=pill_fs, color=_ACCENT)
-                px += pw + 6
-            end
-            py += pill_fs + 14
-        end
-        y = py
-    end
-
-    # --- citation sparkline footer ---
-    if !isempty(meta.citations_by_year)
-        cap = "$(meta.citations_by_year[1][1])–$(meta.citations_by_year[end][1])  ·  $(meta.citation_count) cites"
-        sb  = _backend(SANS, 9.0)
-        spark = citation_sparkline(meta.citations_by_year, sb; target_width=measure(sb, cap))
-        fy = H - M
-        _text!(sc, f, M, fy - 12, spark; fontsize=9, font=SANS, color=_ACCENT)
-        _text!(sc, f, M, fy,      cap;   fontsize=9, font=SANS, color=_MUTED)
-    end
+    # --- DOI provenance footer (research-infographic touch; replaces the duplicate sparkline) ---
+    _text!(sc, f, M, H - M, "doi:" * meta.doi; fontsize=7, font=SANS, color=_MUTED)
     return sc
+end
+
+_commas(n::Integer) = replace(string(n), r"(?<=[0-9])(?=(?:[0-9]{3})+$)" => ",")
+
+# Draw rows of concept pills; top-left of the block at block-top (x0, y0).
+function _draw_pills!(sc, f, pb, rows, fs, step, x0, y0)
+    py = y0
+    for row in rows
+        px = x0
+        for name in row
+            pw = measure(pb, name) + 16
+            _rect!(sc, f, px, py, pw, fs + 8; color=_PILLBG)
+            _text!(sc, f, px + 8, py + fs + 1, name; fontsize=fs, color=_ACCENT)
+            px += pw + 6
+        end
+        py += step
+    end
+    return py
+end
+
+# The figure region as a real data graphic: a citations-per-year bar chart with the total
+# citation count, or — for papers with no citation timeline (e.g. arXiv preprints) — a small
+# stat block (count + year + OA). Never an empty placeholder. Uses only `meta`'s real data.
+function _draw_figure_panel!(sc, f, x, y, w, h, meta)
+    _rect!(sc, f, x, y, w, h; color=CM.RGBf(0.965, 0.97, 0.98))
+    pad = 9.0
+    _text!(sc, f, x + pad, y + 13, "CITATIONS"; fontsize=7, font=SANS, color=_MUTED)
+    _text!(sc, f, x + pad, y + 36, _commas(meta.citation_count); fontsize=21, font=SANS, color=_ACCENT)
+    yrs = meta.citations_by_year
+    if !isempty(yrs)
+        cx = x + pad; cwid = w - 2pad
+        ctop = y + 48; cbot = y + h - 16
+        ch = max(cbot - ctop, 8.0)
+        mx = maximum(c for (_, c) in yrs); mx == 0 && (mx = 1)
+        n = length(yrs); bw = cwid / n
+        for (i, (_, c)) in enumerate(yrs)
+            bh = c / mx * ch
+            _rect!(sc, f, cx + (i - 1) * bw, cbot - bh, max(bw * 0.7, 1.0), bh; color=_ACCENT)
+        end
+        _text!(sc, f, cx, y + h - 4, string(yrs[1][1]); fontsize=6, color=_MUTED)
+        _text!(sc, f, x + w - pad - 16, y + h - 4, string(yrs[end][1]); fontsize=6, color=_MUTED)
+    else
+        _text!(sc, f, x + pad, y + 50, "total citations"; fontsize=7, color=_MUTED)
+        meta.year === nothing ||
+            _text!(sc, f, x + pad, y + 68, "published $(meta.year)"; fontsize=8, color=_INK)
+        _text!(sc, f, x + pad, y + 84, "OA · $(meta.oa_status)"; fontsize=8, color=_oa_color(meta.oa_status))
+    end
 end
