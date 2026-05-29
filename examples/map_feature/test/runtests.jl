@@ -5,5 +5,6 @@ using Test
     include("test_projection.jl")
     include("test_poi_labels.jl")
     include("test_data.jl")
+    include("test_render_layout.jl")
     include("test_render_pdf.jl")
 end

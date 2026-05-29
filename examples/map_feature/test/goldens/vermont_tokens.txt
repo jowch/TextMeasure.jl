@@ -34,6 +34,7 @@ flowing
 folds
 follow
 gather
+geography
 geographywhen
 grain
 green
@@ -49,6 +50,7 @@ jerrys
 johnsbury
 knows
 lake
+lakewillchamplain
 land
 layout
 leaves
@@ -96,6 +98,7 @@ valleys
 vermont
 vermontrises
 was
+when
 where
 white
 wide
