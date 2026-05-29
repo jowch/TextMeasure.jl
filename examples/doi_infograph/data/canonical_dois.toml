@@ -1,0 +1,11 @@
+# Canonical demonstration DOIs for the 6-up DOIInfograph grid (#F3).
+# Source of truth — one string array, slot order is grid order (2x3, row-major).
+# Each slot stresses a different adaptive primitive; see README + plan for rationale.
+dois = [
+    "10.1038/s41586-019-1666-5",   # 1 Sycamore — long title, 77 authors, hybrid OA, abstract+tldr
+    "10.48550/arXiv.1706.03762",   # 2 Attention — short title, 8 authors, green OA preprint
+    "10.1371/journal.pone.0000308",# 3 PLOS ONE — gold OA, abstract reliably present, 3 authors
+    "10.48550/arXiv.2405.17090",   # 4 arXiv — 125-char title, no abstract (autoshrink + degradation)
+    "10.1038/ng.3097",             # 5 GWAS — 446 authors (author-overflow "et al.")
+    "10.1016/0927-0256(96)00008-0",# 6 VASP — no abstract AND no S2 tldr (deepest degradation)
+]
