@@ -23,20 +23,29 @@ using TextMeasure
 using TextMeasureLayouts: JustifiedLayout, greedy_justify, knuth_plass
 using Justification: find_rivers, CANONICAL_PARAGRAPH
 
-const BODY_FONT  = "Liberation Serif"   # pinned body face
-const LABEL_FONT = "DejaVu Sans"        # pinned label face
+# ---- House style (docs/superpowers/demos-house-style.md) ------------------------------
+const BODY_FONT  = "Liberation Serif"   # pinned serif (body / title)
+const LABEL_FONT = "DejaVu Sans"        # pinned sans  (subheads / caption / footer)
 
-# SCALE multiplies BOTH the font size and the measures together. Badness is dimensionless
-# (the adjustment ratio r is slack/stretch), and river detection scales with it, so the
-# computed comparison — line breaks, badges, river counts — is identical at every SCALE;
-# only the rendered size changes. We render larger than the base measure for a legible,
-# print-quality figure.
-const SCALE     = 1.7
-const FONTSIZE  = 11.0 * SCALE
-const WIDE_PX   = 520.0 * SCALE
-const NARROW_PX = 260.0 * SCALE
-const LEAD      = 1.5            # render leading (visual breathing room; not a layout input)
-const RIVER_COL = RGBf(0.86, 0.21, 0.18)   # warm red for river channels
+# Type ramp (pt): body 11, subhead 14, caption 9, display 44 (masthead only). #K is the one
+# demo that stays JUSTIFIED (its justified columns are the demo). Body = 11 pt exactly, so
+# we render at the base measure (no scaling). Badness is dimensionless and river detection
+# scales with geometry, so the computed comparison/badges are identical at any size anyway.
+const BODY_PT    = 11.0
+const SUBHEAD_PT = 14.0
+const CAPTION_PT = 9.0
+const DISPLAY_PT = 44.0
+const FONTSIZE   = BODY_PT
+const WIDE_PX    = 520.0
+const NARROW_PX  = 260.0
+const LEAD       = 1.25          # render leading (display only; not a layout input)
+const MARGIN_PX  = 36.0          # outer margin on all four sides
+
+# Palette — locked (3 accents + 1 gray); background white, body near-black.
+const RED   = RGBf(0.753, 0.224, 0.169)   # #C0392B — river overlays
+const GREEN = RGBf(0.106, 0.478, 0.239)   # #1B7A3D — K–P "winner" label
+const GRAY  = RGBf(0.420, 0.447, 0.502)   # #6B7280 — caption / footer / hairlines
+const INK   = RGBf(0.10,  0.10,  0.10)    # #1A1A1A — body text
 
 # Block-top-frame baseline of line i with display leading (y increasing DOWN: line 1 small,
 # line N large). We render in Makie's native y-UP axis, so every y is NEGATED at draw time
@@ -64,31 +73,30 @@ function _draw_column!(ax, prep, lay::JustifiedLayout; show_rivers::Bool)
             yb_bot = _baseline(prep, maximum(lns)) + prep.metrics.descent
             bandw = 0.85 * FONTSIZE          # em-based so the channel reads boldly
             poly!(ax, Rect2f(xbar - bandw / 2, -yb_bot, bandw, yb_bot - yb_top);
-                  color=(RIVER_COL, 0.30))
-            lines!(ax, [xbar, xbar], [-yb_top, -yb_bot]; color=(RIVER_COL, 0.9),
-                   linewidth=2.4 * SCALE)
+                  color=(RED, 0.28))
+            lines!(ax, [xbar, xbar], [-yb_top, -yb_bot]; color=(RED, 0.9), linewidth=2.2)
         end
     end
 
-    # Words (y negated ⇒ line 1 at the top, reading top→bottom).
+    # Words (y negated ⇒ line 1 at the top, reading top→bottom). Justified — #K's exception.
     xs = Float64[]; ys = Float64[]; strs = String[]
     for (i, l) in enumerate(lay.lines), (j, wi) in enumerate(l.words)
         push!(xs, l.word_x[j]); push!(ys, -_baseline(prep, i))
         push!(strs, prep.segments[wi].str)
     end
     text!(ax, xs, ys; text=strs, align=(:left, :baseline), font=BODY_FONT,
-          fontsize=FONTSIZE, markerspace=:data, color=:black)
+          fontsize=FONTSIZE, markerspace=:data, color=INK)
     return total_h
 end
 
 # Configure one fixed-size, decoration-free axis sized 1:1 to its content (no letterboxing).
 function _column_axis(cell, prep, lay, w, title, titlecolor)
     total_h = _baseline(prep, length(lay.lines)) + prep.metrics.descent
-    xlo, xhi = -8.0, w + 14.0
+    xlo, xhi = -6.0, w + 10.0
     ylo, yhi = -(total_h + 0.6 * FONTSIZE), 0.9 * FONTSIZE   # y-up: line 1 near the top
-    ax = Axis(cell; title=title, titlefont=LABEL_FONT, titlesize=11 * SCALE, titlegap=6,
-              titlecolor=titlecolor, backgroundcolor=:white, halign=:left, valign=:top,
-              width=xhi - xlo, height=yhi - ylo)
+    ax = Axis(cell; title=title, titlefont=LABEL_FONT, titlesize=SUBHEAD_PT, titlegap=6,
+              titlealign=:left, titlecolor=titlecolor, backgroundcolor=:white,
+              halign=:left, valign=:top, width=xhi - xlo, height=yhi - ylo)
     hidedecorations!(ax); hidespines!(ax)
     limits!(ax, xlo, xhi, ylo, yhi)
     return ax
@@ -109,35 +117,42 @@ function render_comparison(outpath::AbstractString=joinpath(@__DIR__, "compariso
     nA = length(find_rivers(A; align_tol=space_w))
     nB = length(find_rivers(B; align_tol=space_w))
     nC = length(find_rivers(C; align_tol=space_w))
-    green = RGBf(0.13, 0.40, 0.20)
-
     # Balanced composition (avoids the wide-ribbon aspect of three columns in a row): the
     # generous-measure baseline (A) spans the top full width; the two TIGHT-measure columns
-    # — greedy (B) vs Knuth–Plass (C) — sit side by side beneath it, so the key comparison
-    # stays side-by-side at equal height. Each axis box is fixed 1:1 to its content (no
-    # DataAspect letterboxing); resize_to_layout! trims the figure to the content.
-    fig = Figure(backgroundcolor=:white, figure_padding=(10, 10, 8, 8))
-    Label(fig[1, 1:2], "Greedy line-breaking pools rivers; Knuth–Plass minimizes them";
-          font=LABEL_FONT, fontsize=15 * SCALE, halign=:left, padding=(0, 0, 2, 4))
+    # — greedy (B) vs Knuth–Plass (C) — sit side by side beneath it (cols 1 & 3, with a
+    # hairline gutter in col 2), so the key comparison stays side-by-side at equal height.
+    # Each axis box is fixed 1:1 to its content (no DataAspect letterboxing); house-style
+    # type ramp / palette / 36 px margin / bottom-left footer; resize_to_layout! trims it.
+    fig = Figure(backgroundcolor=:white,
+                 figure_padding=(MARGIN_PX, MARGIN_PX, MARGIN_PX, MARGIN_PX))
 
-    axA = _column_axis(fig[2, 1:2], prep, A, WIDE_PX, _badge("Greedy", "generous measure", A, nA), :black)
+    Label(fig[1, 1:3], "Greedy vs. Knuth–Plass"; font=BODY_FONT, fontsize=DISPLAY_PT,
+          color=INK, halign=:left, padding=(0, 0, 4, 0))
+
+    axA = _column_axis(fig[2, 1:3], prep, A, WIDE_PX, _badge("Greedy", "generous measure", A, nA), INK)
     _draw_column!(axA, prep, A; show_rivers=false)
 
-    axB = _column_axis(fig[3, 1], prep, B, NARROW_PX, _badge("Greedy", "tight measure", B, nB), :black)
+    axB = _column_axis(fig[3, 1], prep, B, NARROW_PX, _badge("Greedy", "tight measure", B, nB), INK)
     _draw_column!(axB, prep, B; show_rivers=true)
 
-    axC = _column_axis(fig[3, 2], prep, C, NARROW_PX, _badge("Knuth–Plass", "tight measure", C, nC), green)
+    Box(fig[3, 2]; color=(GRAY, 0.15), strokevisible=false)   # 0.5 px-class hairline gutter
+    colsize!(fig.layout, 2, Fixed(1.0))
+
+    axC = _column_axis(fig[3, 3], prep, C, NARROW_PX, _badge("Knuth–Plass", "tight measure", C, nC), GREEN)
     _draw_column!(axC, prep, C; show_rivers=true)
 
-    Label(fig[4, 1:2],
+    Label(fig[4, 1:3],
           "Same paragraph, set three ways. A river (red) is a run of inter-word gaps " *
           "aligned across ≥3 lines. At a tight\nmeasure greedy pools them; Knuth–Plass " *
           "minimizes total badness and breaks them up — at roughly half the badness.";
-          font=LABEL_FONT, fontsize=9 * SCALE, color=(:black, 0.6), halign=:left,
-          justification=:left, padding=(0, 0, 10, 0))
+          font=LABEL_FONT, fontsize=CAPTION_PT, color=GRAY, halign=:left,
+          justification=:left, lineheight=1.3, padding=(0, 0, 14, 2))
+
+    Label(fig[5, 1:3], "TextMeasure.jl · Knuth–Plass"; font=LABEL_FONT, fontsize=CAPTION_PT,
+          color=GRAY, halign=:left, padding=(0, 0, 0, 0))
 
     rowgap!(fig.layout, 8)
-    colgap!(fig.layout, 16)
+    colgap!(fig.layout, 14)
     resize_to_layout!(fig)
     save(outpath, fig)
     return abspath(outpath)
