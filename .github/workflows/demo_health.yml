@@ -79,24 +79,15 @@ jobs:
           fc-list | grep -qi 'DejaVu Sans'      || { echo '::error::DejaVu Sans not installed'; exit 1; }
           fc-list | grep -qi 'Liberation Serif' || { echo '::error::Liberation Serif not installed'; exit 1; }
 
-      - name: Develop path deps, instantiate, and run the demo test suite
+      - name: Instantiate and run the demo test suite
         id: runtest
+        # Plain instantiate+test — no manual Pkg.develop. The unregistered in-repo deps
+        # (TextMeasure, and TextMeasureLayouts for the demos that use it) are resolved via
+        # each demo's [sources] table in Project.toml. This is the exact flow the per-demo
+        # READMEs document, so green CI here means the documented quickstart works too.
         run: |
           julia --color=yes --project=examples/${{ matrix.demo }} -e '
             using Pkg
-            root = pwd()
-            demo = "examples/${{ matrix.demo }}"
-            # Committed demo Manifests (where present) pin TextMeasure to a non-portable
-            # absolute author path; drop it so we resolve cleanly from current source.
-            mpath = joinpath(demo, "Manifest.toml")
-            isfile(mpath) && rm(mpath)
-            proj = Pkg.TOML.parsefile(joinpath(demo, "Project.toml"))
-            deps = get(proj, "deps", Dict{String,Any}())
-            specs = Pkg.PackageSpec[Pkg.PackageSpec(path=root)]   # TextMeasure (always)
-            if haskey(deps, "TextMeasureLayouts") && get(proj, "name", "") != "TextMeasureLayouts"
-                push!(specs, Pkg.PackageSpec(path=joinpath(root, "examples", "layouts")))
-            end
-            Pkg.develop(specs)
             Pkg.instantiate()
             Pkg.test()
           '
