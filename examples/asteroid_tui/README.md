@@ -55,9 +55,12 @@ The suite checks three things independently:
 
 ### The golden frame
 
-The committed snapshot (`test/golden/frame60.txt`) is a 120×40 showcase scene:
-two intact asteroids with their descriptive prose **shape-packed inside each
-silhouette** under a `┌─ d:… v:… ─┐` stat tag, plus a four-shard explosion from a
-beam hit (each shard carries a `subprep` slice of the original prose, scattered
-outward). The scene is tuned for legibility — no overlapping labels, no off-screen
-clipping. Open `test/golden/frame60.txt` to view the full frame.
+The committed snapshot (`test/golden/frame60.txt`) is a 116×36 showcase scene: a
+large dominant asteroid whose descriptive prose is **shape-packed inside its
+silhouette** as a rounded text-mass, a smaller intact drifter receding to the upper
+right, and the player's ship hunting below — each asteroid labelled by a closed
+`┌─ d:… v:… ─┐` callout box joined to its body by a connector leader, with short
+motion trails behind the moving bodies and a thrust plume under the ship. Every
+body carries a nonzero velocity so the still telegraphs motion. The scene is tuned
+for legibility — no overlapping labels, no off-screen clipping. Open
+`test/golden/frame60.txt` to view the full frame.

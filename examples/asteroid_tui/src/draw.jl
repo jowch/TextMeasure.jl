@@ -44,7 +44,11 @@ function _draw_border!(buf::CellBuffer)
     return buf
 end
 
-# --- helpers: write only into empty cells (guarantees no overprint) ----------
+# --- decoration helpers: write only into already-empty cells ------------------
+# These (trails / leader / thrust plume / beam) yield to anything already drawn, so
+# they never land on top of prose or callouts. They are NOT what keeps the prose
+# bodies / callouts / hull / border from colliding — that is z-order + scene
+# composition (see `draw!`). These helpers just keep the *decorations* tidy.
 
 _put_if_empty!(buf, r, c, ch; fg) =
     (inbounds(buf, r, c) && buf.chars[r, c] == ' ') ? put_char!(buf, r, c, ch; fg = fg) : buf
@@ -90,10 +94,8 @@ _callout_stat(a) = Printf.@sprintf("d:%03dm v:%.2fµ", round(Int, a.radius * 10)
 # Geometry of an asteroid's closed 3-row callout box centered on the body's x. It
 # floats ABOVE the blob when there's room; if that would collide the top frame
 # border (tall blob near the top), it FLIPS to below the blob instead. A connector
-# (┬ above / ┴ below) plus a short leader joins the box to the blob. `buf_h` is the
-# buffer height so the placement rule knows the frame. Returns coords so the drawer
-# and the overprint scorer agree exactly.
-function _callout_layout(a, pp, buf_h::Int)
+# (┬ above / ┴ below) plus a short leader joins the box to the blob.
+function _callout_layout(a, pp)
     stat  = _callout_stat(a)
     inner = length(stat) + 2          # one space pad each side
     width = inner + 2                 # plus the two │ borders
@@ -112,25 +114,8 @@ function _callout_layout(a, pp, buf_h::Int)
     end
 end
 
-# All (row,col) cells a callout (box + connector leader) occupies — for the scorer.
-function _callout_cells(a, pp, buf_h::Int)
-    L = _callout_layout(a, pp, buf_h)
-    cells = Tuple{Int,Int}[]
-    for c in L.left:(L.left + L.width - 1)
-        push!(cells, (L.box_top, c)); push!(cells, (L.box_top + 2, c))
-    end
-    push!(cells, (L.box_top + 1, L.left)); push!(cells, (L.box_top + 1, L.left + L.width - 1))
-    for c in (L.left + 1):(L.left + L.width - 2)
-        push!(cells, (L.box_top + 1, c))
-    end
-    for r in L.leader_from:L.leader_to            # connector leader to the blob
-        push!(cells, (r, L.cx))
-    end
-    return cells
-end
-
 function _draw_callout!(buf::CellBuffer, a, pp)
-    L = _callout_layout(a, pp, nrows(buf))
+    L = _callout_layout(a, pp)
     conn = L.cx - L.left + 1                       # 1-based offset of connector in the box rule
     toprule = collect("┌" * ("─"^L.inner) * "┐")
     botrule = collect("└" * ("─"^L.inner) * "┘")
@@ -211,10 +196,15 @@ end
 """
     draw!(buf, g) -> buf
 
-Paint the whole game into `buf` (cleared first). Pure: no terminal I/O. Layer order:
-motion trails (under) → asteroid prose + closed callouts → shard prose → targeting
-leader → beam → ship → border+footer. Trails/leader/plume write only into empty
-cells, so they never overprint prose or callouts.
+Paint the whole game into `buf` (cleared first). Pure: no terminal I/O.
+
+Non-overlap is guaranteed by **z-order + scene composition**, not by per-write
+guards: the scene is hand-composed (and, for the golden, seed-pinned) so the prose
+bodies and their callouts don't share cells, and the draw order layers later
+elements over earlier ones deliberately. Layer order: motion trails (under) →
+asteroid prose + closed callouts → shard prose → targeting leader → beam → ship →
+border + footer. The decorations (trails / leader / plume / beam) additionally yield
+to already-occupied cells (`_put_if_empty!`) so they never land on the prose.
 """
 function draw!(buf::CellBuffer, g::GameState)
     clear!(buf)
