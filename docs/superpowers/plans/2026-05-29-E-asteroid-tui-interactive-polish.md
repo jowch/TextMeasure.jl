@@ -30,9 +30,11 @@
 | `src/render_tachikoma.jl` | `InputState` + pure `sweep_stale!`/`fold_input` + `_poll_input!` + `run_game` wiring + loop |
 | `src/draw.jl` | `_draw_ship!` directional glyph; no leader/plume |
 | `src/entities.jl` | unchanged (`Ship.φ` already exists) |
-| `test/test_input.jl` | **new** — headless unit tests for `sweep_stale!`/`fold_input`/`aim_heading` |
+| `test/test_input.jl` | **new** — headless unit tests for `sweep_stale!`/`fold_input` (`aim_heading` tested in `test_game.jl`) |
+| `test/runtests.jl` | add `"test_input.jl"` to the include tuple |
 | `test/test_game.jl`, `test_gameloop.jl`, `test_draw.jl`, `test_fracture.jl` | updated field set + new behavior tests |
-| `test/golden/frame60.{sha256,txt}` | regenerated (driven by `_draw_ship!` only) |
+| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `draw.jl` visual changes: glyph + plume + leader cut) |
+| `run.jl` | rewrite the player-facing controls banner (`:3-5`) for twin-stick |
 
 ---
 
@@ -211,7 +213,15 @@ using Test
 end
 ```
 
-Register it in `test/runtests.jl` (add `include("test_input.jl")` alongside the others).
+Register it in `test/runtests.jl` by adding `"test_input.jl"` **into the existing filename tuple** the file iterates (it does `for f in ("test_cellbuffer.jl", …, "test_golden.jl"); include(f); end` — not standalone `include()` calls). Put it first:
+
+```julia
+    for f in ("test_input.jl", "test_cellbuffer.jl", "test_cellbackend.jl", "test_prose.jl",
+              "test_pack.jl", "test_game.jl", "test_fracture.jl", "test_draw.jl",
+              "test_gameloop.jl", "test_golden.jl")
+        include(f)
+    end
+```
 
 Replace `test/test_game.jl`'s `tick! physics` testset (strafe + aim + edge-debug; keep the `respawn + invuln` testset; add `spawn protection`):
 
@@ -477,7 +487,7 @@ end
         term  = TK.Terminal(; size = (cols = width, rows = height))
         state = InputState(width, height)
         TK.enter_tui!(term)                 # alt-screen + raw mode + start_input!
-        print(term.io, "\e[?1003h"); flush(term.io)   # any-motion mouse (enter_tui! enables only 1002h)
+        print(term.io, "\e[?1003h"); flush(term.io)   # any-motion mouse: enter_tui! enables 1000h+1002h+1006h (button-motion + SGR), not 1003h bare-motion
         try
             _run_loop!(g, cb, term; max_frames = max_frames,
                        poll = frame -> _poll_input!(state, term, frame),
@@ -488,7 +498,12 @@ end
         end
 ```
 
-(Leave the headless `else` branch — `poll = frame -> Input()` — unchanged.) Also rewrite the stale prose: the file header (`:1-17`), the `run_game` key-map docstring (`:96-97`) and interactive bullet (`:84-86`), to describe twin-stick + held-key decay (no "turn & thrust", no "momentary").
+(Leave the headless `else` branch — `poll = frame -> Input()` — unchanged.) Also rewrite the stale prose: the file header (`:1-17`), the `run_game` key-map docstring (`:96-97`) and interactive bullet (`:84-86`), to describe twin-stick + held-key decay (no "turn & thrust", no "momentary"). And rewrite **`run.jl`'s player-facing controls banner** (`run.jl:3-5`) — currently `# Controls: arrows / WASD turn & thrust, space charges (release to fire), …`:
+
+```julia
+# Controls: WASD strafe (the mouse aims the ship), LMB or space charges (release to fire),
+#           ? toggles the debug overlay, q / Esc / Ctrl-C quit.
+```
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -558,10 +573,10 @@ Honour the `impact` argument by converting the cell-space contact offset into th
 end
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 2: Run — note both tests already pass (the impact arg is currently IGNORED)**
 
 Run: `julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log"`
-Expected: FAIL — `length(g.shards) == requested` fails (cell-space impact ≈ 7 seeds outside the ~±1 polygon → `voronoi_shatter` collapses to ~1 shard).
+Expected: **PASS** — this is *not* a red step. The current `fracture_asteroid!` discards `impact` and hardcodes `(0,0)` into `voronoi_shatter` (`game.jl:167`), so seeds land at the centroid and the full shard count is produced regardless of the passed offset. The off-centre test is a **regression guard**: it must stay green after Step 3, and (crucially) would FAIL if `impact` were honoured *without* the frame conversion (raw cell-space ≈7 seeds escape the ~±1 polygon → `voronoi_shatter` collapses to ~1 shard → `length==requested` fails). You can confirm it bites: after Step 3, temporarily drop the `/ a.radius` divisor and re-run — the off-centre `length(g.shards)==requested` assert fails — then restore it.
 
 - [ ] **Step 3: Implement the conversion** — in `fracture_asteroid!` replace the `voronoi_shatter` call (`game.jl:167`) with the conversion + call, and update the docstring's frame contract:
 
@@ -574,7 +589,7 @@ Expected: FAIL — `length(g.shards) == requested` fails (cell-space impact ≈ 
     polys = voronoi_shatter(a.poly, GB.Point2{Float64}(fx, fy); n_shards = n_shards)
 ```
 
-Also update the existing centre-hit caller `test_fracture.jl:16` from `GB.Point2(a.x, a.y)` to `GB.Point2{Float64}(0.0, 0.0)` (cell-space zero offset — a centre hit).
+Also update the existing centre-hit caller `test_fracture.jl:16` from `GB.Point2(a.x, a.y)` to `GB.Point2{Float64}(0.0, 0.0)` (cell-space zero offset — a centre hit). (Both the old `(a.x,a.y)` and the new `(0.0,0.0)` resolve to the polygon centroid under the conversion — `a.x,a.y` would clamp far into the bbox corner — so use the offset form to honour the new contract.)
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -775,10 +790,14 @@ git commit -m "feat(#E): wire ship↔asteroid death (kill_ship! on wrap-aware co
     g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=N)
     g.ship.invuln = 1_000_000                  # keep ship alive; don't perturb the test
     empty!(g.asteroids)
-    tick!(g, Input()); @test length(g.asteroids) == 1          # one per tick
+    tick!(g, Input())
+    @test length(g.asteroids) == 1             # one spawned per tick
+    # _replenish_field! runs LAST in tick! (after _advance_asteroids!), so the just-spawned
+    # asteroid is still exactly on its edge this tick — assert it here, before it drifts.
+    a = g.asteroids[1]
+    @test a.x == 0.0 || a.x == g.width || a.y == 0.0 || a.y == g.height
     for _ in 1:10; tick!(g, Input()); end
-    @test length(g.asteroids) == N                              # caps at N (g.n_target)
-    @test any(a -> a.x==0.0 || a.x==g.width || a.y==0.0 || a.y==g.height, g.asteroids)  # edge spawn
+    @test length(g.asteroids) == N             # caps at N (g.n_target), never exceeds
 end
 ```
 
@@ -835,18 +854,26 @@ git commit -m "feat(#E): field replenish — edge-spawn one asteroid per tick to
 
 ```julia
     g.debug = false
-    g.ship.φ = 0.0; g.ship.alive = true; g.ship.invuln = 0; g.ship.charge = 0
+    g.ship.alive = true; g.ship.invuln = 0; g.ship.charge = 0
     g.ship.x = 40.0; g.ship.y = 12.0
-    buf3 = CellBuffer(g.height, g.width); draw!(buf3, g)
     sx = round(Int, g.ship.x); sy = round(Int, g.ship.y)
-    @test buf3.chars[sy, sx]     == '▮'          # hull at centre
-    @test buf3.chars[sy - 1, sx] == '▲'          # nose-up at φ=0
+    # φ=0 ⇒ nose-up; the OLD wings (╱╲) and plume (┃) must be GONE.
+    g.ship.φ = 0.0
+    b0 = CellBuffer(g.height, g.width); draw!(b0, g)
+    @test b0.chars[sy, sx]     == '▮'            # hull at centre
+    @test b0.chars[sy - 1, sx] == '▲'            # nose one cell up
+    @test b0.chars[sy, sx - 1] != '╱' && b0.chars[sy, sx + 1] != '╲'   # wings removed
+    @test b0.chars[sy + 1, sx] != '┃'            # downward plume removed
+    # φ=π/2 ⇒ facing RIGHT ⇒ nose '▶' one cell to the right (catches a CCW octant table)
+    g.ship.φ = π/2
+    b1 = CellBuffer(g.height, g.width); draw!(b1, g)
+    @test b1.chars[sy, sx + 1] == '▶'
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log"`
-Expected: FAIL — current `_draw_ship!` draws `'▲'` at `(sy-1,sx)` but also `╱▮╲`; the hull is `▮` at `(sy,sx)` so that asserts true, but determinism/other asserts pass — the new test's nose char passes only if the rewrite keeps `▲` at φ=0. (If currently green by accident, proceed; Step 3 makes it correct by construction.)
+Expected: FAIL — the current `_draw_ship!` draws swept wings `╱`/`╲` at `(sy,sx∓1)` and a `┃` plume at `(sy+1,sx)` (so the "removed" asserts fail) and never rotates the glyph (so the `φ=π/2 ⇒ '▶'` assert fails). The φ=0 nose `▲`/hull `▮` asserts already pass against the old glyph — that's expected; the wing/plume/octant asserts are the real red.
 
 - [ ] **Step 3: Rewrite `_draw_ship!`** in `src/draw.jl` (replace lines ~165-181):
 
@@ -855,14 +882,16 @@ Expected: FAIL — current `_draw_ship!` draws `'▲'` at `(sy-1,sx)` but also `
 # (8-way octant table), and — while charging — the charge glyph one cell BEYOND the
 # nose along φ. Pure function of g (no RNG/clock): same state ⇒ same cells. At φ=0
 # the nose is '▲' (nose-up), matching the golden's pinned pose.
-const SHIP_OCTANT = ('▲', '◤', '◀', '◣', '▼', '◢', '▶', '◥')  # N NW W SW S SE E NE
+# φ increases CLOCKWISE from up, so the table must run CW: k·45° = N,NE,E,SE,S,SW,W,NW.
+# (A CCW table makes the nose point backwards — e.g. '◀' while facing right.)
+const SHIP_OCTANT = ('▲', '◥', '▶', '◢', '▼', '◣', '◀', '◤')  # N NE E SE S SW W NW
 
 function _draw_ship!(buf::CellBuffer, g)
     ship_visible(g) || return buf
     s = g.ship
     sx = round(Int, s.x); sy = round(Int, s.y)
     dx, dy = sin(s.φ), -cos(s.φ)
-    nose = SHIP_OCTANT[mod(round(Int, s.φ / (π/4)), 8) + 1]
+    nose = SHIP_OCTANT[mod(round(Int, s.φ / (π/4)), 8) + 1]   # mod handles negative φ
     put_char!(buf, sy, sx, '▮'; fg = COL_SHIP, bold = true)                              # hull
     put_char!(buf, round(Int, s.y + dy), round(Int, s.x + dx), nose; fg = COL_SHIP, bold = true)  # nose
     if s.charge > 0
@@ -886,7 +915,7 @@ In `src/game.jl` `_handle_charge_and_beam!` (line ~88), set the beam origin to t
 - [ ] **Step 5: Run to verify pass** (golden will now be STALE — that's expected; Task 9 regenerates it)
 
 Run: `julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log"`
-Expected: `test_draw.jl` PASS (φ=0 nose `▲`, hull `▮`, determinism holds); **`golden showcase frame` FAILS the hash compare** (the ship glyph changed). Note it — do NOT regenerate yet; commit the code, regenerate in Task 9.
+Expected: `test_draw.jl` PASS (φ=0 nose `▲`, hull `▮`, wings/plume gone, φ=π/2 nose `▶`, determinism holds); **`golden showcase frame` FAILS the hash compare** (the draw.jl visual changes — glyph, plume, leader — altered the rendered frame). Note it — do NOT regenerate yet; commit the code, regenerate in Task 9.
 
 - [ ] **Step 6: Commit**
 
@@ -899,7 +928,7 @@ git commit -m "feat(#E): directional 8-way ship glyph, beam-from-nose, cut targe
 
 ## Task 9: Regenerate + visually verify the golden
 
-The golden is a static `draw!` (no tick loop); only `_draw_ship!` changed it.
+The golden is a static `draw!` (no tick loop), so it is invariant to every `tick!` change; it changes here only from the **Task 8 `draw.jl` visual edits**: the 8-way ship glyph, the removed wings/plume, and the cut targeting-leader (the leader dotted into the golden frame because `_run_golden` has a visible ship + 2 asteroids). A larger-than-just-the-ship diff is expected and correct — no `tick!` change has leaked in.
 
 **Files:** `test/golden/frame60.{sha256,txt}`, `test/test_golden.jl` (comment).
 
@@ -957,6 +986,6 @@ Expected: all testsets pass, `EXIT=0`.
 - Replenish cadence (one/tick) and `SHIP_OCTANT` glyphs.
 
 ## Notes for the implementer
-- `Xoshiro(5)` in the `tick! physics` rotation assert: verify at least one of its asteroids has nonzero ω (almost certain for n=3; if a future seed change breaks it, pick a seed with visible spin).
+- Asteroid-rotation coverage lives in `test_gameloop.jl`'s hardened "entities evolve" assert (`Xoshiro(42)`, n=3 — verified to have nonzero ω). The old fragile `Xoshiro(5)` index-1 rotation assert in `tick! physics` is removed by the Task 2 rewrite; don't reintroduce it.
 - `a.radius > 0` always (`_spawn_asteroid`: `6.0 + 6.0*rand ≥ 6.0`), so `impact / a.radius` needs no divide-by-zero guard.
 - Tachikoma's `poll_event`/`enter_tui!`/`leave_tui!` are unexported internals (`TK.`-qualified); the `[compat] Tachikoma = "2.1.0"` pin guards this coupling.
