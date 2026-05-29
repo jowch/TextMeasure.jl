@@ -45,4 +45,21 @@ export GameState, new_game, tick!, draw!, kill_ship!, ship_visible
 export Input, ScriptedInput, next_input!
 export run_game, game_loop!, step_frame!, drain_to_tachikoma!
 
+# Precompile the first-frame call graph so it's baked into this package's cache
+# instead of JIT-compiled on every fresh `run_game` (~28s TTFX otherwise). The
+# headless `run_game(io=IOBuffer())` path drives new_game → tick! (all resolvers) →
+# draw! → the Tachikoma render drain — the bulk of that cost. We also force one
+# fracture (voronoi_shatter/subprep rarely fire in a few slow-asteroid frames) and
+# the aim/strafe/fire input arms. This lengthens THIS package's precompile step,
+# but that result is cached and amortised across every launch.
+using PrecompileTools: @compile_workload
+
+@compile_workload begin
+    g = run_game(; width = 48, height = 20, seed = 0, max_frames = 3, io = IOBuffer())
+    isempty(g.asteroids) || fracture_asteroid!(g, 1, GB.Point2{Float64}(0.0, 0.0))
+    g2 = new_game(Xoshiro(1); width = 48, height = 20)
+    tick!(g2, Input(up = true, aim = (10.0, 3.0)))
+    tick!(g2, Input(fire = true)); tick!(g2, Input(fire = false))
+end
+
 end # module
