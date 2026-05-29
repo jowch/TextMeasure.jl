@@ -6,15 +6,15 @@ byline   = "by TextMeasure.jl"
 
 [layout]
 page_size     = "letter"
-margin_px     = 54
+margin_px     = 36
 dropcap_lines = 4
 gutter_px     = 8
 
 # v3: same body, a wider centered inset and a 4-line drop cap — all geometry re-derived.
 [inset]
 svg_path  = "skyline.svg"
-x_px      = 147
-y_px      = 232
+x_px      = 165
+y_px      = 168
 width_px  = 210
 height_px = 172
 
@@ -67,6 +67,6 @@ So the page is a proof rather than a paste up. What you are reading flowed aroun
 [[pull_quote]]
 text        = "The page is a proof, not a paste-up."
 attribution = "— the thesis"
-x_px        = 150
-y_px        = 510
+x_px        = 168
+y_px        = 486
 width_px    = 204

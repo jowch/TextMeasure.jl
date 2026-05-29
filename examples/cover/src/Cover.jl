@@ -36,11 +36,16 @@ const PAGE_SIZES = Dict{String,Tuple{Float64,Float64}}(
 # Pinned font set (DejaVu Sans + Liberation Serif). NOT TOML-overridable.
 const TITLE_FONT    = "Liberation Serif Bold"
 const SUBTITLE_FONT = "Liberation Serif"
-const BYLINE_FONT   = "DejaVu Sans"
+const FOOTER_FONT   = "DejaVu Sans"
 const BODY_FONT     = "Liberation Serif"
 const DROPCAP_FONT  = "Liberation Serif Bold"
-const PQ_FONT       = "DejaVu Sans"
+const PQ_FONT       = "Liberation Serif"
 const PQ_ATTR_FONT  = "DejaVu Sans"
+
+# House-style palette (docs/superpowers/demos-house-style.md), locked.
+const NEAR_BLACK = (0.10, 0.10, 0.10)        # body / titles
+const RED        = (0.753, 0.224, 0.169)     # #C0392B — subtitle
+const GRAY       = (0.420, 0.447, 0.502)     # #6B7280 — footer / captions / rules
 
 # ---- geometry types ------------------------------------------------------
 """Axis-aligned bbox in the block-top frame (y down). `left<right`, `top<bottom`."""
@@ -52,14 +57,18 @@ struct BBox
 end
 
 """A positioned text run in ABSOLUTE page coords (block-top). `baseline` is the
-text baseline y; `x` is the left edge. `font`/`fontsize` are the render+measure font."""
+text baseline y; `x` is the left edge. `font`/`fontsize` are the render+measure font;
+`color` is an RGB tuple (defaults to near-black)."""
 struct PlacedText
     text     :: String
     x        :: Float64
     baseline :: Float64
     fontsize :: Float64
     font     :: String
+    color    :: NTuple{3,Float64}
 end
+PlacedText(text, x, baseline, fontsize, font) =
+    PlacedText(text, x, baseline, fontsize, font, NEAR_BLACK)
 
 # ---- config types (filled by config.jl) ----------------------------------
 struct InsetSpec
@@ -118,6 +127,7 @@ struct ComposedCover
     inset_rings      :: Vector          # Vector{SvgRing} from svg.jl
     pull_quotes      :: Vector{PullQuotePlaced}
     rules            :: Vector{NTuple{4,Float64}}   # editorial hairlines (x1,y1,x2,y2), abs
+    footer           :: Union{Nothing,PlacedText}   # house-style bottom-left credit line
 end
 
 include("config.jl")

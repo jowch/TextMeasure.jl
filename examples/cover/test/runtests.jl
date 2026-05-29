@@ -358,9 +358,15 @@ end
         @test c.inset_rect.left ≈ 54.0 + 240.0 atol=1e-9
         @test c.inset_rect.top  ≈ 54.0 + 200.0 atol=1e-9
 
-        @test length(c.masthead) == 3
+        @test length(c.masthead) == 2                  # title + subtitle (byline moved to footer)
         @test c.masthead[1].text == "The Newer Yorker"
         @test c.masthead[1].x > 54.0                   # centered title
+        @test c.masthead[2].color == Cover.RED          # subtitle is house-style RED
+        # footer credit line, GRAY, bottom-left, baseline on the inner bottom margin
+        @test c.footer !== nothing
+        @test c.footer.text == "TextMeasure.jl · The Newer Yorker"
+        @test c.footer.color == Cover.GRAY
+        @test c.footer.baseline ≈ c.page_size[2] - 54.0 atol = 1e-6   # _make_cfg uses margin 54
 
         # no dropcap -> baseline checks vacuously true
         cfg_nd = _make_cfg()
@@ -415,7 +421,7 @@ end
         dc_bad = BBox(120.0, 120.0, 150.0, 160.0)               # inside inset
         pqp = Cover.PullQuotePlaced(PlacedText[], BBox(110.0, 110.0, 190.0, 130.0))  # inside inset
         c = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[], bad_body,
-                          nothing, NaN, dc_bad, 3, inset, [], [pqp], NTuple{4,Float64}[])
+                          nothing, NaN, dc_bad, 3, inset, [], [pqp], NTuple{4,Float64}[], nothing)
         @test !body_wrap_honors_inset(c)
         v = bbox_violations(c)
         @test (:body_inset, 1, 0) in v
@@ -426,7 +432,7 @@ end
         # clean control: same inset, body word well clear -> no findings
         c2 = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[],
                            [BBox(10.0, 10.0, 40.0, 30.0)], nothing, NaN, nothing, 3,
-                           inset, [], Cover.PullQuotePlaced[], NTuple{4,Float64}[])
+                           inset, [], Cover.PullQuotePlaced[], NTuple{4,Float64}[], nothing)
         @test body_wrap_honors_inset(c2)
         @test isempty(bbox_violations(c2))
     end

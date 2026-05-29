@@ -12,7 +12,7 @@ _rgb(t::NTuple{3,Float64}) = MK.RGBf(t[1], t[2], t[3])
 
 function _draw_text!(sc, H, t::PlacedText)
     MK.text!(sc, MK.Point2f(t.x, H - t.baseline); text = t.text, font = t.font,
-             fontsize = t.fontsize, align = (:left, :baseline), color = :black)
+             fontsize = t.fontsize, align = (:left, :baseline), color = _rgb(t.color))
 end
 
 """
@@ -36,16 +36,17 @@ function render_scene(c::ComposedCover)
             MK.lines!(sc, seg; color = _rgb(r.stroke), linewidth = r.stroke_width)
         end
     end
-    # editorial hairlines (masthead separator + pull-quote brackets)
+    # structural hairlines (masthead separator + pull-quote brackets): 1px GRAY @ alpha 1
     for (x1, y1, x2, y2) in c.rules
         MK.lines!(sc, [MK.Point2f(x1, H - y1), MK.Point2f(x2, H - y2)];
-                  color = :black, linewidth = 0.8)
+                  color = MK.RGBAf(GRAY[1], GRAY[2], GRAY[3], 1.0), linewidth = 1.0)
     end
-    # masthead + body + drop cap + pull quotes
+    # masthead + body + drop cap + pull quotes + footer
     for t in c.masthead; _draw_text!(sc, H, t); end
     c.dropcap !== nothing && _draw_text!(sc, H, c.dropcap)
     for t in c.body_runs; _draw_text!(sc, H, t); end
     for pq in c.pull_quotes, t in pq.runs; _draw_text!(sc, H, t); end
+    c.footer !== nothing && _draw_text!(sc, H, c.footer)
     return sc
 end
 

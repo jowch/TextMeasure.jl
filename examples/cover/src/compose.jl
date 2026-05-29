@@ -5,19 +5,20 @@
 # placement, and pull-quote boxes. NO CairoMakie. All correctness invariants are
 # checked against the value it returns, per the issue's "verify at layout time" rule.
 
-# Fixed display metrics (points). Fonts are pinned constants (Cover.jl).
-const TITLE_SIZE    = 52.0
-const SUBTITLE_SIZE = 18.0
-const BYLINE_SIZE   = 11.0
-const BODY_SIZE     = 11.0
-const PQ_SIZE       = 15.0
-const PQ_ATTR_SIZE  = 11.0
-const SUBTITLE_GAP  = 7.0
-const BYLINE_GAP    = 9.0
+# Fixed display metrics (points), from the house-style ramp (display 44 / subhead 14 /
+# body 11 / caption 9). Fonts + palette are pinned constants (Cover.jl).
+const TITLE_SIZE    = 44.0     # display tier (4x body)
+const SUBTITLE_SIZE = 14.0     # subhead tier
+const BODY_SIZE     = 11.0     # body tier
+const PQ_SIZE       = 14.0     # subhead tier — pull-quote callout
+const PQ_ATTR_SIZE  = 9.0      # caption tier — attribution
+const FOOTER_SIZE   = 9.0      # caption tier — footer credit line
+const SUBTITLE_GAP  = 8.0
 const BODY_GAP      = 22.0
 const DROPCAP_GAP   = 6.0      # horizontal space after the drop cap
 const PQ_RULE_GAP   = 6.0      # gap between a pull-quote and its bracketing rules
 const PQ_HOLE_PAD   = 10.0     # extra horizontal clearance so wrap text never touches the callout rules
+const FOOTER_GAP    = 10.0     # clearance reserved above the footer line
 
 # WRAP-AROUND (#H ↔ #C2, WIRED): with `fill=:all`, shape_pack packs EVERY disjoint
 # interval per band left-to-right, so body text flows on BOTH sides of a centered inset
@@ -58,27 +59,26 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     tb = _mk(TITLE_FONT, TITLE_SIZE);     tm = TextMeasure.font_metrics(tb)
     cur = content_top + tm.ascent
     title_w = TextMeasure.measure(tb, cfg.title)
-    push!(masthead, PlacedText(cfg.title, content_left + (content_w - title_w)/2, cur, TITLE_SIZE, TITLE_FONT))
+    push!(masthead, PlacedText(cfg.title, content_left + (content_w - title_w)/2, cur, TITLE_SIZE, TITLE_FONT, NEAR_BLACK))
     cur += tm.descent
     if !isempty(cfg.subtitle)
         sb = _mk(SUBTITLE_FONT, SUBTITLE_SIZE); sm = TextMeasure.font_metrics(sb)
         cur += SUBTITLE_GAP + sm.ascent
         sw = TextMeasure.measure(sb, cfg.subtitle)
-        push!(masthead, PlacedText(cfg.subtitle, content_left + (content_w - sw)/2, cur, SUBTITLE_SIZE, SUBTITLE_FONT))
+        push!(masthead, PlacedText(cfg.subtitle, content_left + (content_w - sw)/2, cur, SUBTITLE_SIZE, SUBTITLE_FONT, RED))
         cur += sm.descent
-    end
-    if !isempty(cfg.byline)
-        bb = _mk(BYLINE_FONT, BYLINE_SIZE); bm = TextMeasure.font_metrics(bb)
-        cur += BYLINE_GAP + bm.ascent
-        bw = TextMeasure.measure(bb, cfg.byline)
-        # right-align the byline to the rule's right end so it reads as intentional
-        push!(masthead, PlacedText(cfg.byline, content_right - bw, cur, BYLINE_SIZE, BYLINE_FONT))
-        cur += bm.descent
     end
     # editorial hairline separating the masthead from the body column
     rule_y = cur + BODY_GAP * 0.5
     push!(rules, (content_left, rule_y, content_right, rule_y))
     body_top = cur + BODY_GAP
+
+    # ---- footer credit line (house style): "TextMeasure.jl · <demo name>",
+    # DejaVu Sans 9pt GRAY, bottom-left, baseline on the inner bottom margin ----
+    fb = _mk(FOOTER_FONT, FOOTER_SIZE); fm = TextMeasure.font_metrics(fb)
+    footer = PlacedText("TextMeasure.jl · " * cfg.title, content_left, content_bottom,
+                        FOOTER_SIZE, FOOTER_FONT, GRAY)
+    footer_reserve = fm.ascent + FOOTER_GAP        # body must stop above the footer
 
     # ---- body backend / metrics ----
     body_be = _mk(BODY_FONT, BODY_SIZE)
@@ -154,7 +154,7 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
         if !isempty(pq.attribution)
             ab = text_bottom + PQ_ATTR_SIZE * 0.4 + pqam.ascent
             aw = TextMeasure.measure(pqa_be, pq.attribution)
-            push!(runs, PlacedText(pq.attribution, pql + pq.width_px - aw, ab, PQ_ATTR_SIZE, PQ_ATTR_FONT))
+            push!(runs, PlacedText(pq.attribution, pql + pq.width_px - aw, ab, PQ_ATTR_SIZE, PQ_ATTR_FONT, GRAY))
             text_bottom = ab + pqam.descent
         end
         bot_rule_y = text_bottom + PQ_RULE_GAP
@@ -174,7 +174,7 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     for h in pq_holes
         push!(holes, BBox(h.left, h.top - body_top, h.right, h.bottom - body_top))
     end
-    region_bottom = content_bottom - body_top
+    region_bottom = (content_bottom - footer_reserve) - body_top   # leave room for the footer
     chord = RectExclusionChordFn(content_left, content_right, region_bottom, holes, cfg.gutter_px)
 
     # ---- pack the body ----
@@ -193,7 +193,7 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
 
     return ComposedCover((W,H), masthead, packed, body_top, body_runs, body_bboxes,
                          dropcap, dropcap_baseline, dropcap_bbox, D, inset_rect, inset_rings,
-                         pull_quotes, rules)
+                         pull_quotes, rules, footer)
 end
 
 # Distinct body-line baselines (body-local), sorted ascending.
