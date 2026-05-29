@@ -306,7 +306,7 @@ function infograph(meta::PaperMetadata; page=(420, 594), template::Symbol=:edito
 end
 
 """
-    shared_title_fontsize(metas; box_width, fs_min=14.0, fs_max=22.0) -> Float64
+    shared_title_fontsize(metas; box_width, fs_min=11.0, fs_max=15.0, font=SERIF_BOLD) -> Float64
 
 The single title size that fits EVERY title in `metas` within 2 lines of `box_width` — the
 size the longest title needs (the min over each title's autoshrink size). Used by the grid
