@@ -21,14 +21,15 @@ _prep(s) = TextMeasure.prepare(CellBackend(), s)
 
 # The committed showcase scene (design-reviewer pick, FEATURABLE): a single dominant
 # rounded text-mass (left-center, the engine shaping ~300 chars of prose into a
-# silhouette) + a smaller receding intact asteroid (upper-right) + the hunting ship
-# with thrust plume. Hand-placed for composition; velocities are NONZERO so the stat
-# readouts and the motion trails show the field in motion even in a still frame. The
+# silhouette) + a smaller receding intact asteroid (upper-right) + the ship (▲ nose
+# above ▮ hull, 8-way directional glyph). Hand-placed for composition; velocities are
+# NONZERO so the stat readouts show the field in motion even in a still frame. The
 # silhouette POLYGONS come from `Xoshiro(38)` via `new_game`, so the whole frame is
-# deterministic and reproducible. This is a STATIC composed frame (no tick loop): the
-# headless tick-loop / determinism path is covered by test_game.jl, and the
-# order-exact fracture glyph-preservation acceptance by test_fracture.jl. This golden
-# is the render-regression anchor for the gallery showcase frame.
+# deterministic and reproducible. This is a STATIC composed frame (`draw!` only, no
+# tick loop): the headless tick-loop / determinism path is covered by test_game.jl,
+# and the order-exact fracture glyph-preservation acceptance by test_fracture.jl. This
+# golden regenerates ONLY when `draw.jl` visuals change (not on `tick!`/physics changes)
+# and is the render-regression anchor for the gallery showcase frame.
 function _run_golden()
     g = new_game(Xoshiro(38); width = 116, height = 36, n_asteroids = 2)
     g.ship.x = 58.0; g.ship.y = 31.0; g.ship.φ = 0.0; g.ship.vx = 0.0; g.ship.vy = -0.15

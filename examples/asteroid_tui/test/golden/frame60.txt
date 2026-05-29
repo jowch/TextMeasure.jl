@@ -20,17 +20,17 @@
 │                    has dealt it,                                                                                 │
 │                    tumbling on without                                                                           │
 │                     haste or heading                                                                             │
-│                     through the long    ··                                                                       │
-│                      night between        ···                                                                    │
-│                       the                    ··                                                                  │
-│                        scattered               ···                                                               │
-│                        stars.                     ··                                                             │
-│                                                     ··                                                           │
-│                                                       ··                                                         │
+│                     through the long                                                                             │
+│                      night between                                                                               │
+│                       the                                                                                        │
+│                        scattered                                                                                 │
+│                        stars.                                                                                    │
+│                                                                                                                  │
+│                                                                                                                  │
 │                                                        ▲                                                         │
-│                                                       ╱▮╲                                                        │
-│                                                        ┃                                                         │
-│                                                        ┋                                                         │
+│                                                        ▮                                                         │
+│                                                                                                                  │
+│                                                                                                                  │
 │                                                                                                                  │
 │                                                                                                                  │
 └─ TextMeasure.jl · Asteroid TUI ──────────────────────────────────────────────────────────────────────────────────┘
