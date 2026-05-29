@@ -33,10 +33,8 @@ mutable struct Shard
     radius::Float64
 end
 
-mutable struct Beam
-    active::Bool
-    x::Float64; y::Float64           # origin (ship tip)
-    φ::Float64
-    length::Int                      # cells (onomatopoeia repeats)
-    ttl::Int
+mutable struct Projectile
+    x::Float64; y::Float64
+    vx::Float64; vy::Float64
+    ttl::Int                          # ticks to live (range backstop; also despawns off-screen)
 end

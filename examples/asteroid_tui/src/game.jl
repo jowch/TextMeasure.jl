@@ -10,7 +10,7 @@ mutable struct GameState
     ship::Ship
     asteroids::Vector{Asteroid}
     shards::Vector{Shard}
-    beam::Beam
+    projectiles::Vector{Projectile}
     rng::Xoshiro
     tick_count::Int
     debug::Bool
@@ -30,31 +30,14 @@ const SHATTER_CLOSING = 0.13         # asteroid closing-speed: ≥ ⇒ fracture,
                                      # (0.2) so the bounce/shatter MIX is speed-independent:
                                      # halve both to slow the field without changing which
                                      # collisions shatter.
+const PROJECTILE_SPEED = 1.2         # cells/tick — fast vs the slow asteroid field
+const PROJECTILE_TTL   = 90          # lifetime backstop (off-screen despawn usually fires first)
+const BURST_SPREAD     = 0.22        # rad (~12.5°) half-fan for a charged burst
 
 _wrap(v, hi) = mod(v, hi)
 
 # A body is fully off-screen once its centre passes an edge by more than its radius.
 _offscreen(b, w, h) = b.x < -b.radius || b.x > w + b.radius || b.y < -b.radius || b.y > h + b.radius
-
-# Toroidal signed delta from (ax,ay) to (bx,by) on a width×height torus. Each axis
-# takes the minimum-magnitude candidate over {d, d-size, d+size}; at the exact
-# |d|==size/2 boundary (rarely reached with float positions) the tie-break prefers
-# the non-negative candidate, so the result stays deterministic. Returns
-# (dx, dy, dist=hypot(dx,dy)) — the VECTOR, so collision code derives
-# normal/closing-speed/push-apart from one wrapped delta.
-function _wrap_axis(d, size)
-    cands = (d, d - size, d + size)
-    best = cands[1]
-    for c in cands
-        if abs(c) < abs(best) || (abs(c) == abs(best) && c > best)
-            best = c
-        end
-    end
-    return best
-end
-
-_wrap_delta(ax, ay, bx, by, width, height) =
-    (dx = _wrap_axis(bx - ax, width); dy = _wrap_axis(by - ay, height); (dx, dy, hypot(dx, dy)))
 
 # Visual-space heading from ship (sx,sy) toward cursor (cx,cy). Cells are ~2:1, so
 # the row delta is multiplied by 2 (cell aspect) before atan, so the nose points at
@@ -81,8 +64,7 @@ reproducible game — the golden test relies on this).
 function new_game(rng::Xoshiro = Xoshiro(0); width=120, height=40, n_asteroids=5)
     ship = Ship(width/2, height/2, 0.0, 0.0, 0.0, 0, true, INVULN_TICKS)
     asteroids = [_spawn_asteroid(rng, width, height) for _ in 1:n_asteroids]
-    beam = Beam(false, 0.0, 0.0, 0.0, 0, 0)
-    return GameState(width, height, ship, asteroids, Shard[], beam, rng, 0, false,
+    return GameState(width, height, ship, asteroids, Shard[], Projectile[], rng, 0, false,
                      false, false, 0, String[], n_asteroids)
 end
 
@@ -117,21 +99,34 @@ function _advance_asteroids!(g::GameState)
     filter!(sh -> sh.ttl > 0 && !_offscreen(sh, g.width, g.height), g.shards)
 end
 
-function _handle_charge_and_beam!(g::GameState, in::Input)
+function _fire_burst!(g::GameState, n::Int)
+    s = g.ship
+    ox, oy = s.x + sin(s.φ), s.y - cos(s.φ)            # nose
+    for k in 1:n
+        off = n == 1 ? 0.0 : -BURST_SPREAD + 2*BURST_SPREAD*(k-1)/(n-1)   # even fan
+        a = s.φ + off
+        push!(g.projectiles, Projectile(ox, oy,
+                                        PROJECTILE_SPEED * sin(a),
+                                        -PROJECTILE_SPEED * cos(a),
+                                        PROJECTILE_TTL))
+    end
+    return g
+end
+
+# Hold `fire` to grow the charge; the first release fires a fan burst of (1 + charge)
+# projectiles from the nose. No RNG — deterministic.
+function _handle_charge_and_fire!(g::GameState, in::Input)
     s = g.ship
     if s.alive
         if in.fire
             s.charge = min(s.charge + 1, CHARGE_MAX)
-        elseif g.prev_fire && s.charge > 0          # release edge ⇒ launch
-            g.beam = Beam(true, s.x + sin(s.φ), s.y - cos(s.φ), s.φ, 4 + 6 * s.charge, 6)
+        elseif g.prev_fire && s.charge > 0
+            _fire_burst!(g, 1 + s.charge)
             s.charge = 0
         end
     end
     g.prev_fire = in.fire
-    if g.beam.active
-        g.beam.ttl -= 1
-        g.beam.ttl <= 0 && (g.beam = Beam(false, 0.0, 0.0, 0.0, 0, 0))
-    end
+    return g
 end
 
 # --- death / respawn ---------------------------------------------------------
@@ -306,21 +301,31 @@ function _resolve_ship_collision!(g::GameState)
     return g
 end
 
-function _resolve_collisions!(g::GameState)
-    g.beam.active || return g
-    bx, by, φ = g.beam.x, g.beam.y, g.beam.φ
-    dirx, diry = sin(φ), -cos(φ)
-    for idx in length(g.asteroids):-1:1
-        a = g.asteroids[idx]
-        for t in 0:g.beam.length              # sample along the beam
-            px, py = bx + dirx * t, by + diry * t
-            ddx, ddy, dist = _wrap_delta(px, py, a.x, a.y, g.width, g.height)
-            if dist <= a.radius
-                fracture_asteroid!(g, idx, GB.Point2{Float64}(-ddx, -ddy))
+function _advance_projectiles!(g::GameState)
+    for p in g.projectiles
+        p.x += p.vx; p.y += p.vy; p.ttl -= 1
+    end
+    filter!(p -> p.ttl > 0 && 0 <= p.x <= g.width && 0 <= p.y <= g.height, g.projectiles)
+    return g
+end
+
+# Each projectile fractures the first asteroid whose radius it's inside (Euclidean),
+# then is consumed. Asteroids fracture one at a time; we re-read g.asteroids per
+# projectile (fracture_asteroid! deleteat!s), and remove spent projectiles after.
+function _resolve_projectile_collisions!(g::GameState)
+    isempty(g.projectiles) && return g
+    spent = falses(length(g.projectiles))
+    for (pidx, p) in enumerate(g.projectiles)
+        for idx in eachindex(g.asteroids)
+            a = g.asteroids[idx]
+            if hypot(a.x - p.x, a.y - p.y) <= a.radius
+                fracture_asteroid!(g, idx, GB.Point2{Float64}(p.x - a.x, p.y - a.y))
+                spent[pidx] = true
                 break
             end
         end
     end
+    deleteat!(g.projectiles, findall(spent))
     return g
 end
 
@@ -356,8 +361,9 @@ function tick!(g::GameState, in::Input)
     g.prev_debug = in.debug
     _advance_ship!(g, in)
     _advance_asteroids!(g)
-    _handle_charge_and_beam!(g, in)
-    _resolve_collisions!(g)              # beam → asteroid
+    _handle_charge_and_fire!(g, in)
+    _advance_projectiles!(g)
+    _resolve_projectile_collisions!(g)   # bullets → asteroid
     _resolve_asteroid_collisions!(g)     # asteroid ↔ asteroid
     _resolve_ship_collision!(g)          # ship ↔ asteroid (death)
     _replenish_field!(g)                 # top up toward g.n_target (one per tick)

@@ -51,7 +51,7 @@ The suite checks three things independently:
   slices its already-measured prose so every word survives in exactly one shard, in
   original order (`rebuilt == original`).
 - **Tick-loop determinism / physics** (`test/test_game.jl`) — seeded `tick!` over the
-  game core (motion, charge, beam, respawn, invulnerability).
+  game core (motion, charge, projectiles, respawn, invulnerability).
 
 ### The golden frame
 

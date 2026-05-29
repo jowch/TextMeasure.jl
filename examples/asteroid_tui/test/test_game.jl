@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 using AsteroidTUI: new_game, tick!, Input, CHARGE_MAX, kill_ship!, ship_visible,
-                   _wrap_delta, aim_heading
+                   aim_heading
 using Random
 using Test
 
@@ -19,7 +19,7 @@ using Test
     g2 = new_game(Xoshiro(1))
     for _ in 1:20; tick!(g2, Input(fire=true)); end
     @test g2.ship.charge == CHARGE_MAX
-    tick!(g2, Input(fire=false)); @test g2.beam.active && g2.ship.charge == 0
+    tick!(g2, Input(fire=false)); @test !isempty(g2.projectiles) && g2.ship.charge == 0
     g4 = new_game(Xoshiro(2)); @test !g4.debug
     tick!(g4, Input(debug=true)); @test g4.debug         # edge: one press toggles on
     tick!(g4, Input(debug=true)); @test g4.debug         # held ⇒ NOT re-toggled (no strobe)
@@ -43,18 +43,6 @@ end
     @test any(vis) && any(!, vis)
 end
 
-@testset "wrap-aware delta" begin
-    W, H = 100.0, 40.0
-    dx, dy, dist = _wrap_delta(98.0, 20.0, 2.0, 20.0, W, H)   # straddle right/left edge
-    @test dx == 4.0 && dy == 0.0 && dist == 4.0               # short way is +4, not -96
-    dx2, dy2, _ = _wrap_delta(10.0, 5.0, 13.0, 9.0, W, H)     # no wrap needed
-    @test dx2 == 3.0 && dy2 == 4.0
-    _, dyv, _ = _wrap_delta(0.0, 39.0, 0.0, 1.0, W, H)        # vertical wrap
-    @test dyv == 2.0
-    dxt, _, _ = _wrap_delta(0.0, 0.0, 50.0, 0.0, W, H)        # tie at size/2 ⇒ +50
-    @test dxt == 50.0
-end
-
 @testset "aim_heading (visual space, up=0 clockwise)" begin
     # ship at (40,12); cells ~2:1 so the row delta is doubled.
     @test isapprox(aim_heading(40.0, 12.0, 40.0, 2.0),  0.0;  atol=1e-9)   # cursor above ⇒ up
@@ -68,11 +56,11 @@ end
     a, b = g.asteroids[1], g.asteroids[2]
     a.x=50.0; a.y=20.0; a.vx=0.0; a.vy=0.0
     b.x=50.0+(a.radius+b.radius)*0.5; b.y=20.0; b.vx=-0.05; b.vy=0.0   # low closing speed
-    n0 = length(g.asteroids); _,_,d0 = _wrap_delta(a.x,a.y,b.x,b.y,g.width,g.height)
+    n0 = length(g.asteroids); d0 = hypot(b.x - a.x, b.y - a.y)
     @test d0 < a.radius + b.radius
     tick!(g, Input())
     @test length(g.asteroids) == n0                       # bounce, not fracture
-    a2,b2 = g.asteroids[1], g.asteroids[2]; _,_,d1 = _wrap_delta(a2.x,a2.y,b2.x,b2.y,g.width,g.height)
+    a2,b2 = g.asteroids[1], g.asteroids[2]; d1 = hypot(b2.x - a2.x, b2.y - a2.y)
     @test d1 >= d0                                         # pushed apart
     @test all(a -> -a.radius <= a.x <= g.width + a.radius &&
                    -a.radius <= a.y <= g.height + a.radius, g.asteroids)  # push-apart clamps within despawn bounds
@@ -113,27 +101,34 @@ end
     @test g.ship.alive
 end
 
-@testset "beam hits across the wrap seam (wrap-aware)" begin
-    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=1)
-    g.ship.invuln = 1_000_000                 # keep ship alive, irrelevant to beam
-    a = g.asteroids[1]
-    # Asteroid just past the LEFT seam; ship/beam just inside the RIGHT edge, aimed +x.
-    # Beam origin = (s.x + sin φ, s.y - cos φ) = (119, 20); dir = (sin,-cos) = (1,0).
-    # Euclidean px (119..) is >100 cells from a.x=2 ⇒ never within radius; the SHORT
-    # toroidal distance across the seam is ~3 cells ⇒ only a wrap-aware check hits.
-    a.x = 2.0; a.y = 20.0; a.vx = 0.0; a.vy = 0.0
-    g.ship.x = 118.0; g.ship.y = 20.0; g.ship.φ = π/2   # φ=π/2 ⇒ dir (1,0) = +x
-    for _ in 1:20; tick!(g, Input(fire=true)); end       # charge to CHARGE_MAX
+@testset "fire launches a charge-sized burst" begin
+    g = new_game(Xoshiro(1); n_asteroids=0)
+    for _ in 1:20; tick!(g, Input(fire=true)); end
     @test g.ship.charge == CHARGE_MAX
-    # The asteroid drifts/wraps over the charge ticks (vx=vy=0 but other physics may
-    # nudge nothing here); re-pin it right before the launch tick so the seam geometry
-    # is exact when _resolve_collisions! runs.
-    a.x = 2.0; a.y = 20.0; a.vx = 0.0; a.vy = 0.0
-    g.ship.x = 118.0; g.ship.y = 20.0; g.ship.φ = π/2
-    shards0 = length(g.shards)
-    # Release edge: beam launches AND _resolve_collisions! runs this same tick.
     tick!(g, Input(fire=false))
-    @test length(g.asteroids) == 0 || length(g.shards) > shards0
+    @test g.ship.charge == 0
+    @test length(g.projectiles) == 1 + CHARGE_MAX        # burst = 1 + charge
+end
+
+@testset "projectile fractures an asteroid it reaches" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=1)
+    g.ship.invuln = 1_000_000
+    a = g.asteroids[1]
+    g.ship.x = 60.0; g.ship.y = 30.0; g.ship.φ = 0.0     # firing straight up
+    a.x = 60.0; a.y = 5.0; a.vx = 0.0; a.vy = 0.0          # rock near the top, dead ahead
+    shards0 = length(g.shards)
+    for _ in 1:20; tick!(g, Input(fire=true)); end          # charge to max
+    tick!(g, Input(fire=false))                             # launch the burst upward
+    for _ in 1:30; tick!(g, Input()); end                   # bullets travel up into the rock
+    @test length(g.shards) > shards0                        # it got fractured (shards spawned)
+end
+
+@testset "projectiles do not wrap — despawn off-screen" begin
+    g = new_game(Xoshiro(3); n_asteroids=0)
+    g.ship.x = 60.0; g.ship.y = 20.0; g.ship.φ = 0.0
+    tick!(g, Input(fire=true)); tick!(g, Input(fire=false))  # one bullet, heading up
+    for _ in 1:60; tick!(g, Input()); end                    # it flies off the top
+    @test isempty(g.projectiles)                             # gone, not wrapped to the bottom
 end
 
 @testset "field replenish restores count to N" begin

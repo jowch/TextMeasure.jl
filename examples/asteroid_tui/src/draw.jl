@@ -5,7 +5,7 @@ import GeometryBasics as GB
 const COL_PROSE  = 0xfa    # 250 grey  — intact asteroid prose
 const COL_SHARD  = 0xdf    # 223 warm  — fracture-shard prose (pops against grey)
 const COL_SHIP   = 0x33    # 51 cyan   — ship hull
-const COL_BEAM   = 0xe2    # 226 yellow— beam + charge indicator
+const COL_BEAM   = 0xe2    # 226 yellow— projectiles + charge indicator
 const COL_TAG    = 0xf4    # 244 grey  — callout boxes
 const COL_TRAIL  = 0xf3    # 243 grey  — motion trails
 const COL_DEBUG  = 0x2d    # 45 cyan   — debug bbox overlay
@@ -45,7 +45,7 @@ function _draw_border!(buf::CellBuffer)
 end
 
 # --- decoration helpers: write only into already-empty cells ------------------
-# These (trails / beam) yield to anything already drawn, so
+# These (trails) yield to anything already drawn, so
 # they never land on top of prose or callouts. They are NOT what keeps the prose
 # bodies / callouts / hull / border from colliding — that is z-order + scene
 # composition (see `draw!`). These helpers just keep the *decorations* tidy.
@@ -170,13 +170,9 @@ function _draw_ship!(buf::CellBuffer, g)
     return buf
 end
 
-function _draw_beam!(buf::CellBuffer, g)
-    g.beam.active || return buf
-    dirx, diry = sin(g.beam.φ), -cos(g.beam.φ)
-    word = "PEW "
-    for t in 1:g.beam.length
-        ch = word[(t - 1) % length(word) + 1]
-        _put_if_empty!(buf, round(Int, g.beam.y + diry * t), round(Int, g.beam.x + dirx * t), ch; fg = COL_BEAM)
+function _draw_projectiles!(buf::CellBuffer, g)
+    for p in g.projectiles
+        put_char!(buf, round(Int, p.y), round(Int, p.x), '•'; fg = COL_BEAM, bold = true)
     end
     return buf
 end
@@ -192,8 +188,8 @@ Non-overlap is guaranteed by **z-order + scene composition**, not by per-write
 guards: the scene is hand-composed (and, for the golden, seed-pinned) so the prose
 bodies and their callouts don't share cells, and the draw order layers later
 elements over earlier ones deliberately. Layer order: motion trails (under) →
-asteroid prose + closed callouts → shard prose → beam → ship →
-border + footer. The decorations (trails / beam) additionally yield
+asteroid prose + closed callouts → shard prose → projectiles → ship →
+border + footer. The decorations (trails) additionally yield
 to already-occupied cells (`_put_if_empty!`) so they never land on the prose.
 """
 function draw!(buf::CellBuffer, g::GameState)
@@ -202,7 +198,7 @@ function draw!(buf::CellBuffer, g::GameState)
     for sh in g.shards;   _draw_trail!(buf, sh.x, sh.y, sh.vx, sh.vy, sh.radius; fg = COL_TRAIL); end
     for a in g.asteroids; _draw_asteroid!(buf, a, g.debug); end
     for sh in g.shards;   _draw_shard!(buf, sh, g.debug); end
-    _draw_beam!(buf, g)
+    _draw_projectiles!(buf, g)
     _draw_ship!(buf, g)
     _draw_border!(buf)
     return buf
