@@ -21,7 +21,6 @@ end
 
 const CHARGE_MAX = 5
 const INVULN_TICKS = 120             # ~2s at 60fps
-const RERASTER_EVERY = 5
 const THRUST = 0.05
 const TURN   = 0.12
 const FRICTION = 0.98
