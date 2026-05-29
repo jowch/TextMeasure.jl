@@ -60,7 +60,7 @@ function _spawn_asteroid(rng::AbstractRNG, width, height)
     radius = 6.0 + 6.0 * rand(rng)
     return Asteroid(poly,
                     rand(rng) * width, rand(rng) * height,
-                    (rand(rng) - 0.5) * 0.6, (rand(rng) - 0.5) * 0.6,
+                    (rand(rng) - 0.5) * 1.4, (rand(rng) - 0.5) * 1.4,
                     (rand(rng) - 0.5) * 0.8 / 60,   # ω in rad/tick (~[-0.4,0.4] rad/s)
                     0.0, radius, prep, 0)
 end
