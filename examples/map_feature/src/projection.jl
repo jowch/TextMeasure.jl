@@ -7,14 +7,18 @@
 import Proj
 
 """
-    PageProjection(geo_ref, region; dest="EPSG:5070")
+    PageProjection(geo_ref, region; dest="EPSG:5070", halign=:center, valign=:center)
 
 Affine fit of a geographic ring (`Vector{Point2{Float64}}` of `(lon, lat)`) into a page
 rectangle `region = (left, top, right, bottom)` (page-pixel, block-top). `geo_ref` defines
 the projected bounding box; build once from the state polygon, then apply to that polygon
 AND its POIs with the SAME transform via [`project_point`](@ref). Aspect ratio is preserved
-(uniform scale = the binding dimension); the result is centered in `region`; projected-north
-maps to page-top (y-flip).
+(uniform scale = the binding dimension); projected-north maps to page-top (y-flip).
+
+`halign ∈ (:left,:center,:right)` / `valign ∈ (:top,:center,:bottom)` place the scaled bbox
+within `region` along the slack (non-binding) dimension. `map_feature` uses `halign=:right` so
+the silhouette is anchored to the page's right margin (no dead east gap) and the editorial
+column wraps its irregular western edge — the single-side feature-page composition.
 
 **CRS scope.** `dest` defaults to `"EPSG:5070"` (NAD83 / CONUS Albers Equal-Area) — the
 **verified** path, used for Vermont (the offline quickstart) and other CONUS states. Non-CONUS
@@ -32,7 +36,8 @@ struct PageProjection
 end
 
 function PageProjection(geo_ref::Vector{Point2{Float64}}, region::NTuple{4,Float64};
-                        dest::AbstractString="EPSG:5070")
+                        dest::AbstractString="EPSG:5070",
+                        halign::Symbol=:center, valign::Symbol=:center)
     left, top, right, bottom = Float64.(region)
     trans = Proj.Transformation("EPSG:4326", dest; always_xy=true)
     proj = [trans(p[1], p[2]) for p in geo_ref]      # (x,y) projected meters, y-up
@@ -41,8 +46,10 @@ function PageProjection(geo_ref::Vector{Point2{Float64}}, region::NTuple{4,Float
     pw = max(pxmax - pxmin, eps()); ph = max(pymax - pymin, eps())
     rw = right - left; rh = bottom - top
     scale = min(rw / pw, rh / ph)                    # uniform ⇒ aspect preserved
-    offx = left + (rw - scale * pw) / 2              # center the scaled bbox in region
-    offy = top + (rh - scale * ph) / 2
+    hfrac = halign === :left ? 0.0 : halign === :right ? 1.0 : 0.5
+    vfrac = valign === :top ? 0.0 : valign === :bottom ? 1.0 : 0.5
+    offx = left + (rw - scale * pw) * hfrac          # place along the slack dimension
+    offy = top + (rh - scale * ph) * vfrac
     return PageProjection(trans, scale, offx, offy, pxmin, pymax)
 end
 

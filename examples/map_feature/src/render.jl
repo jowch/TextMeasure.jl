@@ -11,16 +11,17 @@
 #   (c) in bands that DO cross the silhouette, complement_chord_fn carves [env_l,env_r] → body
 #       wraps the silhouette's facing edge and never sits on it.
 #
-# Packing uses `fill=:all` (impl-C2): a silhouette-crossing band offers TWO usable runs — the
-# left margin AND the strip right of the silhouette before the map's right edge — and both are
-# filled, so the prose wraps the state on BOTH sides (most VT bands yield two runs ≥ min_chord_width).
-# Letterbox bands (silhouette absent) collapse to the single left region (the map column is
-# reserved by the render combinator). overflow_strategy=:skip ⇒ no over-wide word is dumped atop
-# the map.
+# Composition: the silhouette is RIGHT-ALIGNED to the page's right margin (PageProjection
+# halign=:right), and the editorial column wraps its irregular WESTERN edge — a clean single-side
+# feature page. Packing is `:widest` (the wide left/west run per band); the strip east of the
+# silhouette is empty (silhouette flush-right) so there is no cramped east column. fill=:all is
+# available in shape_pack (impl-C2) for genuinely two-sided layouts, but a thin east strip reads
+# as accidental, not deliberate — so #G deliberately keeps the single elegant west wrap.
+# overflow_strategy=:skip ⇒ no over-wide word is dumped atop the map.
 #
 # Rendering is pixel-faithful: a `campixel!` Scene maps 1 data unit → 1 screen px exactly, so the
 # measured layout (MakieBackend at px_per_unit=1) is drawn at the same scale — glyph runs occupy
-# exactly their measured width and never overrun the silhouette envelope they were packed against.
+# exactly their measured width and never overrun the silhouette/label boxes they were packed against.
 
 import CairoMakie
 const CM = CairoMakie   # re-exports Makie's Scene / campixel! / text! / poly! / scatter!
@@ -36,8 +37,8 @@ const SIDEBAR_BOTTOM = 200.0    # masthead + sidebar glyphs all stay above this 
 const REGION_TOP     = 230.0    # body + map region top (a gutter below SIDEBAR_BOTTOM)
 const BYLINE_H       = 36.0
 
-# Packing kwargs — see NOTE above.
-const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip, fill = :all)
+# Packing kwargs — see NOTE above (single elegant west wrap; silhouette right-aligned).
+const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip, fill = :widest)
 
 _map_left()      = MARGIN + 0.45 * (PAGE_W - 2MARGIN)
 _region_bottom() = PAGE_H - BYLINE_H - MARGIN
@@ -105,7 +106,7 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
     map_right     = PAGE_W - MARGIN
     map_region    = (map_left, region_top, map_right, region_bottom)
 
-    pp = PageProjection(state_polygon, map_region; dest=dest)
+    pp = PageProjection(state_polygon, map_region; dest=dest, halign=:right)
     poly_px = project_polygon(pp, state_polygon)
 
     body_backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
