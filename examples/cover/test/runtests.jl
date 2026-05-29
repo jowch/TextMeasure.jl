@@ -522,6 +522,30 @@ end
         @test dropcap_baseline_aligned(c; tol=0.5)
     end
 
+    @testset "shipped fixtures render two-sided (render-level)" begin
+        # Assert on the ACTUAL composed render of each SHIPPED fixture — the same
+        # ComposedCover that render_scene draws — NOT a synthetic config. Mirrors #G's
+        # render-level check: from the real placed word boxes, body text must flank the
+        # inset on BOTH sides within its vertical span (sharing bands), and reach below
+        # it. This is what guards against a green test that doesn't match the picture.
+        for name in ("cover-v1.toml", "cover-v2.toml", "cover-v3.toml")
+            c = compose_cover(load_config(joinpath(@__DIR__, "..", "data", name)))
+            il, ir, it, ib = c.inset_rect.left, c.inset_rect.right, c.inset_rect.top, c.inset_rect.bottom
+            in_span(b) = b.bottom > it && b.top < ib
+            band(b)    = round((b.top + b.bottom) / 2; digits = 0)
+            left  = filter(b -> in_span(b) && b.right <= il + 1e-6, c.body_word_bboxes)
+            right = filter(b -> in_span(b) && b.left  >= ir - 1e-6, c.body_word_bboxes)
+            shared = intersect(Set(band.(left)), Set(band.(right)))
+            @test length(left)  >= 3            # prose down the LEFT of the inset
+            @test length(right) >= 3            # prose down the RIGHT of the inset
+            @test length(shared) >= 3           # >=3 bands flanked on BOTH sides at once (true wrap)
+            @test maximum(b.bottom for b in c.body_word_bboxes) > ib   # text continues below the inset
+            @test isempty(bbox_violations(c))   # invariants hold on the real render
+            @test body_wrap_honors_inset(c)
+            @test dropcap_baseline_aligned(c; tol = 0.5)
+        end
+    end
+
     @testset "PDF golden + embedding + vector" begin
         pdf = _render_fixture("cover-v1.toml")
         @test isfile(pdf) && filesize(pdf) > 0

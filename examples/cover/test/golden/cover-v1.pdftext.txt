@@ -1,33 +1,45 @@
 The Newer Yorker
 A Correctness Exhibit
 by TextMeasure.jl
+here are no manual offsets on this page. Every baseline, every wrap point, and the drop cap that opens
+this column were computed by the measurement pipeline, not nudged by hand. Move the illustration a
+few pixels and re-render, and the body text re-flows around its new footprint, the pull quote keeps its
+clearance, and the drop cap still lands squarely on its line, because nothing here was placed by a designer
+fighting the page.
+The exhibit measures once and lays
+out many times. A single prepared
+paragraph is packed around an
+inset-exclusion chord function that
+subtracts the illustration, the drop cap,
+and the pull quote from every scanline
+band before a single glyph is ever
+drawn. Correctness is asserted on the
+computed layout, never recovered
+from the rendered file.
+Because the packer fills every interval
+a band offers, the column wraps on
+both sides of a centered illustration at
+once. Text streams down the left
+margin and the right margin in the
+very same lines, threading past the
+skyline without a hand-placed break
+anywhere in sight.
+Widen the inset, narrow it, or slide it
+toward either edge of the column, and
+the surrounding prose simply
+rebalances around the new shape. The
+measurements do not care where the
+picture lands. They report how much
+room each line has, and the greedy
+packer takes it from there.
 
 T
 
-here are no manual offsets on this page. Every baseline, every wrap point, and the drop cap that opens
-this column were computed by the measurement pipeline, not nudged by hand. Move the illustration a
-few pixels and re-render: the body text re-flows around its new footprint, the pull quote keeps its
-clearance, and the drop cap still lands on its line, because nothing here was hardcoded.
-
-The exhibit measures once and lays
-paragraph is packed around an
-subtracts the illustration, the drop cap,
-band. Correctness is asserted on the
-is drawn.
-Because the packer fills every interval
-both sides of a centered illustration at
-slide it toward either margin, and the
-The page is a proof, not a paste up.
+So the page is a proof rather than a paste up. What you are reading flowed around the art automatically, top to
+bottom and left to right, with the same engine that will lay out the next cover and the one after that. Measure once,
+then compose forever.
 
 Measure once. Lay out
 many times. Never
 nudge.
 — the thesis
-
-out many times. The same prepared
-inset-exclusion chord function that
-and the pull quote from each scanline
-computed layout before a single glyph
-a band offers, the column wraps on
-once. Widen the inset, narrow it, or
-surrounding text simply rebalances.
