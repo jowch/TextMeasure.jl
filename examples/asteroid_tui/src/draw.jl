@@ -86,16 +86,22 @@ function _callout_layout(a, pp)
     width = inner + 2                 # plus the two │ borders
     cx    = round(Int, a.x)
     left  = cx - width ÷ 2
-    blob_top = round(Int, a.y) - pp.rows ÷ 2
-    blob_bot = blob_top + pp.rows - 1
-    top_above = blob_top - 4          # 3 box rows + 1 leader gap above the blob
+    r0    = round(Int, a.y) - pp.rows ÷ 2
+    # Anchor to the ACTUAL prose content extent, not the pack's full bounding box:
+    # `pp.cells` entries are (row, col, char) (see `_blit_packed!`), so `c[1]` is the
+    # pack-local row. Short/sparse prose fills only part of `pp.rows`; anchoring to the
+    # bbox would float the box far from the visible glyphs.
+    rs = (c -> c[1]).(pp.cells)                            # pack-local rows that actually have prose
+    content_top = isempty(rs) ? r0 : r0 + minimum(rs) - 1  # screen row of the topmost prose cell
+    content_bot = isempty(rs) ? r0 : r0 + maximum(rs) - 1  # screen row of the bottommost prose cell
+    top_above = content_top - 4       # 3 box rows + 1 leader gap above the prose
     if top_above >= 2                 # fits above the top border (row 1 is border)
         return (; stat, inner, width, cx, left, box_top = top_above,
-                  place = :above, leader_from = top_above + 3, leader_to = blob_top - 1)
-    else                              # flip below the blob
-        box_top = blob_bot + 2        # 1 leader gap then the box
+                  place = :above, leader_from = top_above + 3, leader_to = content_top - 1)
+    else                              # flip below the prose
+        box_top = content_bot + 2     # 1 leader gap then the box
         return (; stat, inner, width, cx, left, box_top,
-                  place = :below, leader_from = blob_bot + 1, leader_to = box_top - 1)
+                  place = :below, leader_from = content_bot + 1, leader_to = box_top - 1)
     end
 end
 

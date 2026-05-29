@@ -46,6 +46,26 @@ using Test
     g.ship.charge = 0
 end
 
+@testset "callout hugs the asteroid prose (no far-floating box)" begin
+    g = new_game(Xoshiro(5); width=100, height=40, n_asteroids=1)
+    a = g.asteroids[1]
+    a.x = 50.0; a.y = 6.0; a.vx = 0.0; a.vy = 0.0; a.θ = 0.0   # near the top ⇒ callout flips below
+    empty!(g.shards); empty!(g.projectiles)
+    cb = CellBuffer(40, 100); draw!(cb, g)
+    nr, nc = size(cb.chars)
+    # Scope to the interior: exclude the frame border (rows/cols 1 & last) and the
+    # bottom footer, whose corner glyphs (┌/└) and prose vowels would otherwise be
+    # mistaken for the callout box / asteroid prose.
+    interior = 2:(nr - 1)
+    icols    = 2:(nc - 1)
+    proserows = [r for r in interior if any(c -> c == 'a' || c == 'e' || c == 'o' || c == 'i', cb.chars[r, icols])]
+    boxrows  = [r for r in interior if any(==('┌'), cb.chars[r, icols]) || any(==('└'), cb.chars[r, icols])]
+    @test !isempty(proserows) && !isempty(boxrows)
+    # the callout box must sit close to the visible prose, not ~14 rows away
+    gap = minimum(abs(br - pr) for br in boxrows, pr in proserows)
+    @test gap <= 4
+end
+
 @testset "_rotate_poly rotates vertices by θ" begin
     p = [AsteroidTUI.GB.Point2{Float64}(1.0, 0.0)]
     r = AsteroidTUI._rotate_poly(p, π/2)
