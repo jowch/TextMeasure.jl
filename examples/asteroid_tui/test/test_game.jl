@@ -62,3 +62,27 @@ end
     @test isapprox(abs(aim_heading(40.0, 12.0, 40.0, 22.0)), pi; atol=1e-9) # below ⇒ ±π
     @test isapprox(aim_heading(40.0, 12.0, 20.0, 12.0), -pi/2; atol=1e-9)  # left ⇒ −π/2
 end
+
+@testset "asteroid bounce separates overlapping pair (below threshold)" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=2)
+    a, b = g.asteroids[1], g.asteroids[2]
+    a.x=50.0; a.y=20.0; a.vx=0.0; a.vy=0.0
+    b.x=50.0+(a.radius+b.radius)*0.5; b.y=20.0; b.vx=-0.05; b.vy=0.0   # low closing speed
+    n0 = length(g.asteroids); _,_,d0 = _wrap_delta(a.x,a.y,b.x,b.y,g.width,g.height)
+    @test d0 < a.radius + b.radius
+    tick!(g, Input())
+    @test length(g.asteroids) == n0                       # bounce, not fracture
+    a2,b2 = g.asteroids[1], g.asteroids[2]; _,_,d1 = _wrap_delta(a2.x,a2.y,b2.x,b2.y,g.width,g.height)
+    @test d1 >= d0                                         # pushed apart
+    @test all(a -> 0 <= a.x <= g.width && 0 <= a.y <= g.height, g.asteroids)  # re-wrap holds in-bounds
+end
+
+@testset "high closing speed fractures both" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=2)
+    a, b = g.asteroids[1], g.asteroids[2]
+    a.x=60.0; a.y=20.0; a.vx=2.0; a.vy=0.0
+    b.x=60.0+(a.radius+b.radius)*0.5; b.y=20.0; b.vx=-2.0; b.vy=0.0     # head-on, high closing
+    shards0 = length(g.shards)
+    tick!(g, Input())
+    @test length(g.asteroids) == 0 && length(g.shards) > shards0
+end

@@ -234,6 +234,52 @@ function fracture_asteroid!(g::GameState, idx::Int, impact::GB.Point2{Float64})
     return g
 end
 
+# Asteroid↔asteroid: bounce below the closing-speed threshold, fracture both above.
+# Wrap-aware. Collect fracture pairs and apply them AFTER the sweep so deleteat!
+# never invalidates a live index mid-iteration.
+function _resolve_asteroid_collisions!(g::GameState)
+    n = length(g.asteroids)
+    n < 2 && return g
+    to_fracture = Tuple{Int,Float64,Float64}[]
+    fractured = falses(n)
+    # Single-pass O(n²) sweep. The bounce branch mutates a's position/velocity in
+    # place, and a's corrected state is intentionally reused for a's remaining j
+    # checks this tick. In clusters of 3+ overlapping asteroids one pass may leave
+    # residual overlap (resolved on the next tick) — acceptable for a demo.
+    for i in 1:(n-1)
+        fractured[i] && continue
+        a = g.asteroids[i]
+        for j in (i+1):n
+            fractured[j] && continue
+            b = g.asteroids[j]
+            dx, dy, dist = _wrap_delta(a.x, a.y, b.x, b.y, g.width, g.height)
+            rsum = a.radius + b.radius
+            (dist >= rsum || dist < 1e-9) && continue
+            nx, ny = dx/dist, dy/dist                 # contact normal a→b
+            rvx, rvy = b.vx - a.vx, b.vy - a.vy
+            closing = -(rvx*nx + rvy*ny)              # >0 ⇒ approaching
+            if closing >= SHATTER_CLOSING
+                push!(to_fracture, (i,  nx*a.radius,  ny*a.radius))   # cell-space contact offsets
+                push!(to_fracture, (j, -nx*b.radius, -ny*b.radius))
+                fractured[i] = true; fractured[j] = true
+                break
+            else
+                p = rvx*nx + rvy*ny                   # elastic, equal-mass reflection
+                a.vx += p*nx; a.vy += p*ny
+                b.vx -= p*nx; b.vy -= p*ny
+                overlap = (rsum - dist)/2 + 0.01      # push apart; re-wrap to stay in-bounds
+                a.x = _wrap(a.x - nx*overlap, g.width); a.y = _wrap(a.y - ny*overlap, g.height)
+                b.x = _wrap(b.x + nx*overlap, g.width); b.y = _wrap(b.y + ny*overlap, g.height)
+            end
+        end
+    end
+    for (idx, idx_dx, idx_dy) in sort(to_fracture; by = first, rev = true)
+        idx <= length(g.asteroids) || continue
+        fracture_asteroid!(g, idx, GB.Point2{Float64}(idx_dx, idx_dy))
+    end
+    return g
+end
+
 function _resolve_collisions!(g::GameState)
     g.beam.active || return g
     bx, by, φ = g.beam.x, g.beam.y, g.beam.φ
@@ -267,7 +313,8 @@ function tick!(g::GameState, in::Input)
     _advance_ship!(g, in)
     _advance_asteroids!(g)
     _handle_charge_and_beam!(g, in)
-    _resolve_collisions!(g)
+    _resolve_collisions!(g)              # beam → asteroid
+    _resolve_asteroid_collisions!(g)     # asteroid ↔ asteroid
     g.tick_count += 1
     return g
 end
