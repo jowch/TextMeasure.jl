@@ -37,11 +37,13 @@ const SIDEBAR_BOTTOM = 200.0    # masthead + sidebar glyphs all stay above this 
 const REGION_TOP     = 230.0    # body + map region top (a gutter below SIDEBAR_BOTTOM)
 const BYLINE_H       = 36.0
 
-# Packing kwargs — see NOTE above (single elegant west wrap; silhouette right-aligned).
-const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip, fill = :widest)
+# Packing kwargs — `fill` is supplied per-call (default :widest; see NOTE above).
+const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip)
+const SILHOUETTE_PAD = 6.0   # px clearance the body keeps from the silhouette fill
 
-_map_left()      = MARGIN + 0.45 * (PAGE_W - 2MARGIN)
 _region_bottom() = PAGE_H - BYLINE_H - MARGIN
+# Map-region horizontal box edge at `frac` of the inner content width [MARGIN, PAGE_W-MARGIN].
+_map_x(frac)     = MARGIN + frac * (PAGE_W - 2MARGIN)
 
 _marker_glyph(kind::Symbol) = kind === :capital ? '★' :
                               kind === :city     ? '●' :
@@ -68,8 +70,8 @@ end
 #  - each POI **label** box (`label_excl`, already grown for clearance) is subtracted from every
 #    band it spans, so body text flows around the labels exactly as it flows around the silhouette.
 function _body_chord_fn(poly_px, text_bounds, map_region,
-                        label_excl::Vector{NTuple{4,Float64}})
-    base = complement_chord_fn(poly_px, text_bounds)
+                        label_excl::Vector{NTuple{4,Float64}}; pad::Float64=0.0)
+    base = complement_chord_fn(poly_px, text_bounds; pad=pad)
     left, _, right, _ = text_bounds
     mx0, mtop, mx1, mbot = map_region
     return function (yt, yb)
@@ -99,14 +101,18 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
                          pois::Vector{POI};
                          dest::AbstractString="EPSG:5070",
                          body_text::AbstractString=DEFAULT_BODY,
-                         fontsize::Float64=12.0)
+                         fontsize::Float64=12.0,
+                         fill::Symbol=:widest,
+                         silhouette_halign::Symbol=:right,
+                         map_left_frac::Float64=0.45,
+                         map_right_frac::Float64=1.0)
     region_top    = REGION_TOP
     region_bottom = _region_bottom()
-    map_left      = _map_left()
-    map_right     = PAGE_W - MARGIN
+    map_left      = _map_x(map_left_frac)
+    map_right     = _map_x(map_right_frac)
     map_region    = (map_left, region_top, map_right, region_bottom)
 
-    pp = PageProjection(state_polygon, map_region; dest=dest, halign=:right)
+    pp = PageProjection(state_polygon, map_region; dest=dest, halign=silhouette_halign)
     poly_px = project_polygon(pp, state_polygon)
 
     body_backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
@@ -116,7 +122,9 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
     anchors = [project_point(pp, Point2{Float64}(p.coord[1], p.coord[2])) for p in pois]
     sizes = [(TextMeasure.measure(label_backend, p.name) + 4.0,
               (p.kind === :capital ? fontsize + 4.0 : fontsize + 2.0)) for p in pois]
-    labelboxes = place_poi_labels(anchors, sizes; offset=6.0, margin=2.0)
+    # keep labels inside the content canvas (right-edge anchors fall through to a left-anchored box)
+    canvas = (MARGIN, region_top, PAGE_W - MARGIN, region_bottom)
+    labelboxes = place_poi_labels(anchors, sizes; offset=7.0, margin=2.0, bounds=canvas)
 
     # Grow each placed label box into a body-exclusion rect: +2px x clearance, and vertically by a
     # word's ascent/descent so a body word in an adjacent band can't clip the label either.
@@ -127,9 +135,9 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
         for b in labelboxes if b !== nothing]
 
     text_bounds = (MARGIN, region_top, PAGE_W - MARGIN, region_bottom)
-    cf = _body_chord_fn(poly_px, text_bounds, map_region, label_excl)
+    cf = _body_chord_fn(poly_px, text_bounds, map_region, label_excl; pad=SILHOUETTE_PAD)
     prep = prepare(body_backend, body_text)
-    pk = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, PACK_KW...)
+    pk = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, fill=fill, PACK_KW...)
 
     return (; pp, poly_px, prep, pk, anchors, labelboxes, pois, text_bounds, map_region,
             region_top, region_bottom, map_left, map_right)
@@ -150,8 +158,14 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
                      points_of_interest::Vector{POI};
                      dest::AbstractString="EPSG:5070",
                      body_text::AbstractString=DEFAULT_BODY,
-                     fontsize::Float64=12.0)
-    L = _compose_layout(state_polygon, points_of_interest; dest=dest, body_text=body_text, fontsize=fontsize)
+                     fontsize::Float64=12.0,
+                     fill::Symbol=:widest,
+                     silhouette_halign::Symbol=:right,
+                     map_left_frac::Float64=0.45,
+                     map_right_frac::Float64=1.0)
+    L = _compose_layout(state_polygon, points_of_interest; dest=dest, body_text=body_text,
+                        fontsize=fontsize, fill=fill, silhouette_halign=silhouette_halign,
+                        map_left_frac=map_left_frac, map_right_frac=map_right_frac)
 
     # Pixel-space scene: 1 data unit == 1 screen px (campixel!), so measured widths render 1:1.
     scene = CM.Scene(; size=(PAGE_W, PAGE_H), backgroundcolor=:white)
@@ -209,13 +223,29 @@ function render_to_pdf(scene::CM.Scene, path::AbstractString)
     return path
 end
 
-# Placeholder editorial copy (the demo's "prose"); tripled to fill the column.
-const DEFAULT_BODY = repeat("""
-Vermont rises in green folds between the Connecticut River and the broad blue reach of Lake \
-Champlain. Its ridgelines run north and south like the grain of old timber, and the towns \
-gather in the valleys where the rivers slow. This page is set by measurement: every line of \
-this column was placed by flowing words through the white space the map leaves behind, so the \
-text wraps the silhouette of the state itself and never crosses into the cartography. Nothing \
-here is nudged by hand. The column narrows where the border bulges and opens again where the \
-land falls away, a quiet demonstration that type can follow geography when the layout engine \
-knows exactly how wide each word will be. """, 3)
+# Editorial copy — genuine, non-repeating Vermont feature prose (geography / history / economy).
+const DEFAULT_BODY = """
+Vermont is the only New England state without an Atlantic coastline, a landlocked country of \
+ridgelines and river valleys that joined the Union in 1791 as the fourteenth state. For \
+fourteen years before that it governed itself as an independent republic, minting its own \
+coppers and writing, in 1777, the first constitution in North America to prohibit adult \
+slavery. The Green Mountains run the length of the state like a spine, their highest summit \
+Mount Mansfield rising to 4,393 feet above the dairy farms and sugar bushes below. To the \
+west, Lake Champlain forms a long blue border with New York; to the east, the Connecticut \
+River traces the line with New Hampshire. Burlington, on the lake, is the largest city, \
+though Montpelier remains the smallest state capital in the country by population. The \
+economy was built on what the land gives: Vermont is the leading producer of maple syrup in \
+the United States, drawing sap from the same hillsides each spring, and its dairy herds \
+supply cheese and milk far beyond its borders. In autumn the hardwood forests turn the hills \
+gold and scarlet and the foliage draws travelers along roads that have changed little in a \
+century; in winter the snow brings skiers to Stowe, Killington, and Mad River Glen. The state \
+guards its character carefully — billboards are banned along its highways, many towns still \
+settle local affairs by a show of hands at March meeting, and the working landscape of barn, \
+steeple, and stone wall is kept as much by habit as by law. The Abenaki lived in the \
+Champlain and Connecticut valleys long before European settlement, and their names still mark \
+the water and the hills. Ethan Allen and the Green Mountain Boys, first organized to defend \
+disputed land grants, seized Fort Ticonderoga in 1775. Today roughly 650,000 people live \
+here, fewer than in many single cities, spread across a patchwork of small towns where the \
+nearest neighbor may be a mountain — a place that reads, from the air or on the page, as \
+mostly forest, nearly three-quarters of it wooded, stitched together by rivers, roads, and \
+the slow work of the seasons."""

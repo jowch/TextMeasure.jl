@@ -48,7 +48,7 @@ lat  = 44.5438
 kind = "feature"
 
 [[poi]]
-name = "Camels Hump"
+name = "Camel's Hump"
 lon  = -72.8849
 lat  = 44.3195
 kind = "feature"
@@ -77,7 +77,7 @@ lat  = 42.8857
 kind = "landmark"
 
 [[poi]]
-name = "Ben and Jerrys Factory"
+name = "Ben & Jerry's Factory"
 lon  = -72.7637
 lat  = 44.3520
 kind = "landmark"

@@ -89,3 +89,29 @@ boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
         end
     end
 end
+
+@testset "render layout: alternate composition (fill=:all, centered two-column) holds invariants" begin
+    # Smoke + invariant check for the parameterized two-sided path (centered silhouette, both
+    # margins filled). Same non-overlap guarantees must hold as the default single-side layout.
+    L = MapFeature._compose_layout(load_vermont(), load_pois();
+            fill=:all, silhouette_halign=:center, map_left_frac=0.34, map_right_frac=0.72)
+    pk, prep, poly = L.pk, L.prep, L.poly_px
+    asc, desc = prep.metrics.ascent, prep.metrics.descent
+    @test !isempty(pk.placements)
+    labels = [b for b in L.labelboxes if b !== nothing]
+    n_left = 0; n_right = 0
+    for p in pk.placements
+        w = prep.segments[p.segment_index].width
+        x0, x1, wtop, wbot = p.x, p.x + w, p.y - asc, p.y + desc
+        env = envelope_over(poly, wtop, wbot)
+        if env !== nothing
+            el, er = env
+            @test x1 <= el + 1e-6 || x0 >= er - 1e-6        # never overlaps the silhouette
+            x1 <= el + 1e-6 ? (n_left += 1) : (n_right += 1)
+        end
+        for b in labels
+            @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)   # nor any label
+        end
+    end
+    @test n_left > 0 && n_right > 0                          # genuinely TWO columns (both sides used)
+end

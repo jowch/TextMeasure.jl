@@ -33,18 +33,24 @@ _overlaps(a::LabelBox, b::LabelBox) =
     a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 
 """
-    place_poi_labels(anchors, sizes; offset=6.0, margin=2.0) -> Vector{Union{LabelBox,Nothing}}
+    place_poi_labels(anchors, sizes; offset=7.0, margin=2.0, bounds=nothing)
+        -> Vector{Union{LabelBox,Nothing}}
 
 Greedy simple-offset placement. For each anchor (page-pixel marker position) and label
-`(w,h)`, try candidate offsets (E, W, N, S, then diagonals) at `offset` px; accept the
-first whose box (grown by `margin` for clearance) clears all already-placed boxes. Returns
-one entry per anchor (`nothing` if every candidate collides — caller may skip its label).
-Placement order is input order (deterministic).
+`(w,h)`, try candidate offsets (E, W, N, S, then diagonals) at `offset` px; accept the first
+whose box (grown by `margin` for clearance) clears all already-placed boxes **and**, if
+`bounds = (xmin, ymin, xmax, ymax)` is given, lies fully inside it. The bounds check makes
+right-edge anchors fall through to their West (left-anchored) candidate instead of clipping
+off the canvas. Returns one entry per anchor (`nothing` if every candidate fails — caller may
+skip its label). Placement order is input order (deterministic).
 """
 function place_poi_labels(anchors::AbstractVector{<:Point2}, sizes::AbstractVector{<:Tuple};
-                          offset::Float64=6.0, margin::Float64=2.0)
+                          offset::Float64=7.0, margin::Float64=2.0,
+                          bounds::Union{Nothing,NTuple{4,Float64}}=nothing)
     placed = LabelBox[]
     out = Vector{Union{LabelBox,Nothing}}(undef, length(anchors))
+    inside(cx, cy, w, h) = bounds === nothing ||
+        (cx >= bounds[1] && cy >= bounds[2] && cx + w <= bounds[3] && cy + h <= bounds[4])
     for (i, a) in enumerate(anchors)
         w, h = Float64(sizes[i][1]), Float64(sizes[i][2])
         ax, ay = Float64(a[1]), Float64(a[2])
@@ -60,6 +66,7 @@ function place_poi_labels(anchors::AbstractVector{<:Point2}, sizes::AbstractVect
         )
         chosen = nothing
         for (cx, cy) in candidates
+            inside(cx, cy, w, h) || continue
             grown = LabelBox(cx - margin, cy - margin, w + 2margin, h + 2margin)
             if !any(p -> _overlaps(grown, p), placed)
                 chosen = LabelBox(cx, cy, w, h); break

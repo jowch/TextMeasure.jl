@@ -7,7 +7,7 @@
 
 """
     complement_chord_fn(polygon::Vector{Point2{Float64}},
-                        page_bounds::NTuple{4,Float64}) -> Function
+                        page_bounds::NTuple{4,Float64}; pad=0.0) -> Function
 
 Build a `shape_pack` `chord_fn` that flows text through the **white space around**
 `polygon`. `page_bounds = (left, top, right, bottom)` is the editorial text region in
@@ -31,16 +31,20 @@ only at the band-boundary crossings (`y_top`, `y_bottom`) or at polygon vertices
 the band; no sampling. Because `shape_pack` calls with the band height = `line_advance`
 (≈ a line's `ascent + descent`), a word packed flush to `env_l` then clears the silhouette across
 its *entire* glyph height — not only at its baseline — so a slanted or concave facing edge cannot
-poke through the text the way a center-only scanline would allow. The envelope (rather than the
-exact inside-runs) keeps text out of the polygon's full horizontal extent, so the column follows
+poke through the text the way a center-only scanline would allow. `pad` (px) grows the carved
+envelope on each side, so the text column keeps a clearance gutter and never kisses the polygon
+fill. The envelope (rather than the exact inside-runs) keeps text out of the polygon's full
+horizontal extent, so the column follows
 concavities on the facing edge but text never lands in an interior notch of the map.
 
 **Scope:** `polygon` is treated as a single closed ring (last vertex implicitly joins the
 first). Multi-part geographies (islands/holes) are out of scope this milestone — pass a single
 outer ring (e.g. Vermont). See `load_state_shapefile`.
 """
-function complement_chord_fn(polygon::Vector{Point2{Float64}}, page_bounds::NTuple{4,Float64})
+function complement_chord_fn(polygon::Vector{Point2{Float64}}, page_bounds::NTuple{4,Float64};
+                             pad::Real=0.0)
     left, top, right, bottom = Float64.(page_bounds)
+    padf = Float64(pad)
     n = length(polygon)
     return function (y_top::Real, y_bottom::Real)
         yt = Float64(y_top); yb = Float64(y_bottom)
@@ -76,8 +80,8 @@ function complement_chord_fn(polygon::Vector{Point2{Float64}}, page_bounds::NTup
             end
         end
         crossed || return Tuple{Float64,Float64}[(left, right)]
-        el = clamp(env_l, left, right)
-        er = clamp(env_r, left, right)
+        el = clamp(env_l - padf, left, right)        # grow the carved obstacle by `pad` ⇒ clearance
+        er = clamp(env_r + padf, left, right)
         out = Tuple{Float64,Float64}[]
         (el - left) > 0 && push!(out, (left, el))
         (right - er) > 0 && push!(out, (er, right))
