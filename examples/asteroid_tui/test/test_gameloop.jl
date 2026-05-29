@@ -108,13 +108,18 @@ end
         @test drain_to_tachikoma!(tbuf, cb) === tbuf   # completes, returns the buffer
     end
 
-    @testset "run_game itself runs headless (bounded, no TTY)" begin
-        # run.jl's exact entry point. _poll_input returns Input() (no keys) and
-        # _present is a no-op without a real terminal, so a bounded run must complete
-        # and return the evolved GameState. This is the closest possible proof that
-        # `julia run.jl` boots and loops without crashing.
-        g = run_game(; width=W, height=H, seed=3, max_frames=60)
+    @testset "run_game itself runs headless (bounded, injected io, no TTY)" begin
+        # run.jl's EXACT entry point: we call the real `run_game`, not a stand-in.
+        # Passing `io=IOBuffer()` builds the Tachikoma Terminal over that buffer with
+        # an explicit size, so it never queries a TTY and the headless branch (no
+        # keys, real `_present` → `draw!` → flush, no pacing) runs end to end. This is
+        # the closest possible proof that `julia run.jl` boots, loops, and renders
+        # without crashing. (`_poll_input`'s raw-mode key capture stays TTY-only — the
+        # human tier-2/3 check.)
+        io = IOBuffer()
+        g = run_game(; width=W, height=H, seed=3, max_frames=60, io=io)
         @test g isa GameState
-        @test g.tick_count == 60
+        @test g.tick_count == 60                 # the loop ran every frame
+        @test position(io) > 0                   # _present actually flushed bytes to the terminal io
     end
 end
