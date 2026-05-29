@@ -86,3 +86,26 @@ end
     tick!(g, Input())
     @test length(g.asteroids) == 0 && length(g.shards) > shards0
 end
+
+@testset "ship dies on asteroid contact" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=1)
+    g.ship.invuln = 0                                   # drop spawn protection for the test
+    a = g.asteroids[1]; a.vx=0.0; a.vy=0.0; a.x=g.ship.x; a.y=g.ship.y
+    tick!(g, Input())
+    @test !g.ship.alive && length(g.asteroids) == 1     # death; asteroid NOT removed
+    # drive until the ship respawns (asteroid pinned to a corner so the fresh,
+    # invulnerable ship at centre isn't immediately re-killed). Loop-until-alive is
+    # robust to respawn_in / INVULN_TICKS constant changes; 200 is a safety cap.
+    for _ in 1:200
+        g.asteroids[1].x=0.0; g.asteroids[1].y=0.0; tick!(g, Input())
+        g.ship.alive && break
+    end
+    @test g.ship.alive && g.ship.invuln > 0             # respawned, invulnerable
+end
+
+@testset "invulnerable ship survives contact" begin
+    g = new_game(Xoshiro(3); n_asteroids=1)             # fresh ship has invuln=INVULN_TICKS>0, so the collision is skipped
+    a = g.asteroids[1]; a.vx=0.0; a.vy=0.0; a.x=g.ship.x; a.y=g.ship.y
+    tick!(g, Input())
+    @test g.ship.alive
+end

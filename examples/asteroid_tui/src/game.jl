@@ -280,6 +280,21 @@ function _resolve_asteroid_collisions!(g::GameState)
     return g
 end
 
+# Ship↔asteroid: alive && not invulnerable && wrap-aware distance within the
+# asteroid's radius ⇒ kill_ship!. The asteroid is never mutated (it continues).
+function _resolve_ship_collision!(g::GameState)
+    s = g.ship
+    (s.alive && s.invuln == 0) || return g
+    for a in g.asteroids
+        _, _, dist = _wrap_delta(s.x, s.y, a.x, a.y, g.width, g.height)
+        if dist <= a.radius
+            kill_ship!(g)
+            return g
+        end
+    end
+    return g
+end
+
 function _resolve_collisions!(g::GameState)
     g.beam.active || return g
     bx, by, φ = g.beam.x, g.beam.y, g.beam.φ
@@ -315,6 +330,7 @@ function tick!(g::GameState, in::Input)
     _handle_charge_and_beam!(g, in)
     _resolve_collisions!(g)              # beam → asteroid
     _resolve_asteroid_collisions!(g)     # asteroid ↔ asteroid
+    _resolve_ship_collision!(g)          # ship ↔ asteroid (death)
     g.tick_count += 1
     return g
 end
