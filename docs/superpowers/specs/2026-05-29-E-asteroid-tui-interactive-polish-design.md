@@ -131,17 +131,25 @@ decoding (`1006h`) is already on and `1003h` bare-motion reports decode through 
 > first `toggle_mouse!` would flip `true → false` and emit `MOUSE_OFF`, *disabling* tracking. Raw
 > `1003h`/`1003l` to `term.io` is the deliberate, only mechanism in Tachikoma 2.1.0.
 
-`φ` is computed in **visual space**: terminal cells are ~2:1, with **cell aspect = height/width ≈
-2** applied as a **multiplier on the row delta** (`φ = atan(dx, -(dy·2))`) so the ship's nose
-actually points at the cursor on screen, using the existing convention (up = 0, clockwise, matching
-`vy -= cos φ` / `dirx = sin φ`; verified at all four cardinals — multiply, not divide, is the
-correct direction). The same `φ` drives facing, the beam, and the rotated ship glyph; the only side
-effect (slightly faster geometric turn per visual degree vertically) is imperceptible.
+**Aim is ship-relative, computed in the sim — not the input layer.** The ship strafes around a
+fixed viewport (WASD moves it; no camera), so the heading must be measured from the **live ship
+position** to the cursor, not from screen-centre. Therefore:
+- `Input.aim` carries the **cursor cell** `(cx, cy)` (or `nothing`), *not* a pre-computed `φ`. The
+  input layer just reports where the pointer is.
+- `_advance_ship!` computes `φ = aim_heading(s.x, s.y, cx, cy)` when `in.aim !== nothing`, via a
+  pure helper `aim_heading(sx, sy, cx, cy) = atan(cx - sx, -((cy - sy) * 2.0))`.
+
+`φ` is in **visual space**: cells are ~2:1, so **cell aspect = height/width ≈ 2** multiplies the row
+delta (the `* 2.0` above) so the nose points at the cursor *on screen*, using the existing
+convention (up = 0, clockwise, matching `vy -= cos φ` / `dirx = sin φ`; verified at all four
+cardinals — multiply, not divide). The same `φ` drives facing, the beam, and the rotated ship glyph;
+the only side effect (slightly faster geometric turn per visual degree vertically) is imperceptible.
+Keeping `aim_heading` in the sim makes it directly headless-testable through `tick!(g, Input(aim=…))`.
 
 **Aim persists between mouse moves.** With `1003h`, mouse events arrive only *when the cursor
-moves*; idle frames carry none. So the input layer remembers the **last-known cursor position**
-and re-emits the corresponding `φ` every frame, holding the ship's facing steady until the next
-move. This makes `_poll_input` stateful (see Renderer wiring).
+moves*; idle frames carry none. So the input layer remembers the **last-known cursor position** and
+re-emits it as `Input.aim` every frame, holding facing steady until the next move. This makes
+`_poll_input!` stateful (see Renderer wiring).
 
 ### Fire (LMB **or** Space)
 
@@ -272,7 +280,7 @@ Base.@kwdef struct Input
     left::Bool  = false                 # strafe (NOT turn — turning is gone)
     right::Bool = false                 # strafe
     fire::Bool  = false
-    aim::Union{Nothing,Float64} = nothing   # absolute heading φ; nothing ⇒ leave φ unchanged
+    aim::Union{Nothing,Tuple{Float64,Float64}} = nothing   # cursor cell (cx,cy); nothing ⇒ leave φ unchanged
     debug::Bool = false
     quit::Bool  = false
 end
@@ -280,11 +288,12 @@ end
 
 - The old `thrust` field is removed; `up`/`down` are added; `left`/`right` are retained as
   identifiers but their **meaning changes from turn to strafe**.
-- When `aim === nothing`, `tick!` leaves `φ` unchanged — so the headless smoke path (`Input()` each
-  frame, plus the scripted-`Input` tests) never depends on a mouse and its `tick!` arithmetic stays
-  reproducible. (The *golden* needs no such guarantee — it runs no `tick!` and consumes no `Input`;
-  its determinism comes from the static `draw!`, see "Determinism & the golden frame". All call
-  sites use kwargs, so field order is not load-bearing.)
+- `aim` is the **cursor cell** `(cx, cy)`; `_advance_ship!` turns it into `φ` via `aim_heading`
+  (see Aim). When `aim === nothing`, `tick!` leaves `φ` unchanged — so the headless smoke path
+  (`Input()` each frame, plus the scripted-`Input` tests) never depends on a mouse and its `tick!`
+  arithmetic stays reproducible. (The *golden* needs no such guarantee — it runs no `tick!` and
+  consumes no `Input`; its determinism comes from the static `draw!`, see "Determinism & the golden
+  frame". All call sites use kwargs, so field order is not load-bearing.)
 - `prev_debug` edge state for the debug toggle lives in **`GameState`** (`game.jl`, alongside the
   existing `prev_fire`), **not** in `entities.jl`. `debug` becomes **edge-triggered** in `tick!`
   (toggles once per press), fixing the strobe.
@@ -333,9 +342,10 @@ constructs an `InputState`.
   the fire flag — SGR mouse has no per-frame "held" bit, so `lmb_down` is **edge-derived**: set
   `true` on a `mouse_left` `mouse_press`/`mouse_drag`, set `false` on a `mouse_left`
   `mouse_release`; (c) runs the decay sweep evicting stale held keys; (d) folds the held set +
-  last-cursor-derived aim `φ` + `fire = lmb_down || space-held` into one `Input`. Aim is emitted
-  from the remembered cursor every frame (held steady between moves); it stays `nothing` until the
-  first mouse event.
+  `aim = last-known cursor (cx,cy)` + `fire = lmb_down || space-held` into one `Input`. The cursor
+  is emitted every frame (held steady between moves) and `aim` stays `nothing` until the first mouse
+  event. **No `φ` math here** — `aim_heading` lives in the sim (`_advance_ship!`), since it needs the
+  live ship position.
 - **The pure logic is factored out of `_poll_input!`** into helpers that don't need a live terminal:
   `sweep_stale!(map, now, window)` (eviction/refresh) and `fold_input(state, now)` (held-map + aim +
   fire → `Input`). `_poll_input!` itself needs a live `TK.poll_event` (it depends on `INPUT_ACTIVE[]`
@@ -423,13 +433,19 @@ not trusted on report.
   commit `Project.toml` only and instantiate on a fresh clone.
 - The demo project pins `julia = "1.12"` and `Tachikoma = "2.1.0"` (`Project.toml`); new code and
   tests must stay within that floor and must not need a Tachikoma API beyond 2.1.0's surface.
+- **Env bootstrap (prerequisite):** this branch predates the #J `[sources]` fix, and
+  `examples/asteroid_tui/Project.toml` has **no `[sources]` table**, so plain `Pkg.test()` fails at
+  instantiate (local unregistered deps). Add a `[sources]` table — `TextMeasure = { path = "../.." }`,
+  `TextMeasureLayouts = { path = "../layouts" }`, `Silhouettes = { path = "../silhouettes" }` — so
+  `Pkg.test()` runs without a manual `Pkg.develop` (matching the on-main demos). This is **Task 0**,
+  before any TDD.
 
 ## Files touched
 
 | File | Change |
 |---|---|
 | `src/input.jl` | `Input` fields → `up/down/left/right` strafe + optional `aim::Union{Nothing,Float64}`; remove `thrust`; docstring |
-| `src/game.jl` | `GameState` gains `prev_debug` (edge state, beside `prev_fire`); direct-velocity movement; aim→`φ`; wrap-aware **delta** helper; asteroid bounce/shatter; ship↔asteroid death; spawn protection; replenish; honour `impact` (cell→polygon frame conversion) in `fracture_asteroid!`; **beam origin → nose at `Beam(...)` construction (`game.jl:88`)**; edge-triggered debug; spawn-velocity rescale |
+| `src/game.jl` | `GameState` gains `prev_debug` + `n_target` (init in `new_game`); direct-velocity strafe movement; `aim_heading` helper + aim→`φ` in `_advance_ship!`; wrap-aware **delta** helper; asteroid bounce/shatter; ship↔asteroid death; spawn protection (initial `invuln`); replenish (`n_target`, fixed RNG draws); honour `impact` (cell→polygon frame conversion) in `fracture_asteroid!`; **beam origin → nose at `Beam(...)` construction (`game.jl:88`)**; edge-triggered debug; spawn-velocity rescale |
 | `src/entities.jl` | none expected (`Ship.φ` already exists; `prev_debug` lives in `GameState`) |
 | `src/draw.jl` | 8-way directional ship glyph (nose one cell along `φ`, charge indicator relocated) + plume removed; **cut the auto-targeting leader** (`draw.jl:215-223`); update stale plume comments (`draw.jl:8` `COL_BEAM`, `:48-51`, `:165`/`:175`) |
 | `src/render_tachikoma.jl` | stateful `InputState` (held-key map + last cursor + `lmb_down`); pure `sweep_stale!` + `fold_input` helpers; `_poll_input!` rewrite (stamp on press/repeat, mouse aim + edge-derived button, drain-loop timeout per existing caveat); `1003h/1003l` enable/restore in `run_game`; rewrite stale prose (`:1-17` header, `:96-97` & `:141-153` docstrings, `:113` poll wiring) |
