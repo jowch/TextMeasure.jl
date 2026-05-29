@@ -7,8 +7,9 @@
 # iteration. `measure` is imported at the module top (NOT exported by TextMeasure —
 # backend contract).
 
-const SANS  = "DejaVu Sans"        # pinned (CI font-pinning); see #J
-const SERIF = "Liberation Serif"
+const SANS       = "DejaVu Sans"          # pinned (CI font-pinning); see #J
+const SERIF      = "Liberation Serif"
+const SERIF_BOLD = "Liberation Serif Bold" # panel titles (weight carries the headline tier)
 
 "A px_per_unit=1 MakieBackend at `fs` px in font family `fam`."
 _backend(fam::AbstractString, fs::Real) = MakieBackend(; font=fam, fontsize=Float64(fs), px_per_unit=1)
@@ -311,10 +312,11 @@ The single title size that fits EVERY title in `metas` within 2 lines of `box_wi
 size the longest title needs (the min over each title's autoshrink size). Used by the grid
 so all panels share one headline scale.
 """
-shared_title_fontsize(metas; box_width::Real, fs_min::Real=14.0, fs_max::Real=22.0) =
+shared_title_fontsize(metas; box_width::Real, fs_min::Real=11.0, fs_max::Real=15.0,
+                      font::AbstractString=SERIF_BOLD) =
     isempty(metas) ? Float64(fs_max) :
     minimum(title_autoshrink(m.title; box_width=box_width, fs_min=fs_min, fs_max=fs_max,
-                             font=SERIF).fontsize for m in metas)
+                             font=font).fontsize for m in metas)
 
 # House-style §3 footer: "TextMeasure.jl · DOI Infographic", DejaVu Sans 9pt, GRAY,
 # bottom-left at the 36px outer margin. Drawn once per print piece (page), not per panel.
@@ -358,15 +360,16 @@ function _draw_infograph!(sc, meta::PaperMetadata, f; title_fontsize::Union{Noth
     isempty(jline) || _text!(sc, f, M + 78, y + 10, jline; fontsize=9, font=SANS, color=_GRAY)
     y += 24
 
-    # --- title: serif (house-style §1). Grid passes a shared `title_fontsize` (uniform scale,
-    #     no clipping); single autoshrinks 14→22 to showcase the primitive. ---
+    # --- title: Liberation Serif BOLD — the headline tier. WEIGHT (not size) carries the
+    #     hierarchy: bold ~15pt subhead over a lighter 10pt body, with the citation number as
+    #     the display element. Grid passes a shared `title_fontsize`; single autoshrinks. ---
     t = title_fontsize === nothing ?
-        title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=22.0, font=SERIF) :
+        title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=22.0, font=SERIF_BOLD) :
         title_autoshrink(meta.title; box_width=cw, fs_min=Float64(title_fontsize),
-                         fs_max=Float64(title_fontsize), font=SERIF)
+                         fs_max=Float64(title_fontsize), font=SERIF_BOLD)
     tla = t.line_advance                          # baseline-to-baseline (from the autoshrink layout)
     for ln in t.lines
-        _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SERIF, color=_INK)
+        _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SERIF_BOLD, color=_INK)
         y += tla
     end
     y += 6
@@ -406,7 +409,7 @@ function _draw_infograph!(sc, meta::PaperMetadata, f; title_fontsize::Union{Noth
     _draw_figure_panel!(sc, f, M + cw - figure_w, body_top, figure_w, body_h, meta)
 
     if has_body
-        body_fs = 11.0                            # house-style body tier (serif, ragged-right)
+        body_fs = 10.0                            # ~1.5× step below the bold ~15pt title
         s = strip(body)
         first_char = string(first(s))
         rest = String(SubString(s, nextind(s, firstindex(s))))   # body minus its initial letter
