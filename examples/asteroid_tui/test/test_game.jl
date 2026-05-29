@@ -84,7 +84,9 @@ end
     b.x=60.0+(a.radius+b.radius)*0.5; b.y=20.0; b.vx=-2.0; b.vy=0.0     # head-on, high closing
     shards0 = length(g.shards)
     tick!(g, Input())
-    @test length(g.asteroids) == 0 && length(g.shards) > shards0
+    # Both original asteroids fracture into shards; _replenish_field! adds exactly 1 back.
+    @test length(g.shards) > shards0
+    @test length(g.asteroids) == 1                           # 0 from fracture + 1 from replenish = exactly 1
 end
 
 @testset "ship dies on asteroid contact" begin
@@ -108,4 +110,19 @@ end
     a = g.asteroids[1]; a.vx=0.0; a.vy=0.0; a.x=g.ship.x; a.y=g.ship.y
     tick!(g, Input())
     @test g.ship.alive
+end
+
+@testset "field replenish restores count to N" begin
+    N = 4
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=N)
+    g.ship.invuln = 1_000_000                  # keep ship alive; don't perturb the test
+    empty!(g.asteroids)
+    tick!(g, Input())
+    @test length(g.asteroids) == 1             # one spawned per tick
+    # _replenish_field! runs LAST in tick! (after _advance_asteroids!), so the just-spawned
+    # asteroid is still exactly on its edge this tick — assert it here, before it drifts.
+    a = g.asteroids[1]
+    @test a.x == 0.0 || a.x == g.width || a.y == 0.0 || a.y == g.height
+    for _ in 1:10; tick!(g, Input()); end
+    @test length(g.asteroids) == N             # caps at N (g.n_target), never exceeds
 end

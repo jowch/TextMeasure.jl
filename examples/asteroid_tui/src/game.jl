@@ -314,6 +314,22 @@ end
 
 # --- tick --------------------------------------------------------------------
 
+# When the live count drops below the target, spawn ONE asteroid at a screen edge
+# from a FIXED number of g.rng draws (no rejection loop) so the RNG stream stays
+# predictable. `g.n_target` is the starting n_asteroids (set in new_game).
+function _replenish_field!(g::GameState)
+    length(g.asteroids) >= g.n_target && return g
+    a = _spawn_asteroid(g.rng, g.width, g.height)   # x,y overwritten below; its draws are kept so the rng stream stays stable
+    edge = rand(g.rng, 1:4); t = rand(g.rng)        # fixed 2 extra draws
+    if     edge == 1; a.x = t*g.width;  a.y = 0.0
+    elseif edge == 2; a.x = t*g.width;  a.y = g.height
+    elseif edge == 3; a.x = 0.0;        a.y = t*g.height
+    else              a.x = g.width;    a.y = t*g.height
+    end
+    push!(g.asteroids, a)
+    return g
+end
+
 """
     tick!(g, input) -> g
 
@@ -331,6 +347,7 @@ function tick!(g::GameState, in::Input)
     _resolve_collisions!(g)              # beam → asteroid
     _resolve_asteroid_collisions!(g)     # asteroid ↔ asteroid
     _resolve_ship_collision!(g)          # ship ↔ asteroid (death)
+    _replenish_field!(g)                 # top up toward g.n_target (one per tick)
     g.tick_count += 1
     return g
 end
