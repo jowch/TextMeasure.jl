@@ -19,14 +19,15 @@ other element re-aligns because every offset is measurement-derived.
   PDF coords don't round-trip at sub-pixel precision. The PDF is checked only for
   selectable text + font embedding + zero raster images (vector inset).
 
-## Wrap status (single-sided, for now)
+## Two-sided wrap
 
-Body text currently flows down **one side** of the inset (the wider available
-interval per scanline band — `shape_pack`'s default `:widest_row`). Two-sided flow
-(text on both sides of a centered inset) lands when the shared `shape_pack` `fill=:all`
-extension merges; the `compose.jl` integration point is flagged with `TWO_SIDED_WRAP`.
-The correctness invariants (no overlap, baseline alignment, wrap-honors-inset) hold in
-either mode.
+Body text flows on **both sides** of the inset in the same scanline bands, using
+`shape_pack`'s `fill=:all` mode (every disjoint interval per band is packed
+left-to-right). A centered illustration gets text down its left *and* right margins
+at once; slide or resize it and the column rebalances with no code change. The
+correctness invariants (no overlap, baseline alignment, wrap-honors-inset) hold
+regardless. The `compose.jl` flag `TWO_SIDED_WRAP`/`FILL_MODE` selects `:all` vs the
+single-sided `:widest`.
 
 ## Run it
 

@@ -17,12 +17,13 @@ const BYLINE_GAP    = 10.0
 const BODY_GAP      = 20.0
 const DROPCAP_GAP   = 6.0      # horizontal space after the drop cap
 
-# WRAP-AROUND integration point (#H ↔ #C2): shape_pack's default :widest_row fills only
-# the single widest interval per band, so body text flows down ONE side of a centered
-# inset. When impl-C2's `fill=:all` kwarg merges (packs ALL disjoint intervals per band),
-# flip this to true to get two-sided flow. Until then, claims of two-sided wrap are
-# premature — see README. The invariants (no overlap, baseline alignment) hold either way.
-const TWO_SIDED_WRAP = false
+# WRAP-AROUND (#H ↔ #C2, WIRED): with `fill=:all`, shape_pack packs EVERY disjoint
+# interval per band left-to-right, so body text flows on BOTH sides of a centered inset
+# (the leftmost interval fills first, then the next). `:widest` would fill only the wider
+# side. The invariants (no overlap, baseline alignment) hold either way; two-sided is the
+# visual win that C2's kwarg unlocked.
+const TWO_SIDED_WRAP = true
+const FILL_MODE = TWO_SIDED_WRAP ? :all : :widest
 
 _mk(font, size) = MakieBackend(; font=font, fontsize=size, px_per_unit=1.0)
 
@@ -161,8 +162,9 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     chord = RectExclusionChordFn(content_left, content_right, region_bottom, holes, cfg.gutter_px)
 
     # ---- pack the body ----
-    # NOTE: single-sided until impl-C2's fill=:all merges (see TWO_SIDED_WRAP).
-    packed = shape_pack(body_prep, chord; line_advance = la, min_chord_width = 24.0)
+    # fill=:all flows body text on BOTH sides of the inset (see FILL_MODE / TWO_SIDED_WRAP).
+    packed = shape_pack(body_prep, chord; line_advance = la, min_chord_width = 24.0,
+                        fill = FILL_MODE)
 
     # ---- absolute body runs + bboxes ----
     body_runs = PlacedText[]; body_bboxes = BBox[]

@@ -10,12 +10,13 @@ margin_px     = 54
 dropcap_lines = 4
 gutter_px     = 8
 
+# v3: a larger, lower inset with a 4-line drop cap — geometry all re-derived.
 [inset]
 svg_path  = "skyline.svg"
 x_px      = 150
-y_px      = 360
-width_px  = 220
-height_px = 230
+y_px      = 330
+width_px  = 210
+height_px = 215
 
 [[body]]
 dropcap   = true
@@ -26,6 +27,11 @@ There are no manual offsets on this page. Every baseline, every wrap point, and 
 [[body]]
 paragraph = """
 The exhibit measures once and lays out many times. The same prepared paragraph is packed around an inset-exclusion chord function that subtracts the illustration, the drop cap, and the pull quote from each scanline band. Correctness is asserted on the computed layout before a single glyph is drawn.
+"""
+
+[[body]]
+paragraph = """
+Because the packer fills every interval a band offers, the column wraps on both sides of a centered illustration at once. Widen the inset, narrow it, or slide it toward either margin, and the surrounding text simply rebalances. The page is a proof, not a paste up.
 """
 
 [[pull_quote]]

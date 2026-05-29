@@ -9,14 +9,25 @@ this column were computed by the measurement pipeline, not nudged by hand. Move 
 few pixels and re-render: the body text re-flows around its new footprint, the pull quote keeps its
 clearance, and the drop cap still lands on its line, because nothing here was hardcoded.
 
-The exhibit measures once and lays out many times.
-The same prepared paragraph is packed around an
-inset-exclusion chord function that subtracts the
-illustration, the drop cap, and the pull quote from each
-scanline band. Correctness is asserted on the computed
-layout before a single glyph is drawn.
+The exhibit measures once and lays
+paragraph is packed around an
+subtracts the illustration, the drop cap,
+band. Correctness is asserted on the
+is drawn.
+Because the packer fills every interval
+both sides of a centered illustration at
+slide it toward either margin, and the
+The page is a proof, not a paste up.
 
 Measure once. Lay out
 many times. Never
 nudge.
 — the thesis
+
+out many times. The same prepared
+inset-exclusion chord function that
+and the pull quote from each scanline
+computed layout before a single glyph
+a band offers, the column wraps on
+once. Widen the inset, narrow it, or
+surrounding text simply rebalances.

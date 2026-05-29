@@ -482,6 +482,46 @@ end
         @test passed == ntrials
     end
 
+    @testset "two-sided wrap (fill=:all)" begin
+        # A CENTERED inset must get body text on BOTH sides in the same bands — the
+        # property that C2's fill=:all unlocked. content x ∈ [54,558] (center 306); a
+        # 150-wide inset at x_px=177 sits centered, leaving ~177px on each side.
+        dir = mktempdir()
+        write(joinpath(dir,"skyline.svg"),
+            """<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10" fill="#445"/></svg>""")
+        body = repeat("The measurement pipeline computes every baseline and wrap point so the layout adapts beautifully. ", 16)
+        write(joinpath(dir,"cover.toml"), """
+        [meta]
+        title = "The Newer Yorker"
+        subtitle = "A Correctness Exhibit"
+        byline = "by TextMeasure.jl"
+        [layout]
+        page_size = "letter"
+        margin_px = 54
+        dropcap_lines = 3
+        gutter_px = 7
+        [inset]
+        svg_path = "skyline.svg"
+        x_px = 177
+        y_px = 210
+        width_px = 150
+        height_px = 240
+        [[body]]
+        dropcap = true
+        paragraph = "$body"
+        """)
+        c = compose_cover(load_config(joinpath(dir,"cover.toml")))
+        il, ir, it, ib = c.inset_rect.left, c.inset_rect.right, c.inset_rect.top, c.inset_rect.bottom
+        left  = count(b -> b.bottom > it && b.top < ib && b.right <= il + 1e-6, c.body_word_bboxes)
+        right = count(b -> b.bottom > it && b.top < ib && b.left  >= ir - 1e-6, c.body_word_bboxes)
+        @test left  > 0          # body text to the LEFT of the centered inset
+        @test right > 0          # body text to the RIGHT of the centered inset (the two-sided win)
+        # two-sided flow still honors every invariant
+        @test body_wrap_honors_inset(c)
+        @test isempty(bbox_violations(c))
+        @test dropcap_baseline_aligned(c; tol=0.5)
+    end
+
     @testset "PDF golden + embedding + vector" begin
         pdf = _render_fixture("cover-v1.toml")
         @test isfile(pdf) && filesize(pdf) > 0
