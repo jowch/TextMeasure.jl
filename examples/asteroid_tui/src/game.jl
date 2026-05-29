@@ -51,7 +51,7 @@ function _spawn_asteroid(rng::AbstractRNG, width, height)
     return Asteroid(poly,
                     rand(rng) * width, rand(rng) * height,
                     (rand(rng) - 0.5) * 0.2, (rand(rng) - 0.5) * 0.2,   # ~7× slower than 1.4; see SHATTER_CLOSING
-                    (rand(rng) - 0.5) * 0.8 / 60,   # ω in rad/tick (~[-0.4,0.4] rad/s)
+                    (rand(rng) - 0.5) * 0.08,        # ω in rad/tick (~±1.2 rad/s max at 30fps — a visible tumble)
                     0.0, radius, prep, 0)
 end
 
