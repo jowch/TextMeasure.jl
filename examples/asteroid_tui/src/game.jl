@@ -186,15 +186,20 @@ end
     fracture_asteroid!(g, idx, impact)
 
 Remove asteroid `idx`, fracture its silhouette with `voronoi_shatter` seeded at
-`impact`, and re-pack each shard with a `subprep` slice of the asteroid's already
--measured prose (no re-measurement). The slices tile the segment range, so every
-glyph survives in exactly one shard, in original order.
+`impact` — a CELL-space offset from the asteroid centre, converted to the polygon's
+own (~±1) frame internally — and re-pack each shard with a `subprep` slice of the
+asteroid's already-measured prose (no re-measurement). The slices tile the segment
+range, so every glyph survives in exactly one shard, in original order.
 """
 function fracture_asteroid!(g::GameState, idx::Int, impact::GB.Point2{Float64})
     a = g.asteroids[idx]
     nword = count(s -> s.kind === :word, a.prep.segments)
     n_shards = 2 + (nword >= 6 ? 2 : 0)
-    polys = voronoi_shatter(a.poly, GB.Point2{Float64}(0.0, 0.0); n_shards = n_shards)
+    # Convert the CELL-space contact offset into the polygon's own (~±1) frame and
+    # clamp into the polygon bbox so voronoi_shatter's seeds land inside the parent.
+    fx = clamp(impact[1] / a.radius, minimum(p[1] for p in a.poly), maximum(p[1] for p in a.poly))
+    fy = clamp(impact[2] / a.radius, minimum(p[2] for p in a.poly), maximum(p[2] for p in a.poly))
+    polys = voronoi_shatter(a.poly, GB.Point2{Float64}(fx, fy); n_shards = n_shards)
     isempty(polys) && (polys = [a.poly])
     # MAJOR #3: shatter may return fewer polys than requested (length ≤ n_shards),
     # so split into EXACTLY length(polys) chunks and assert the 1:1 pairing before

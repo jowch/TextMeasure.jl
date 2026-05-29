@@ -13,7 +13,7 @@ words(p) = [s.str for s in p.segments if s.kind === :word]
     g = new_game(Xoshiro(11); n_asteroids=1)
     a = g.asteroids[1]
     original = words(a.prep)
-    impact = GB.Point2{Float64}(a.x, a.y)
+    impact = GB.Point2{Float64}(0.0, 0.0)
     fracture_asteroid!(g, 1, impact)
     @test isempty(g.asteroids)                       # the hit asteroid is removed
     @test length(g.shards) >= 2                       # at least two shard-prose chunks
@@ -50,4 +50,19 @@ end
     @test !isempty(g.shards)
     rebuilt = vcat((words(sh.prep) for sh in g.shards)...)
     @test rebuilt == orig                                        # every glyph once, in order
+end
+
+@testset "fracture: off-centre rim impact (frame conversion, no truncation)" begin
+    g = new_game(Xoshiro(11); n_asteroids=1)
+    a = g.asteroids[1]
+    original = words(a.prep)
+    nword = count(s -> s.kind === :word, a.prep.segments)
+    requested = 2 + (nword >= 6 ? 2 : 0)
+    impact = GB.Point2{Float64}(a.radius * 0.8, 0.0)     # cell-space offset near the rim
+    fracture_asteroid!(g, 1, impact)
+    @test isempty(g.asteroids)
+    rebuilt = vcat((words(sh.prep) for sh in g.shards)...)
+    @test rebuilt == original                            # lossless
+    @test g.last_hit_glyphs == original
+    @test length(g.shards) == requested                  # seeds landed INSIDE ⇒ no truncation
 end
