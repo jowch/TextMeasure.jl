@@ -74,7 +74,8 @@ end
     @test length(g.asteroids) == n0                       # bounce, not fracture
     a2,b2 = g.asteroids[1], g.asteroids[2]; _,_,d1 = _wrap_delta(a2.x,a2.y,b2.x,b2.y,g.width,g.height)
     @test d1 >= d0                                         # pushed apart
-    @test all(a -> 0 <= a.x <= g.width && 0 <= a.y <= g.height, g.asteroids)  # re-wrap holds in-bounds
+    @test all(a -> -a.radius <= a.x <= g.width + a.radius &&
+                   -a.radius <= a.y <= g.height + a.radius, g.asteroids)  # push-apart clamps within despawn bounds
 end
 
 @testset "high closing speed fractures both" begin
@@ -148,4 +149,32 @@ end
     @test a.x == 0.0 || a.x == g.width || a.y == 0.0 || a.y == g.height
     for _ in 1:10; tick!(g, Input()); end
     @test length(g.asteroids) == N             # caps at N (g.n_target), never exceeds
+end
+
+@testset "asteroids do not wrap — they leave and despawn off-screen" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=1)
+    g.ship.invuln = 1_000_000        # keep ship out of it
+    g.n_target = 0                   # disable replenish so we can observe the despawn
+    a = g.asteroids[1]
+    a.x = 2.0; a.y = 20.0; a.vx = -1.0; a.vy = 0.0   # heading off the LEFT edge
+    for _ in 1:40; tick!(g, Input()); end
+    @test isempty(g.asteroids)       # gone — NOT wrapped around to x≈width
+end
+
+@testset "shards do not wrap — they leave and despawn" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=0)
+    g.ship.invuln = 1_000_000; g.n_target = 0
+    # hand-make a shard heading off the top edge (use the real Shard constructor field
+    # order you read in entities.jl: poly,x,y,vx,vy,prep,ttl,radius)
+    a = AsteroidTUI.new_game(Xoshiro(7); n_asteroids=1).asteroids[1]   # borrow a prep+poly
+    push!(g.shards, AsteroidTUI.Shard(a.poly, 60.0, 2.0, 0.0, -1.0, a.prep, 1000, 4.0))
+    for _ in 1:40; tick!(g, Input()); end
+    @test isempty(g.shards)          # despawned off the top, did not wrap to the bottom
+end
+
+@testset "ship still wraps" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=0)
+    g.ship.x = 0.5; g.ship.y = 20.0
+    for _ in 1:8; tick!(g, Input(left=true)); end   # strafe left, crosses x=0
+    @test 0 <= g.ship.x <= g.width                  # wrapped, stayed in range
 end

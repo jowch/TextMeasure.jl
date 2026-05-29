@@ -54,9 +54,11 @@ end
         @test frames == 120                      # loop ran to completion, no early crash
         @test isempty(bad_frames)                # every frame produced a valid buffer
         @test g.tick_count == 120                # tick! actually advanced each frame
-        # in-bounds invariants after 120 ticks of motion
+        # the ship wraps, so it stays in-bounds after 120 ticks of motion
         @test 0 <= g.ship.x <= W && 0 <= g.ship.y <= H
-        @test all(a -> 0 <= a.x <= W && 0 <= a.y <= H, g.asteroids)
+        # asteroids/shards no longer wrap — they leave and despawn once fully
+        # off-screen, so any live body's centre is within its radius of the field
+        @test all(a -> -a.radius <= a.x <= W + a.radius && -a.radius <= a.y <= H + a.radius, g.asteroids)
     end
 
     @testset "no-input run — idles cleanly" begin

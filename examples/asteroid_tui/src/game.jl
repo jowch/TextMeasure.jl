@@ -33,6 +33,9 @@ const SHATTER_CLOSING = 0.13         # asteroid closing-speed: ≥ ⇒ fracture,
 
 _wrap(v, hi) = mod(v, hi)
 
+# A body is fully off-screen once its centre passes an edge by more than its radius.
+_offscreen(b, w, h) = b.x < -b.radius || b.x > w + b.radius || b.y < -b.radius || b.y > h + b.radius
+
 # Toroidal signed delta from (ax,ay) to (bx,by) on a width×height torus. Each axis
 # takes the minimum-magnitude candidate over {d, d-size, d+size}; at the exact
 # |d|==size/2 boundary (rarely reached with float positions) the tie-break prefers
@@ -103,14 +106,15 @@ end
 
 function _advance_asteroids!(g::GameState)
     for a in g.asteroids
-        a.x = _wrap(a.x + a.vx, g.width); a.y = _wrap(a.y + a.vy, g.height)
+        a.x += a.vx; a.y += a.vy            # no wrap — only the ship wraps
         a.θ += a.ω; a.age += 1
     end
+    filter!(a -> !_offscreen(a, g.width, g.height), g.asteroids)
     for sh in g.shards
-        sh.x = _wrap(sh.x + sh.vx, g.width); sh.y = _wrap(sh.y + sh.vy, g.height)
+        sh.x += sh.vx; sh.y += sh.vy
         sh.ttl -= 1
     end
-    filter!(sh -> sh.ttl > 0, g.shards)
+    filter!(sh -> sh.ttl > 0 && !_offscreen(sh, g.width, g.height), g.shards)
 end
 
 function _handle_charge_and_beam!(g::GameState, in::Input)
@@ -239,8 +243,8 @@ function fracture_asteroid!(g::GameState, idx::Int, impact::GB.Point2{Float64})
 end
 
 # Asteroid↔asteroid: bounce below the closing-speed threshold, fracture both above.
-# Wrap-aware. Collect fracture pairs and apply them AFTER the sweep so deleteat!
-# never invalidates a live index mid-iteration.
+# Euclidean — only the ship wraps. Collect fracture pairs and apply them AFTER the
+# sweep so deleteat! never invalidates a live index mid-iteration.
 function _resolve_asteroid_collisions!(g::GameState)
     n = length(g.asteroids)
     n < 2 && return g
@@ -256,7 +260,7 @@ function _resolve_asteroid_collisions!(g::GameState)
         for j in (i+1):n
             fractured[j] && continue
             b = g.asteroids[j]
-            dx, dy, dist = _wrap_delta(a.x, a.y, b.x, b.y, g.width, g.height)
+            dx = b.x - a.x; dy = b.y - a.y; dist = hypot(dx, dy)
             rsum = a.radius + b.radius
             (dist >= rsum || dist < 1e-9) && continue
             nx, ny = dx/dist, dy/dist                 # contact normal a→b
@@ -271,9 +275,11 @@ function _resolve_asteroid_collisions!(g::GameState)
                 p = rvx*nx + rvy*ny                   # elastic, equal-mass reflection
                 a.vx += p*nx; a.vy += p*ny
                 b.vx -= p*nx; b.vy -= p*ny
-                overlap = (rsum - dist)/2 + 0.01      # push apart; re-wrap to stay in-bounds
-                a.x = _wrap(a.x - nx*overlap, g.width); a.y = _wrap(a.y - ny*overlap, g.height)
-                b.x = _wrap(b.x + nx*overlap, g.width); b.y = _wrap(b.y + ny*overlap, g.height)
+                overlap = (rsum - dist)/2 + 0.01      # push the pair apart (no wrap)
+                a.x = clamp(a.x - nx*overlap, -a.radius, g.width  + a.radius)
+                a.y = clamp(a.y - ny*overlap, -a.radius, g.height + a.radius)
+                b.x = clamp(b.x + nx*overlap, -b.radius, g.width  + b.radius)
+                b.y = clamp(b.y + ny*overlap, -b.radius, g.height + b.radius)
             end
         end
     end
@@ -284,13 +290,14 @@ function _resolve_asteroid_collisions!(g::GameState)
     return g
 end
 
-# Ship↔asteroid: alive && not invulnerable && wrap-aware distance within the
-# asteroid's radius ⇒ kill_ship!. The asteroid is never mutated (it continues).
+# Ship↔asteroid: alive && not invulnerable && Euclidean distance within the
+# asteroid's radius ⇒ kill_ship!. Only the ship wraps. The asteroid is never
+# mutated (it continues).
 function _resolve_ship_collision!(g::GameState)
     s = g.ship
     (s.alive && s.invuln == 0) || return g
     for a in g.asteroids
-        _, _, dist = _wrap_delta(s.x, s.y, a.x, a.y, g.width, g.height)
+        dist = hypot(a.x - s.x, a.y - s.y)
         if dist <= a.radius
             kill_ship!(g)
             return g
@@ -324,12 +331,13 @@ end
 # predictable. `g.n_target` is the starting n_asteroids (set in new_game).
 function _replenish_field!(g::GameState)
     length(g.asteroids) >= g.n_target && return g
-    a = _spawn_asteroid(g.rng, g.width, g.height)   # x,y overwritten below; its draws are kept so the rng stream stays stable
+    a = _spawn_asteroid(g.rng, g.width, g.height)   # x,y,v overwritten below; its draws are kept so the rng stream stays stable
     edge = rand(g.rng, 1:4); t = rand(g.rng)        # fixed 2 extra draws
-    if     edge == 1; a.x = t*g.width;  a.y = 0.0
-    elseif edge == 2; a.x = t*g.width;  a.y = g.height
-    elseif edge == 3; a.x = 0.0;        a.y = t*g.height
-    else              a.x = g.width;    a.y = t*g.height
+    sp = hypot(a.vx, a.vy)                           # reuse the drawn speed, point it inward
+    if     edge == 1; a.x = t*g.width;   a.y = 0.0;      a.vx = 0.0;  a.vy =  sp   # top  → down
+    elseif edge == 2; a.x = t*g.width;   a.y = g.height; a.vx = 0.0;  a.vy = -sp   # bot  → up
+    elseif edge == 3; a.x = 0.0;         a.y = t*g.height; a.vx =  sp; a.vy = 0.0  # left → right
+    else              a.x = g.width;     a.y = t*g.height; a.vx = -sp; a.vy = 0.0  # right→ left
     end
     push!(g.asteroids, a)
     return g
