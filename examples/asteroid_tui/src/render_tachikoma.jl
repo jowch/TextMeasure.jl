@@ -4,15 +4,17 @@
 #
 # The loop itself (`game_loop!`) is terminal-agnostic: it takes `poll` / `present` /
 # `pace` callbacks, so the EXACT SAME loop code runs both the interactive game
-# (`run_game`, real TTY) and the headless smoke test (scripted input, no-op present,
-# no pacing). Only these three callbacks touch the terminal — everything else (input
-# dispatch via the `Input` struct, `tick!`, `draw!` into a `CellBuffer`, and the
-# `drain_to_tachikoma!` buffer fill) is exercised without a TTY.
+# (`run_game` on a real TTY) and the headless smoke test. `run_game`'s headless branch
+# builds the Tachikoma `Terminal` over an injectable `IOBuffer` (explicit size, no TTY
+# query), so the smoke test drives the REAL entry point — boot → loop → tick → draw →
+# `_present` (`draw!` → drain → flush) → drain — and asserts bytes were flushed
+# (`position(io) > 0`). Input dispatch (`Input` → `tick!`), `draw!` into a `CellBuffer`,
+# `drain_to_tachikoma!`, AND `_present` are all exercised without a TTY.
 #
 # What STILL genuinely requires a live TTY (human tier-2/3 only, not unit-testable):
 #   - `_poll_input` raw-mode keypress capture (reading actual keystrokes)
-#   - `_present` writing escape codes to the terminal
-#   - real ≥30fps wall-clock pacing, and the *visible* respawn blink / `?` overlay
+#   - the visible on-screen render and real ≥30fps wall-clock pacing
+#   - the *visible* respawn blink / `?` debug overlay
 import Tachikoma as TK
 
 # Drain a renderer-agnostic CellBuffer into a Tachikoma Buffer (1-based x=col, y=row).

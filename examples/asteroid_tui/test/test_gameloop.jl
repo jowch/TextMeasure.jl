@@ -2,11 +2,14 @@
 #
 # HEADLESS GAME-LOOP SMOKE TEST — proves the ACTUAL run.jl code path runs without a
 # TTY. run.jl calls `run_game`, which builds a real game + CellBuffer and drives
-# `game_loop!` with terminal-backed poll/present/pace callbacks. This test drives the
-# SAME `game_loop!` with headless callbacks (scripted/no input, no-op present, no
-# pacing), so the loop logic, input dispatch, tick!, draw!, and the Tachikoma buffer
-# drain are all exercised — only the raw-mode keypress capture and escape-code write
-# (`_poll_input`/`_present`) and real-time pacing stay TTY-only.
+# `game_loop!` with terminal-backed poll/present/pace callbacks. The earlier subtests
+# drive `game_loop!` directly with scripted/headless callbacks (loop logic, input
+# dispatch, tick!, draw!, Tachikoma buffer drain). The final subtest calls the REAL
+# `run_game(; io=IOBuffer())`: the headless terminal is built over that IOBuffer
+# (explicit size, no TTY query), so the real `_present` runs (`draw!` → drain → flush)
+# and we assert it flushed bytes (`position(io) > 0`). Only the raw-mode keypress
+# capture (`_poll_input`), the visible on-screen render, and real-time pacing stay
+# TTY-only (the human tier-2/3 check).
 using AsteroidTUI
 using AsteroidTUI: GameState, new_game, Input, ScriptedInput, next_input!, CellBuffer,
                    game_loop!, step_frame!, drain_to_tachikoma!, nrows, ncols, ship_visible
