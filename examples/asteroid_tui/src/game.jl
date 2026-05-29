@@ -115,7 +115,7 @@ function _handle_charge_and_beam!(g::GameState, in::Input)
         if in.fire
             s.charge = min(s.charge + 1, CHARGE_MAX)
         elseif g.prev_fire && s.charge > 0          # release edge ⇒ launch
-            g.beam = Beam(true, s.x, s.y, s.φ, 4 + 6 * s.charge, 6)
+            g.beam = Beam(true, s.x + sin(s.φ), s.y - cos(s.φ), s.φ, 4 + 6 * s.charge, 6)
             s.charge = 0
         end
     end

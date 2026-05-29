@@ -5,7 +5,7 @@ import GeometryBasics as GB
 const COL_PROSE  = 0xfa    # 250 grey  — intact asteroid prose
 const COL_SHARD  = 0xdf    # 223 warm  — fracture-shard prose (pops against grey)
 const COL_SHIP   = 0x33    # 51 cyan   — ship hull
-const COL_BEAM   = 0xe2    # 226 yellow— beam + thrust plume
+const COL_BEAM   = 0xe2    # 226 yellow— beam + charge indicator
 const COL_TAG    = 0xf4    # 244 grey  — callout boxes
 const COL_TRAIL  = 0xf3    # 243 grey  — motion trails / targeting leader
 const COL_DEBUG  = 0x2d    # 45 cyan   — debug bbox overlay
@@ -45,7 +45,7 @@ function _draw_border!(buf::CellBuffer)
 end
 
 # --- decoration helpers: write only into already-empty cells ------------------
-# These (trails / leader / thrust plume / beam) yield to anything already drawn, so
+# These (trails / beam) yield to anything already drawn, so
 # they never land on top of prose or callouts. They are NOT what keeps the prose
 # bodies / callouts / hull / border from colliding — that is z-order + scene
 # composition (see `draw!`). These helpers just keep the *decorations* tidy.
@@ -68,21 +68,6 @@ function _draw_trail!(buf::CellBuffer, cx::Real, cy::Real, vx::Real, vy::Real, r
         r = round(Int, cy - uy * d)      # behind = opposite velocity
         c = round(Int, cx - ux * d)
         _put_if_empty!(buf, r, c, glyphs[k]; fg = fg)
-    end
-    return buf
-end
-
-# Dotted leader from (x0,y0) toward (x1,y1), stopping `stop` cells short of the end.
-# Empty-cells-only, so it never overprints prose/boxes.
-function _draw_leader!(buf::CellBuffer, x0::Int, y0::Int, x1::Int, y1::Int; fg, stop::Int = 2)
-    dx = x1 - x0; dy = y1 - y0
-    n = max(abs(dx), abs(dy))
-    n == 0 && return buf
-    for i in 0:max(0, n - stop)
-        t = i / n
-        r = round(Int, y0 + dy * t)
-        c = round(Int, x0 + dx * t)
-        _put_if_empty!(buf, r, c, '·'; fg = fg)
     end
     return buf
 end
@@ -162,20 +147,25 @@ function _draw_shard!(buf::CellBuffer, sh, debug::Bool)
     return buf
 end
 
-# Ship as a focal anchor: a 2-row Arwing wedge + a fading thrust plume below, with
-# the charge glyph at the nose when charging. Bold cyan so the eye lands here.
+# Ship: a cyan hull at (sx,sy) with a directional NOSE one cell along heading φ
+# (8-way octant table), and — while charging — the charge glyph one cell BEYOND the
+# nose along φ. Pure function of g (no RNG/clock): same state ⇒ same cells. At φ=0
+# the nose is '▲' (nose-up), matching the golden's pinned pose.
+# φ increases CLOCKWISE from up, so the table must run CW: k·45° = N,NE,E,SE,S,SW,W,NW.
+# (A CCW table makes the nose point backwards — e.g. '◀' while facing right.)
+const SHIP_OCTANT = ('▲', '◥', '▶', '◢', '▼', '◣', '◀', '◤')  # N NE E SE S SW W NW
+
 function _draw_ship!(buf::CellBuffer, g)
     ship_visible(g) || return buf
     s = g.ship
     sx = round(Int, s.x); sy = round(Int, s.y)
-    put_char!(buf, sy - 1, sx,     '▲'; fg = COL_SHIP, bold = true)   # nose
-    put_char!(buf, sy,     sx - 1, '╱'; fg = COL_SHIP, bold = true)   # swept wings
-    put_char!(buf, sy,     sx,     '▮'; fg = COL_SHIP, bold = true)   # hull
-    put_char!(buf, sy,     sx + 1, '╲'; fg = COL_SHIP, bold = true)
-    _put_if_empty!(buf, sy + 1, sx, '┃'; fg = COL_BEAM)               # thrust plume
-    _put_if_empty!(buf, sy + 2, sx, '┋'; fg = COL_BEAM)
+    dx, dy = sin(s.φ), -cos(s.φ)
+    nose = SHIP_OCTANT[mod(round(Int, s.φ / (π/4)), 8) + 1]   # mod handles negative φ
+    put_char!(buf, sy, sx, '▮'; fg = COL_SHIP, bold = true)                              # hull
+    put_char!(buf, round(Int, s.y + dy), round(Int, s.x + dx), nose; fg = COL_SHIP, bold = true)  # nose
     if s.charge > 0
-        put_char!(buf, sy - 2, sx, CHARGE_GLYPH[s.charge + 1]; fg = COL_BEAM, bold = true)
+        put_char!(buf, round(Int, s.y + 2dy), round(Int, s.x + 2dx),
+                  CHARGE_GLYPH[s.charge + 1]; fg = COL_BEAM, bold = true)
     end
     return buf
 end
@@ -202,8 +192,8 @@ Non-overlap is guaranteed by **z-order + scene composition**, not by per-write
 guards: the scene is hand-composed (and, for the golden, seed-pinned) so the prose
 bodies and their callouts don't share cells, and the draw order layers later
 elements over earlier ones deliberately. Layer order: motion trails (under) →
-asteroid prose + closed callouts → shard prose → targeting leader → beam → ship →
-border + footer. The decorations (trails / leader / plume / beam) additionally yield
+asteroid prose + closed callouts → shard prose → beam → ship →
+border + footer. The decorations (trails / beam) additionally yield
 to already-occupied cells (`_put_if_empty!`) so they never land on the prose.
 """
 function draw!(buf::CellBuffer, g::GameState)
@@ -212,15 +202,6 @@ function draw!(buf::CellBuffer, g::GameState)
     for sh in g.shards;   _draw_trail!(buf, sh.x, sh.y, sh.vx, sh.vy, sh.radius; fg = COL_TRAIL); end
     for a in g.asteroids; _draw_asteroid!(buf, a, g.debug); end
     for sh in g.shards;   _draw_shard!(buf, sh, g.debug); end
-    # targeting leader: ship → nearest asteroid (dim, empty-cells-only)
-    if ship_visible(g) && !isempty(g.asteroids)
-        s = g.ship
-        ni = argmin([hypot(a.x - s.x, a.y - s.y) for a in g.asteroids])
-        a = g.asteroids[ni]
-        _draw_leader!(buf, round(Int, s.x), round(Int, s.y) - 2,
-                      round(Int, a.x), round(Int, a.y); fg = COL_TRAIL,
-                      stop = ceil(Int, a.radius) + 1)
-    end
     _draw_beam!(buf, g)
     _draw_ship!(buf, g)
     _draw_border!(buf)
