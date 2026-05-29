@@ -17,10 +17,17 @@ import Tachikoma as TK
 
 # Drain a renderer-agnostic CellBuffer into a Tachikoma Buffer (1-based x=col, y=row).
 # No TTY needed — a Tachikoma Buffer is an in-memory cell grid; this is smoke-tested.
+#
+# Every write is guarded by `TK.in_bounds`: a CellBuffer may be larger than the
+# Tachikoma buffer it's drained into (e.g. a resized terminal), so out-of-range cells
+# are skipped rather than throwing. Without this guard `set_char!` raises a
+# `BoundsError` and crashes the render loop — caught by the headless game-loop smoke
+# test (test_gameloop.jl), which is exactly what that test exists to prevent.
 function drain_to_tachikoma!(tbuf, cb::CellBuffer)
     for r in 1:nrows(cb), c in 1:ncols(cb)
         ch = cb.chars[r, c]
         (ch == ' ' && cb.fg[r, c] == 0x00) && continue
+        TK.in_bounds(tbuf, c, r) || continue
         style = TK.Style(; fg = TK.Color256(Int(cb.fg[r, c])), bold = cb.bold[r, c])
         TK.set_char!(tbuf, c, r, ch, style)
     end
