@@ -303,8 +303,9 @@ function _resolve_collisions!(g::GameState)
         a = g.asteroids[idx]
         for t in 0:g.beam.length              # sample along the beam
             px, py = bx + dirx * t, by + diry * t
-            if hypot(px - a.x, py - a.y) <= a.radius
-                fracture_asteroid!(g, idx, GB.Point2{Float64}(px - a.x, py - a.y))
+            ddx, ddy, dist = _wrap_delta(px, py, a.x, a.y, g.width, g.height)
+            if dist <= a.radius
+                fracture_asteroid!(g, idx, GB.Point2{Float64}(-ddx, -ddy))
                 break
             end
         end

@@ -7,7 +7,7 @@ const COL_SHARD  = 0xdf    # 223 warm  — fracture-shard prose (pops against gr
 const COL_SHIP   = 0x33    # 51 cyan   — ship hull
 const COL_BEAM   = 0xe2    # 226 yellow— beam + charge indicator
 const COL_TAG    = 0xf4    # 244 grey  — callout boxes
-const COL_TRAIL  = 0xf3    # 243 grey  — motion trails / targeting leader
+const COL_TRAIL  = 0xf3    # 243 grey  — motion trails
 const COL_DEBUG  = 0x2d    # 45 cyan   — debug bbox overlay
 const COL_BORDER = 0xf0    # 240 dim grey — frame + footer
 const CHARGE_GLYPH = (' ', '·', '*', '─', '\\', '✸')  # index = charge+1 (1-based)

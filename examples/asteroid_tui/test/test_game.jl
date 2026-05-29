@@ -112,6 +112,29 @@ end
     @test g.ship.alive
 end
 
+@testset "beam hits across the wrap seam (wrap-aware)" begin
+    g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=1)
+    g.ship.invuln = 1_000_000                 # keep ship alive, irrelevant to beam
+    a = g.asteroids[1]
+    # Asteroid just past the LEFT seam; ship/beam just inside the RIGHT edge, aimed +x.
+    # Beam origin = (s.x + sin φ, s.y - cos φ) = (119, 20); dir = (sin,-cos) = (1,0).
+    # Euclidean px (119..) is >100 cells from a.x=2 ⇒ never within radius; the SHORT
+    # toroidal distance across the seam is ~3 cells ⇒ only a wrap-aware check hits.
+    a.x = 2.0; a.y = 20.0; a.vx = 0.0; a.vy = 0.0
+    g.ship.x = 118.0; g.ship.y = 20.0; g.ship.φ = π/2   # φ=π/2 ⇒ dir (1,0) = +x
+    for _ in 1:20; tick!(g, Input(fire=true)); end       # charge to CHARGE_MAX
+    @test g.ship.charge == CHARGE_MAX
+    # The asteroid drifts/wraps over the charge ticks (vx=vy=0 but other physics may
+    # nudge nothing here); re-pin it right before the launch tick so the seam geometry
+    # is exact when _resolve_collisions! runs.
+    a.x = 2.0; a.y = 20.0; a.vx = 0.0; a.vy = 0.0
+    g.ship.x = 118.0; g.ship.y = 20.0; g.ship.φ = π/2
+    shards0 = length(g.shards)
+    # Release edge: beam launches AND _resolve_collisions! runs this same tick.
+    tick!(g, Input(fire=false))
+    @test length(g.asteroids) == 0 || length(g.shards) > shards0
+end
+
 @testset "field replenish restores count to N" begin
     N = 4
     g = new_game(Xoshiro(3); width=120, height=40, n_asteroids=N)
