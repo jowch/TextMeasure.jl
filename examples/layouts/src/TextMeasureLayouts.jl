@@ -12,7 +12,9 @@ export Placement, PackedLayout
 export AbstractChordFn, chord_intervals
 export shape_pack
 export polygon_chord_fn, PolygonChordFn, raster_chord_fn, RasterChordFn
+export JustifiedLine, JustifiedLayout, knuth_plass, greedy_justify
 
 include("shape_pack.jl")
+include("knuth_plass.jl")
 
 end # module
