@@ -68,21 +68,28 @@ function render_comparison(outpath::AbstractString=joinpath(@__DIR__, "compariso
         ("Knuth–Plass · narrow measure", knuth_plass(prep; max_width=NARROW_PX), NARROW_PX, true),
     ]
 
-    # Common data range across all axes ⇒ uniform on-screen text size, honest comparison.
-    maxH = maximum(lay.lines[end].baseline + prep.metrics.descent for (_, lay, _, _) in cols)
-
-    fig = Figure(size=(1180, 340), backgroundcolor=:white)
+    # Each column's axis box is fixed to its OWN content size (1 data unit = 1 px), so the
+    # text fills the panel with no DataAspect letterboxing / empty bands. Columns are
+    # top-aligned (valign=:top), so the wide column's shorter block and the narrow columns'
+    # taller blocks read as a deliberate, tightly-framed comparison figure. resize_to_layout!
+    # then shrinks the figure to the content.
+    fig = Figure(backgroundcolor=:white)
     Label(fig[0, 1:3], "Justification: greedy rivers vs Knuth–Plass";
-          font=LABEL_FONT, fontsize=18, padding=(0, 0, 6, 6))
+          font=LABEL_FONT, fontsize=20, padding=(0, 0, 2, 12))
     for (c, (title, lay, w, show_rivers)) in enumerate(cols)
         nr = length(find_rivers(lay; align_tol=prep.segments[2].width))
         full_title = "$(title)\nbadness $(round(lay.total_badness; digits=1)) · $(nr) river(s)"
-        ax = Axis(fig[1, c]; title=full_title, titlefont=LABEL_FONT, titlesize=13,
-                  aspect=DataAspect(), backgroundcolor=:white, yreversed=true)
+        total_h = lay.lines[end].baseline + prep.metrics.descent
+        xlo, xhi = -8.0, w + 12.0
+        ylo, yhi = -0.7 * FONTSIZE, total_h + 0.6 * FONTSIZE
+        ax = Axis(fig[1, c]; title=full_title, titlefont=LABEL_FONT, titlesize=14,
+                  titlegap=8, backgroundcolor=(:gray90, 0.55), yreversed=true,
+                  valign=:top, width=xhi - xlo, height=yhi - ylo)
         hidedecorations!(ax); hidespines!(ax)
         _draw_column!(ax, prep, lay, w; show_rivers=show_rivers)
-        limits!(ax, -6, WIDE_PX + 18, -FONTSIZE, maxH + FONTSIZE)   # shared scale
+        limits!(ax, xlo, xhi, ylo, yhi)   # 1:1 with the fixed box ⇒ no letterboxing
     end
+    resize_to_layout!(fig)
     save(outpath, fig)
     return abspath(outpath)
 end
