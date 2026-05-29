@@ -1,0 +1,47 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Editorial skyline: straight-line primitives only (rect/polygon/line/circle) so the
+     parser renders it as native CairoMakie vector content. Tonal values built around the
+     house-style BLUE #2B6CB0 (shade #1B4A80 / base #2B6CB0 / tint #5B92CE); lit windows are
+     white; moon is a pale blue tint. No off-palette colors. -->
+<svg viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg">
+  <!-- moon (pale blue tint) -->
+  <circle cx="158" cy="48" r="15" fill="#BAD4EE"/>
+
+  <!-- back row (light tint) -->
+  <rect x="2"   y="150" width="34" height="90" fill="#5B92CE"/>
+  <polygon points="96,240 96,108 116,96 136,108 136,240" fill="#5B92CE"/>
+  <rect x="170" y="128" width="28" height="112" fill="#5B92CE"/>
+
+  <!-- mid row (base blue) -->
+  <rect x="40"  y="118" width="34" height="122" fill="#2B6CB0"/>
+  <rect x="140" y="150" width="30" height="90"  fill="#2B6CB0"/>
+
+  <!-- front row (shade, tallest with a stepped crown + antenna) -->
+  <polygon points="74,240 74,86 80,86 80,72 100,72 100,86 106,86 106,240" fill="#1B4A80"/>
+  <line x1="90" y1="72" x2="90" y2="52" stroke="#1B4A80" stroke-width="2"/>
+  <rect x="10"  y="96"  width="22" height="144" fill="#1B4A80"/>
+
+  <!-- lit windows (white) -->
+  <rect x="16" y="108" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="24" y="108" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="16" y="124" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="24" y="124" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="16" y="140" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="82" y="100" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="90" y="100" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="82" y="116" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="90" y="116" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="82" y="132" width="4" height="6" fill="#FFFFFF"/>
+  <rect x="48" y="130" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="60" y="130" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="48" y="148" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="60" y="148" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="108" y="120" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="120" y="120" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="178" y="142" width="5" height="7" fill="#FFFFFF"/>
+  <rect x="188" y="142" width="5" height="7" fill="#FFFFFF"/>
+
+  <!-- ground -->
+  <rect x="0" y="240" width="200" height="20" fill="#143A63"/>
+  <line x1="0" y1="240" x2="200" y2="240" stroke="#102d4d" stroke-width="2"/>
+</svg>

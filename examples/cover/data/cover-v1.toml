@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: MIT
+[meta]
+title    = "The Newer Yorker"
+subtitle = "A Correctness Exhibit"
+byline   = "by TextMeasure.jl"
+
+[layout]
+page_size     = "letter"
+margin_px     = 36
+dropcap_lines = 3
+gutter_px     = 7
+
+# v1: a centered inset, short enough that the prose flanks its FULL height on both
+# sides and then re-merges to full width below it (fill=:all two-sided wrap).
+[inset]
+svg_path  = "skyline.svg"
+x_px      = 190
+y_px      = 134
+width_px  = 160
+height_px = 160
+
+[[body]]
+dropcap   = true
+paragraph = """
+There are no manual offsets on this page. Every baseline, every wrap point, and the drop cap that opens this column were computed by the measurement pipeline, not nudged by hand. Move the illustration a few pixels and re-render, and the body text re-flows around its new footprint, the pull quote keeps its clearance, and the drop cap still lands squarely on its line, because nothing here was placed by a designer fighting the page.
+"""
+
+[[body]]
+paragraph = """
+The exhibit measures once and lays out many times. A single prepared paragraph is packed around an inset-exclusion chord function that subtracts the illustration, the drop cap, and the pull quote from every scanline band before a single glyph is ever drawn. Correctness is asserted on the computed layout, never recovered from the rendered file.
+"""
+
+[[body]]
+paragraph = """
+Because the packer fills every interval a band offers, the column wraps on both sides of a centered illustration at once. Text streams down the left margin and the right margin in the very same lines, threading past the skyline without a hand-placed break anywhere in sight.
+"""
+
+[[body]]
+paragraph = """
+Type is measured before it is drawn. Each word takes its advance width from the very font the renderer will use, so the wrap the engine predicts is the wrap that you see, down to the pixel, with no quiet disagreement between the plan and the printed page.
+"""
+
+[[body]]
+paragraph = """
+The drop cap is no exception to the rule. Its size is solved from the body line height so that its cap sits on the first line and its foot rests on the last, and the text steps neatly around its box without anyone ever reaching for a ruler.
+"""
+
+[[body]]
+paragraph = """
+A pull quote is simply another region the text agrees to avoid. Drop it anywhere into the column and the prose parts cleanly around it, the way water finds its level, because this layout is a consequence of measurement rather than a long series of nudges.
+"""
+
+[[body]]
+paragraph = """
+Widen the inset, narrow it, or slide it toward either edge of the column, and the surrounding prose rebalances around the new shape. The measurements do not care where the picture lands. They report how much room each line has, and the greedy packer takes it from there.
+"""
+
+[[body]]
+paragraph = """
+Change the page from letter to A4 and the margins, the column, and the wrap all follow without complaint. The cover is not a fixed arrangement of boxes. It is a function of its inputs, evaluated fresh every single time that you ask the engine for it.
+"""
+
+[[body]]
+paragraph = """
+Nothing on the page knows its neighbors in advance. The title does not reserve room for the column, and the column does not reserve room for the quote. Each element asks the same measuring tape how wide it is, and the finished layout simply falls out of the answers it gets back.
+"""
+
+[[body]]
+paragraph = """
+That is the whole trick, and it is a quiet one. There is no template to fill, no grid to fight, and no pixel pushed by hand at the end to make a seam disappear. The seams never appear at all, because the seams were computed shut long before any ink was laid on the page.
+"""
+
+[[body]]
+paragraph = """
+So the page is a proof rather than a paste up. What you are reading flowed around the art automatically, top to bottom and left to right, with the same engine that will lay out the next cover and the one after that. Measure once, then compose forever.
+"""
+
+[[pull_quote]]
+text        = "The page is a proof, not a paste-up."
+attribution = "— the thesis"
+x_px        = 168
+y_px        = 430
+width_px    = 204
