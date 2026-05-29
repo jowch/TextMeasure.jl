@@ -17,6 +17,7 @@ const BYLINE_GAP    = 9.0
 const BODY_GAP      = 22.0
 const DROPCAP_GAP   = 6.0      # horizontal space after the drop cap
 const PQ_RULE_GAP   = 6.0      # gap between a pull-quote and its bracketing rules
+const PQ_HOLE_PAD   = 10.0     # extra horizontal clearance so wrap text never touches the callout rules
 
 # WRAP-AROUND (#H ↔ #C2, WIRED): with `fill=:all`, shape_pack packs EVERY disjoint
 # interval per band left-to-right, so body text flows on BOTH sides of a centered inset
@@ -70,7 +71,8 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
         bb = _mk(BYLINE_FONT, BYLINE_SIZE); bm = TextMeasure.font_metrics(bb)
         cur += BYLINE_GAP + bm.ascent
         bw = TextMeasure.measure(bb, cfg.byline)
-        push!(masthead, PlacedText(cfg.byline, content_left + (content_w - bw)/2, cur, BYLINE_SIZE, BYLINE_FONT))
+        # right-align the byline to the rule's right end so it reads as intentional
+        push!(masthead, PlacedText(cfg.byline, content_right - bw, cur, BYLINE_SIZE, BYLINE_FONT))
         cur += bm.descent
     end
     # editorial hairline separating the masthead from the body column
@@ -160,7 +162,9 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
         push!(rules, (pql, bot_rule_y, pql + pq.width_px, bot_rule_y))
         bbox = BBox(pql, top_rule_y, pql + pq.width_px, bot_rule_y)
         push!(pull_quotes, PullQuotePlaced(runs, bbox))
-        push!(pq_holes, bbox)
+        # the HOLE is padded horizontally beyond the visible box so wrap text keeps a
+        # clear gutter from the callout rules (the visible bbox is what overlap checks use)
+        push!(pq_holes, BBox(bbox.left - PQ_HOLE_PAD, bbox.top, bbox.right + PQ_HOLE_PAD, bbox.bottom))
     end
 
     # ---- assemble holes (body-local frame: subtract body_top from y) ----

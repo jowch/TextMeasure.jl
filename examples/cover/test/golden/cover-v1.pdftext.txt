@@ -41,21 +41,22 @@ A pull quote is simply another region the text agrees to avoid. Drop it anywhere
 parts cleanly around it, the way water finds its level, because this layout is a consequence of measurement rather
 than a long series of nudges.
 Widen the inset, narrow it, or
-slide it toward either edge of the
-column, and the surrounding
-The page is a proof, not a new shape. The measurements
-prose rebalances around the
-do not care where the picture
-lands. They report how much
+slide it toward either edge of
+the column, and the
+The page is a proof, not a
+surrounding prose rebalances
+around the new shape. The
+measurements do not care
+where the picture lands. They
 paste-up.
-room each line has, and the
-greedy packer takes it from
+report how much room each
+line has, and the greedy
 —
 the
 thesis
-there.
-Change the page from letter to
-A4 and the margins, the
+packer takes it from there.
+Change the page from letter
+to A4 and the margins, the
 column, and the wrap all follow without complaint. The cover is not a fixed arrangement of boxes. It is a function
 of its inputs, evaluated fresh every single time that you ask the engine for it.
 So the page is a proof rather than a paste up. What you are reading flowed around the art automatically, top to

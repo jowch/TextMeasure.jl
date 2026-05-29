@@ -1,14 +1,45 @@
 <!-- SPDX-License-Identifier: MIT -->
-<svg viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="210" width="200" height="70" fill="#2b3a55"/>
-  <polygon points="20,210 20,120 55,120 55,210" fill="#3d5a80"/>
-  <polygon points="65,210 65,70 100,55 135,70 135,210" fill="#577590"/>
-  <rect x="150" y="100" width="35" height="110" fill="#3d5a80"/>
-  <polygon points="100,55 118,30 118,55" fill="#ee6c4d"/>
-  <circle cx="160" cy="45" r="16" fill="#f2cc8f"/>
-  <line x1="0" y1="210" x2="200" y2="210" stroke="#293241" stroke-width="2"/>
-  <rect x="30" y="140" width="8" height="10" fill="#e0fbfc"/>
-  <rect x="42" y="140" width="8" height="10" fill="#e0fbfc"/>
-  <rect x="80" y="95" width="8" height="12" fill="#e0fbfc"/>
-  <rect x="112" y="95" width="8" height="12" fill="#e0fbfc"/>
+<!-- Editorial skyline: straight-line primitives only (rect/polygon/line/circle) so the
+     parser renders it as native CairoMakie vector content. Three tonal blues + lit windows. -->
+<svg viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg">
+  <!-- moon -->
+  <circle cx="158" cy="48" r="15" fill="#f2cc8f"/>
+
+  <!-- back row (lightest tone) -->
+  <rect x="2"   y="150" width="34" height="90" fill="#5d7e9e"/>
+  <polygon points="96,240 96,108 116,96 136,108 136,240" fill="#5d7e9e"/>
+  <rect x="170" y="128" width="28" height="112" fill="#5d7e9e"/>
+
+  <!-- mid row -->
+  <rect x="40"  y="118" width="34" height="122" fill="#3e5c76"/>
+  <rect x="140" y="150" width="30" height="90"  fill="#3e5c76"/>
+
+  <!-- front row (darkest, tallest with a stepped crown + antenna) -->
+  <polygon points="74,240 74,86 80,86 80,72 100,72 100,86 106,86 106,240" fill="#1d2d44"/>
+  <line x1="90" y1="72" x2="90" y2="52" stroke="#1d2d44" stroke-width="2"/>
+  <rect x="10"  y="96"  width="22" height="144" fill="#1d2d44"/>
+
+  <!-- lit windows: warm + cool -->
+  <rect x="16" y="108" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="24" y="108" width="4" height="6" fill="#e0fbfc"/>
+  <rect x="16" y="124" width="4" height="6" fill="#e0fbfc"/>
+  <rect x="24" y="124" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="16" y="140" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="82" y="100" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="90" y="100" width="4" height="6" fill="#e0fbfc"/>
+  <rect x="82" y="116" width="4" height="6" fill="#e0fbfc"/>
+  <rect x="90" y="116" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="82" y="132" width="4" height="6" fill="#f2cc8f"/>
+  <rect x="48" y="130" width="5" height="7" fill="#e0fbfc"/>
+  <rect x="60" y="130" width="5" height="7" fill="#f2cc8f"/>
+  <rect x="48" y="148" width="5" height="7" fill="#f2cc8f"/>
+  <rect x="60" y="148" width="5" height="7" fill="#e0fbfc"/>
+  <rect x="108" y="120" width="5" height="7" fill="#f2cc8f"/>
+  <rect x="120" y="120" width="5" height="7" fill="#e0fbfc"/>
+  <rect x="178" y="142" width="5" height="7" fill="#f2cc8f"/>
+  <rect x="188" y="142" width="5" height="7" fill="#e0fbfc"/>
+
+  <!-- ground -->
+  <rect x="0" y="240" width="200" height="20" fill="#14202e"/>
+  <line x1="0" y1="240" x2="200" y2="240" stroke="#0d1520" stroke-width="2"/>
 </svg>
