@@ -25,7 +25,11 @@ const CHARGE_MAX = 5
 const INVULN_TICKS = 120             # ~2s; (120÷10)%2==0 ⇒ ship_visible at tick 0
 const MOVE_ACCEL = 0.18              # per-axis velocity added per held strafe key
 const FRICTION   = 0.90              # light friction; crisp strafe stop
-const SHATTER_CLOSING = 0.9          # asteroid closing-speed: ≥ ⇒ fracture, < ⇒ bounce
+const SHATTER_CLOSING = 0.13         # asteroid closing-speed: ≥ ⇒ fracture, < ⇒ bounce.
+                                     # Scaled with the _spawn_asteroid velocity coefficient
+                                     # (0.2) so the bounce/shatter MIX is speed-independent:
+                                     # halve both to slow the field without changing which
+                                     # collisions shatter.
 
 _wrap(v, hi) = mod(v, hi)
 
@@ -60,7 +64,7 @@ function _spawn_asteroid(rng::AbstractRNG, width, height)
     radius = 6.0 + 6.0 * rand(rng)
     return Asteroid(poly,
                     rand(rng) * width, rand(rng) * height,
-                    (rand(rng) - 0.5) * 1.4, (rand(rng) - 0.5) * 1.4,
+                    (rand(rng) - 0.5) * 0.2, (rand(rng) - 0.5) * 0.2,   # ~7× slower than 1.4; see SHATTER_CLOSING
                     (rand(rng) - 0.5) * 0.8 / 60,   # ω in rad/tick (~[-0.4,0.4] rad/s)
                     0.0, radius, prep, 0)
 end
