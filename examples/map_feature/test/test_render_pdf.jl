@@ -30,7 +30,8 @@ end
         n_present = count(p -> occursin(split(p.name)[1], txt), pois)
         @test n_present >= length(pois) - 2
         @test occursin("Montpelier", txt)                # capital (sidebar — always rendered)
-        @test occursin(string(stats[:population]), txt)  # population big-number (sidebar)
+        @test occursin("643", txt)                       # population stat (comma-formatted 643,077)
+        @test stats[:population] > 100_000               # sanity on the bundled stat itself
 
         # token-set FLOOR golden: current extraction must be a SUPERSET of the committed floor
         # (regression floor — never silently lose selectable tokens; floors not hard counts).

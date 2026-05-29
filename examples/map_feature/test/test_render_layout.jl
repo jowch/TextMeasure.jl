@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: MIT
-# Render-level non-overlap invariants (fix #3), asserted on the REAL Vermont layout via the
-# factored-out MapFeature._compose_layout — no drawing needed. Each of the four non-overlaps the
-# design guarantees by construction is a test here.
+# Render-level non-overlap invariants on the REAL Vermont TWO-COLUMN layout, via the factored-out
+# MapFeature._compose_layout (no drawing). Each column is an independent shape_pack run; both must
+# read top-to-bottom on their own side and never overlap the silhouette, the labels, or the chrome.
 using Test, MapFeature
 using GeometryBasics: Point2
 
 # Polygon horizontal envelope over y ∈ [y0,y1], computed DIRECTLY from the polygon (independent of
-# complement_chord_fn / the render combinator), sampled densely. Checking a word against the
-# envelope over its FULL vertical extent — not just its baseline scanline — is the FAITHFUL test:
-# it matches the geometry the render actually draws (the silhouette spans the word's glyph height),
-# so it catches a slanted/concave edge poking into the prose that a center-only check would miss.
+# complement_chord_fn), EXACTLY: extremes are at the y0/y1 boundary crossings or interior vertices.
 function envelope_over(poly, y0, y1)
     lo = Inf; hi = -Inf; n = length(poly)
-    # exact: extremes are at boundary-crossings of y0/y1 or at vertices strictly inside (y0,y1)
     for ys in (y0, y1), i in 1:n
         x1, y1e = poly[i][1], poly[i][2]
         j = i == n ? 1 : i + 1
@@ -33,85 +29,49 @@ end
 boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
     ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
 
-@testset "render layout (Vermont): the non-overlaps hold by construction" begin
+@testset "render layout (Vermont, two independent columns)" begin
     L = MapFeature._compose_layout(load_vermont(), load_pois())
-    pk, prep, poly = L.pk, L.prep, L.poly_px
-    la = prep.metrics.line_advance
-    asc = prep.metrics.ascent
-    @test !isempty(pk.placements)
-    # overflow_strategy=:skip RECORDS an over-wide word (one too wide for a narrow band's run) but
-    # does NOT place it — so it can never sit atop the map. Assert that safety invariant (skipped
-    # words have no placement) rather than zero overflow; a long word may be dropped in a tight band.
-    placed_idx = Set(p.segment_index for p in pk.placements)
-    @test all(si -> !(si in placed_idx), pk.overflowed)
-
-    desc = prep.metrics.descent
-    n_letterbox = 0; n_silhouette = 0
-    for p in pk.placements
-        w  = prep.segments[p.segment_index].width
-        x0, x1 = p.x, p.x + w
-        wtop, wbot = p.y - asc, p.y + desc             # word bbox full vertical extent
-
-        # (a) body never overlaps the masthead/sidebar top band
-        @test wtop >= MapFeature.SIDEBAR_BOTTOM - 1e-6
-
-        # body must stay within the page's inner horizontal margins
-        @test x0 >= MapFeature.MARGIN - 1e-6
-        @test x1 <= MapFeature.PAGE_W - MapFeature.MARGIN + 1e-6
-
-        # FAITHFUL envelope over the word's full glyph height (matches the rendered geometry)
-        env = envelope_over(poly, wtop, wbot)
-        if env === nothing
-            # (b) letterbox (silhouette absent over the word's rows): body must not enter map column
-            n_letterbox += 1
-            @test x1 <= L.map_left + 1e-6 || x0 >= L.map_right - 1e-6
-        else
-            # (c) word must not overlap the silhouette's envelope across its full height
-            n_silhouette += 1
-            el, er = env
-            @test x1 <= el + 1e-6 || x0 >= er - 1e-6
-        end
-    end
-    # The silhouette is right-aligned and its irregular WEST edge is wrapped: many crossing-band
-    # words sit flush against env_l (single elegant west wrap, not a degenerate rectangle).
-    @test n_silhouette > 0
-
-    # (d) body-vs-POI-label: no placed body word's box overlaps any POI label box. The body
-    # chord_fn excludes the (grown) label boxes, so this holds by construction — pins the visual
-    # east-strip-vs-label collision the gate caught.
+    poly = L.poly_px
+    @test length(L.columns) == 2
     labels = [b for b in L.labelboxes if b !== nothing]
     @test !isempty(labels)
-    for p in pk.placements
-        w = prep.segments[p.segment_index].width
-        x0, wtop = p.x, p.y - asc
-        for b in labels
-            @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)
-        end
-    end
-end
 
-@testset "render layout: alternate composition (fill=:all, centered two-column) holds invariants" begin
-    # Smoke + invariant check for the parameterized two-sided path (centered silhouette, both
-    # margins filled). Same non-overlap guarantees must hold as the default single-side layout.
-    L = MapFeature._compose_layout(load_vermont(), load_pois();
-            fill=:all, silhouette_halign=:center, map_left_frac=0.34, map_right_frac=0.72)
-    pk, prep, poly = L.pk, L.prep, L.poly_px
-    asc, desc = prep.metrics.ascent, prep.metrics.descent
-    @test !isempty(pk.placements)
-    labels = [b for b in L.labelboxes if b !== nothing]
-    n_left = 0; n_right = 0
-    for p in pk.placements
-        w = prep.segments[p.segment_index].width
-        x0, x1, wtop, wbot = p.x, p.x + w, p.y - asc, p.y + desc
-        env = envelope_over(poly, wtop, wbot)
-        if env !== nothing
-            el, er = env
-            @test x1 <= el + 1e-6 || x0 >= er - 1e-6        # never overlaps the silhouette
-            x1 <= el + 1e-6 ? (n_left += 1) : (n_right += 1)
-        end
-        for b in labels
-            @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)   # nor any label
+    n_west = 0; n_east = 0
+    for (prep, pk, side) in L.columns
+        asc, desc = prep.metrics.ascent, prep.metrics.descent
+        @test !isempty(pk.placements)                       # neither column starves
+        placed_idx = Set(p.segment_index for p in pk.placements)
+        @test all(si -> !(si in placed_idx), pk.overflowed) # :skip-overflow words are never placed
+
+        for p in pk.placements
+            w  = prep.segments[p.segment_index].width
+            x0, x1 = p.x, p.x + w
+            wtop, wbot = p.y - asc, p.y + desc
+
+            # within inner margins, and below the masthead/stat band
+            @test x0 >= MapFeature.MARGIN - 1e-6
+            @test x1 <= MapFeature.PAGE_W - MapFeature.MARGIN + 1e-6
+            @test wtop >= MapFeature.SIDEBAR_BOTTOM - 1e-6
+
+            # each column stays strictly on its own side of map-center (two real columns)
+            if side === :west
+                @test x1 <= L.map_center + 1e-6; n_west += 1
+            else
+                @test x0 >= L.map_center - 1e-6; n_east += 1
+            end
+
+            # body-vs-silhouette over the word's full glyph height (faithful, independent envelope)
+            env = envelope_over(poly, wtop, wbot)
+            if env !== nothing
+                el, er = env
+                @test x1 <= el + 1e-6 || x0 >= er - 1e-6
+            end
+
+            # body-vs-POI-label
+            for b in labels
+                @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)
+            end
         end
     end
-    @test n_left > 0 && n_right > 0                          # genuinely TWO columns (both sides used)
+    @test n_west > 0 && n_east > 0                           # both columns genuinely populated
 end
