@@ -4,8 +4,8 @@
 # Every primitive is measurement-driven via MakieBackend(; font, fontsize, px_per_unit=1)
 # (CLAUDE.md: px_per_unit=1 to match Makie markerspace). `measure(b, text)` returns px at
 # the backend's baked-in fontsize, so fontsize search = constructing a new backend per
-# iteration. `measure`/`font_metrics` are imported at the module top (NOT exported by
-# TextMeasure — backend contract).
+# iteration. `measure` is imported at the module top (NOT exported by TextMeasure —
+# backend contract).
 
 const SANS  = "DejaVu Sans"        # pinned (CI font-pinning); see #J
 const SERIF = "Liberation Serif"
