@@ -131,10 +131,16 @@ function _blit_packed!(buf::CellBuffer, pp, cx::Real, cy::Real; fg, debug::Bool)
     return buf
 end
 
-_pack(a) = pack_prose_into(a.poly, a.prep; scale = max(4.0, 2 * a.radius), min_chord_width = 3.0)
+# Rotate a silhouette's vertices by θ (radians) about the origin. θ=0 is an exact
+# identity (cos 0 = 1, sin 0 = 0), so unrotated bodies and the golden are byte-stable.
+_rotate_poly(poly, θ) = (c = cos(θ); s = sin(θ);
+    [GB.Point2{Float64}(c*p[1] - s*p[2], s*p[1] + c*p[2]) for p in poly])
+
+_pack(body, θ = 0.0) = pack_prose_into(_rotate_poly(body.poly, θ), body.prep;
+                                       scale = max(4.0, 2 * body.radius), min_chord_width = 3.0)
 
 function _draw_asteroid!(buf::CellBuffer, a, debug::Bool)
-    pp = _pack(a)
+    pp = _pack(a, a.θ)
     _blit_packed!(buf, pp, a.x, a.y; fg = COL_PROSE, debug = debug)
     _draw_callout!(buf, a, pp)
     return buf
