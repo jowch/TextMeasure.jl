@@ -45,7 +45,7 @@ This branch predates the #J `[sources]` fix and `Project.toml` has no `[sources]
 **Files:**
 - Modify: `examples/asteroid_tui/Project.toml`
 
-- [ ] **Step 1: Add a `[sources]` table** (after `[deps]`, before `[compat]`; mirrors the on-main demos):
+- [ ] **Step 1: Add a `[sources]` table** (after `[deps]`, before `[compat]`). This is the Julia 1.11+ local-path-dep mechanism the #J fix applied to the other demos on `main`; this branch predates it, so add it here (justified on its own — it makes a plain `Pkg.instantiate()`/`Pkg.test()` resolve the local packages):
 
 ```toml
 # Local-path deps so a plain `Pkg.instantiate()` / `Pkg.test()` works without a
@@ -342,7 +342,7 @@ mutable struct GameState
 end
 ```
 
-`new_game` — spawn invuln, `prev_debug`, and `n_target`:
+`new_game` — spawn invuln, `prev_debug`, and `n_target`. (The spec's spawn-protection has two parts — initial invulnerability *and* keeping asteroids off the centre spawn cell; the `INVULN_TICKS = 120` (~2 s) initial invuln **subsumes** the centre-clearing, since `_resolve_ship_collision!` skips collision while `invuln > 0`, so the player cannot die on frame 1 even if an asteroid spawns on the centre. No separate centre-clear is implemented.)
 
 ```julia
 function new_game(rng::Xoshiro = Xoshiro(0); width=120, height=40, n_asteroids=5)
@@ -589,7 +589,7 @@ Expected: **PASS** — this is *not* a red step. The current `fracture_asteroid!
     polys = voronoi_shatter(a.poly, GB.Point2{Float64}(fx, fy); n_shards = n_shards)
 ```
 
-Also update the existing centre-hit caller `test_fracture.jl:16` from `GB.Point2(a.x, a.y)` to `GB.Point2{Float64}(0.0, 0.0)` (cell-space zero offset — a centre hit). (Both the old `(a.x,a.y)` and the new `(0.0,0.0)` resolve to the polygon centroid under the conversion — `a.x,a.y` would clamp far into the bbox corner — so use the offset form to honour the new contract.)
+Also update the existing centre-hit caller `test_fracture.jl:16` — the real line is `impact = GB.Point2{Float64}(a.x, a.y)` — to `impact = GB.Point2{Float64}(0.0, 0.0)` (cell-space zero offset — a centre hit). (Both the old `(a.x,a.y)` and the new `(0.0,0.0)` resolve to the polygon centroid under the conversion — `a.x,a.y` would clamp far into the bbox corner — so use the offset form to honour the new contract.)
 
 - [ ] **Step 4: Run to verify pass**
 
