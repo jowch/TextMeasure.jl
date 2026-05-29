@@ -180,9 +180,20 @@ function fracture_asteroid!(g::GameState, idx::Int, impact::GB.Point2{Float64})
     g.last_hit_glyphs = [s.str for s in a.prep.segments if s.kind === :word]
     for (poly, r) in zip(polys, ranges)
         sp = subprep(a.prep, r)
-        push!(g.shards, Shard(poly, a.x, a.y,
-                              a.vx + (rand(g.rng) - 0.5) * 0.4,
-                              a.vy + (rand(g.rng) - 0.5) * 0.4,
+        # Scatter shards like an explosion: spawn each at the asteroid center offset
+        # toward its own polygon centroid (so it leaves from where it sat in the
+        # parent) and give it an OUTWARD velocity along that direction. Without this,
+        # all shards spawn at one point and their prose piles into an illegible blob.
+        cx = sum(p[1] for p in poly) / length(poly)
+        cy = sum(p[2] for p in poly) / length(poly)
+        d = hypot(cx, cy)
+        ux, uy = d > 1e-9 ? (cx / d, cy / d) : (0.0, 0.0)   # unit outward direction
+        spread = a.radius * 0.9                              # spawn offset in cells
+        scatter = 0.6                                        # outward speed (cells/tick)
+        push!(g.shards, Shard(poly,
+                              a.x + ux * spread, a.y + uy * spread,
+                              a.vx + ux * scatter + (rand(g.rng) - 0.5) * 0.2,
+                              a.vy + uy * scatter + (rand(g.rng) - 0.5) * 0.2,
                               sp, 90, a.radius / 2))
     end
     return g

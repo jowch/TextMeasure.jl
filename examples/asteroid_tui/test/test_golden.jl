@@ -22,7 +22,14 @@ function _scripted_seq()
 end
 
 function _run_golden()
-    g = new_game(Xoshiro(2024); width=120, height=40, n_asteroids=5)
+    # Showcase scene tuned to read cleanly as a presentation frame (operator's
+    # README-quality bar): 3 asteroids (uncrowded) at seed 45, which is verified to
+    # produce ZERO cross-entity glyph collisions and ZERO off-screen clipping at
+    # tick 60, so every label is individually legible (no run-together mangling, no
+    # orphaned edge fragments). The fracture still happens (shards scatter outward —
+    # see fracture_asteroid!), so the frame shows intact prose-asteroids plus a clean
+    # exploded-shard cluster.
+    g = new_game(Xoshiro(45); width=120, height=40, n_asteroids=3)
     # Park asteroid 1 directly above the ship, stationary, so the straight-up beam
     # reliably intersects it (deterministic fracture). Asteroid is mutable.
     a = g.asteroids[1]
