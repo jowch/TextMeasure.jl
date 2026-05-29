@@ -27,6 +27,31 @@ const FRICTION = 0.98
 
 _wrap(v, hi) = mod(v, hi)
 
+# Toroidal signed delta from (ax,ay) to (bx,by) on a width×height torus. Each axis
+# takes the minimum-magnitude candidate over {d, d-size, d+size}; at the exact
+# |d|==size/2 boundary (rarely reached with float positions) the tie-break prefers
+# the non-negative candidate, so the result stays deterministic. Returns
+# (dx, dy, dist=hypot(dx,dy)) — the VECTOR, so collision code derives
+# normal/closing-speed/push-apart from one wrapped delta.
+function _wrap_axis(d, size)
+    cands = (d, d - size, d + size)
+    best = cands[1]
+    for c in cands
+        if abs(c) < abs(best) || (abs(c) == abs(best) && c > best)
+            best = c
+        end
+    end
+    return best
+end
+
+_wrap_delta(ax, ay, bx, by, width, height) =
+    (dx = _wrap_axis(bx - ax, width); dy = _wrap_axis(by - ay, height); (dx, dy, hypot(dx, dy)))
+
+# Visual-space heading from ship (sx,sy) toward cursor (cx,cy). Cells are ~2:1, so
+# the row delta is multiplied by 2 (cell aspect) before atan, so the nose points at
+# the cursor ON SCREEN. up=0, clockwise (matches dir(φ)=(sin φ, -cos φ)).
+aim_heading(sx, sy, cx, cy) = atan(cx - sx, -((cy - sy) * 2.0))
+
 function _spawn_asteroid(rng::AbstractRNG, width, height)
     poly = asteroid_polygon(rng; n = rand(rng, 8:16), lumpiness = 0.2 + 0.5 * rand(rng))
     prep = TextMeasure.prepare(CellBackend(), asteroid_prose(rng))
