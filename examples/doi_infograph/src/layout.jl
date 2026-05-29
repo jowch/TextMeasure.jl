@@ -71,8 +71,9 @@ fit is impossible at `fs_max`, the search clamps to `fs_min` and clips. Destruct
 positionally as `(fontsize, nlines) = ...` (NamedTuple iterates its values in field order).
 """
 function title_autoshrink(title::AbstractString; box_width::Real,
-                          fs_min::Real=14.0, fs_max::Real=48.0, tol::Real=0.5)
-    lay_at(fs) = layout(prepare(_backend(SANS, fs), title); max_width=box_width)
+                          fs_min::Real=14.0, fs_max::Real=48.0, tol::Real=0.5,
+                          font::AbstractString=SANS)
+    lay_at(fs) = layout(prepare(_backend(font, fs), title); max_width=box_width)
     # BOTH halves of the contract: ≤2 lines AND the widest line fits the box. The width
     # check catches an over-wide atomic token (which lays out to 1 line yet overflows).
     fits(lay)  = length(lay.lines) <= 2 && lay.size[1] <= box_width
@@ -86,7 +87,7 @@ function title_autoshrink(title::AbstractString; box_width::Real,
     end
     laylo = lay_at(lo)
     if !fits(laylo)                               # impossible to fit → clamp + clip
-        lines, clipped = _clip_lines(String[l.str for l in laylo.lines], _backend(SANS, lo), box_width)
+        lines, clipped = _clip_lines(String[l.str for l in laylo.lines], _backend(font, lo), box_width)
         return (; fontsize=lo, nlines=length(lines), lines=lines, clipped=clipped,
                   line_advance=laylo.metrics.line_advance)
     end
@@ -248,17 +249,22 @@ end
 # Composition: infograph
 # ---------------------------------------------------------------------------
 
-# muted palette
-const _INK    = CM.RGBf(0.12, 0.12, 0.14)
-const _MUTED  = CM.RGBf(0.45, 0.45, 0.50)
-const _ACCENT = CM.RGBf(0.16, 0.32, 0.58)
-const _PILLBG = CM.RGBf(0.90, 0.92, 0.96)
-const _RULE   = CM.RGBf(0.80, 0.80, 0.84)
+# House-style palette (docs/superpowers/demos-house-style.md §2 — locked, 3 accents + 1 gray).
+const _INK    = CM.RGBf(0.10, 0.10, 0.10)              # body/near-black #1A1A1A
+const _GRAY   = CM.RGBf(0.420, 0.447, 0.502)           # captions/footers/rules #6B7280
+const _BLUE   = CM.RGBf(0.169, 0.424, 0.690)           # data: citation bars + tag chips #2B6CB0
+const _GREEN  = CM.RGBf(0.106, 0.478, 0.239)           # green-OA label #1B7A3D
+const _CHIPBG = CM.RGBAf(0.169, 0.424, 0.690, 0.12)    # tag-chip fill (BLUE @ 0.12)
+const _HAIR   = CM.RGBAf(0.420, 0.447, 0.502, 0.15)    # hairline separators (GRAY @ 0.15)
+const _BASE   = CM.RGBAf(0.420, 0.447, 0.502, 0.25)    # chart baseline (GRAY @ 0.25)
 
-_oa_color(s::Symbol) = s === :gold   ? CM.RGBf(0.85, 0.65, 0.10) :
-                       s === :green  ? CM.RGBf(0.20, 0.55, 0.30) :
-                       s === :hybrid ? CM.RGBf(0.45, 0.35, 0.65) :
-                       s === :closed ? _MUTED : _MUTED
+# Footer string (house-style §3); single middot U+00B7.
+const _FOOTER = "TextMeasure.jl · DOI Infographic"
+const _FOOTER_MARGIN = 36.0                            # outer margin (px) for the footer baseline
+const _FOOTER_BAND   = 44.0                            # reserved bottom band that holds the footer
+
+# OA access label color: GREEN for green-OA (house-style), GRAY otherwise (no off-palette hues).
+_oa_color(s::Symbol) = s === :green ? _GREEN : _GRAY
 
 # scene-space pixel helpers; panel frame f = (x0, ybot, w, h), block-top local coords.
 _sy(f, y) = f[2] + f[4] - y                     # block-top local y → scene y (up)
@@ -287,11 +293,21 @@ function infograph(meta::PaperMetadata; page=(420, 594), template::Symbol=:edito
     template === :editorial ||
         throw(ArgumentError("template must be :editorial; got $(repr(template))"))
     _check_justification(justification)
-    fig = CM.Figure(size=page, figure_padding=0)
+    pw, ph = Float64(page[1]), Float64(page[2])
+    total_h = ph + _FOOTER_BAND                  # reserve the house-style footer band at the bottom
+    fig = CM.Figure(size=(pw, total_h), figure_padding=0)
     sc  = fig.scene
-    CM.poly!(sc, CM.Rect2f(0, 0, page[1], page[2]); color=:white, space=:pixel)
-    _draw_infograph!(sc, meta, (0.0, 0.0, Float64(page[1]), Float64(page[2])))
+    CM.poly!(sc, CM.Rect2f(0, 0, pw, total_h); color=:white, space=:pixel)
+    _draw_infograph!(sc, meta, (0.0, _FOOTER_BAND, pw, ph))   # panel sits above the footer band
+    _draw_footer!(sc)
     return fig
+end
+
+# House-style §3 footer: "TextMeasure.jl · DOI Infographic", DejaVu Sans 9pt, GRAY,
+# bottom-left at the 36px outer margin. Drawn once per print piece (page), not per panel.
+function _draw_footer!(sc)
+    CM.text!(sc, CM.Point2f(_FOOTER_MARGIN, _FOOTER_BAND / 2 - 4); text=_FOOTER,
+             fontsize=9.0, font=SANS, color=_GRAY, align=(:left, :baseline), space=:pixel)
 end
 
 function infograph(doi::AbstractString; mailto::AbstractString, kwargs...)
@@ -316,33 +332,33 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
     cw   = W - 2M                       # content width
     y    = M                            # running block-top y (down)
 
-    # --- OA badge + journal/year line ---
+    # --- OA badge + journal/year line (caption tier, 9pt sans) ---
     badge = uppercase(string(meta.oa_status))
-    _text!(sc, f, M, y + 9, badge; fontsize=8, font=SANS, color=_oa_color(meta.oa_status))
+    _text!(sc, f, M, y + 10, badge; fontsize=9, font=SANS, color=_oa_color(meta.oa_status))
     jline = strip(join(filter(!isempty, String[something(meta.journal, ""),
                        meta.year === nothing ? "" : string(meta.year),
                        something(meta.pp, "")]), " · "))
-    isempty(jline) || _text!(sc, f, M + 70, y + 9, jline; fontsize=8, color=_MUTED)
-    y += 22
+    isempty(jline) || _text!(sc, f, M + 78, y + 10, jline; fontsize=9, font=SANS, color=_GRAY)
+    y += 24
 
-    # --- title (autoshrink, ≤2 lines guaranteed) ---
-    t = title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=min(40.0, 0.11H))
+    # --- title: serif (house-style §1), title tier 22pt max, autoshrink ≤2 lines ---
+    t = title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=22.0, font=SERIF)
     tla = t.line_advance                          # baseline-to-baseline (from the autoshrink layout)
     for ln in t.lines
-        _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SANS, color=_INK)
+        _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SERIF, color=_INK)
         y += tla
     end
     y += 6
 
-    # --- authors row (+ et al.) ---
-    ab = _backend(SANS, 9.5)
+    # --- authors byline (sans caption, near-black) ---
+    ab = _backend(SANS, 9.0)
     shown, etal = fit_authors(meta.authors, ab; row_width=cw)
     astr = join((_author_label(a) for a in shown), ", ") * (etal ? " et al." : "")
-    isempty(astr) || _text!(sc, f, M, y + 10, astr; fontsize=9.5, color=_ACCENT)
+    isempty(astr) || _text!(sc, f, M, y + 10, astr; fontsize=9, font=SANS, color=_INK)
     y += 18
 
     # rule
-    _rect!(sc, f, M, y, cw, 1.0; color=_RULE)
+    _rect!(sc, f, M, y, cw, 1.0; color=_HAIR)
     y += 12
 
     # --- region geometry ---
@@ -369,7 +385,7 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
     _draw_figure_panel!(sc, f, M + cw - figure_w, body_top, figure_w, body_h, meta)
 
     if has_body
-        body_fs = tldr_autosize(body; box_width=body_col_w, box_height=body_h, fs_min=9.0, fs_max=12.0)
+        body_fs = 11.0                            # house-style body tier (serif, ragged-right)
         bb   = _backend(SERIF, body_fs)
         prep = prepare(bb, body)
         la   = prep.metrics.line_advance
@@ -389,21 +405,21 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
         # drop cap glyph (baseline ≈ first body line's baseline)
         dcfs = 3 * body_fs
         _text!(sc, f, M, body_top + la + prep.metrics.ascent, string(first(strip(body)));
-               fontsize=dcfs, font=SERIF, color=_ACCENT, align=(:left, :baseline))
+               fontsize=dcfs, font=SERIF, color=_BLUE, align=(:left, :baseline))
         _draw_pills!(sc, f, pb, band_rows, pb_fs, pb_step, M, body_top + body_h + 8)
     else
         # graceful degradation (slot 6): muted caption + ENLARGED pills fill the left column
         # (no empty whitespace where the abstract would be); figure panel still on the right.
-        _text!(sc, f, M, body_top + 18, "abstract unavailable"; fontsize=12, font=SANS, color=_MUTED)
-        big_fs = 12.0
+        _text!(sc, f, M, body_top + 16, "abstract unavailable"; fontsize=11, font=SANS, color=_GRAY)
+        big_fs = 14.0                             # enlarged tags = subhead tier
         bigpb  = _backend(SANS, big_fs)
         rows6  = isempty(pill_names) ? Vector{String}[] :
                  wrap_pills(pill_names, bigpb; strip_width=body_col_w, pad=9.0, gap=7.0)
         _draw_pills!(sc, f, bigpb, rows6, big_fs, big_fs + 14.0, M, body_top + 36)
     end
 
-    # --- DOI provenance footer (research-infographic touch; replaces the duplicate sparkline) ---
-    _text!(sc, f, M, H - M, "doi:" * meta.doi; fontsize=7, font=SANS, color=_MUTED)
+    # --- per-panel DOI source caption (house-style §4: 9pt sans, GRAY, left) ---
+    _text!(sc, f, M, H - M, "doi:" * meta.doi; fontsize=9, font=SANS, color=_GRAY)
     return sc
 end
 
@@ -416,8 +432,8 @@ function _draw_pills!(sc, f, pb, rows, fs, step, x0, y0)
         px = x0
         for name in row
             pw = measure(pb, name) + 16
-            _rect!(sc, f, px, py, pw, fs + 8; color=_PILLBG)
-            _text!(sc, f, px + 8, py + fs + 1, name; fontsize=fs, color=_ACCENT)
+            _rect!(sc, f, px, py, pw, fs + 8; color=_CHIPBG)
+            _text!(sc, f, px + 8, py + fs + 1, name; fontsize=fs, color=_BLUE)
             px += pw + 6
         end
         py += step
@@ -431,25 +447,27 @@ end
 function _draw_figure_panel!(sc, f, x, y, w, h, meta)
     _rect!(sc, f, x, y, w, h; color=CM.RGBf(0.965, 0.97, 0.98))
     pad = 9.0
-    _text!(sc, f, x + pad, y + 13, "CITATIONS"; fontsize=7, font=SANS, color=_MUTED)
-    _text!(sc, f, x + pad, y + 36, _commas(meta.citation_count); fontsize=21, font=SANS, color=_ACCENT)
+    _text!(sc, f, x + pad, y + 14, "CITATIONS"; fontsize=9, font=SANS, color=_GRAY)
+    _text!(sc, f, x + pad, y + 40, _commas(meta.citation_count); fontsize=22, font=SANS, color=_BLUE)
     yrs = meta.citations_by_year
     if !isempty(yrs)
         cx = x + pad; cwid = w - 2pad
-        ctop = y + 48; cbot = y + h - 16
+        ctop = y + 52; cbot = y + h - 18
         ch = max(cbot - ctop, 8.0)
         mx = maximum(c for (_, c) in yrs); mx == 0 && (mx = 1)
         n = length(yrs); bw = cwid / n
         for (i, (_, c)) in enumerate(yrs)
             bh = c / mx * ch
-            _rect!(sc, f, cx + (i - 1) * bw, cbot - bh, max(bw * 0.7, 1.0), bh; color=_ACCENT)
+            _rect!(sc, f, cx + (i - 1) * bw, cbot - bh, max(bw * 0.7, 1.0), bh; color=_BLUE)
         end
-        _text!(sc, f, cx, y + h - 4, string(yrs[1][1]); fontsize=6, color=_MUTED)
-        _text!(sc, f, x + w - pad - 16, y + h - 4, string(yrs[end][1]); fontsize=6, color=_MUTED)
+        # 1px baseline rule (GRAY @ 0.25) so the bars read as a chart, not decoration
+        _rect!(sc, f, cx, cbot, cwid, 1.0; color=_BASE)
+        _text!(sc, f, cx, y + h - 4, string(yrs[1][1]); fontsize=9, font=SANS, color=_GRAY)
+        _text!(sc, f, x + w - pad - 22, y + h - 4, string(yrs[end][1]); fontsize=9, font=SANS, color=_GRAY)
     else
-        _text!(sc, f, x + pad, y + 50, "total citations"; fontsize=7, color=_MUTED)
+        _text!(sc, f, x + pad, y + 56, "total citations"; fontsize=9, font=SANS, color=_GRAY)
         meta.year === nothing ||
-            _text!(sc, f, x + pad, y + 68, "published $(meta.year)"; fontsize=8, color=_INK)
-        _text!(sc, f, x + pad, y + 84, "OA · $(meta.oa_status)"; fontsize=8, color=_oa_color(meta.oa_status))
+            _text!(sc, f, x + pad, y + 74, "published $(meta.year)"; fontsize=9, font=SANS, color=_INK)
+        _text!(sc, f, x + pad, y + 90, "OA · $(meta.oa_status)"; fontsize=9, font=SANS, color=_oa_color(meta.oa_status))
     end
 end
