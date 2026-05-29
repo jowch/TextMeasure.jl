@@ -10,6 +10,12 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
 TextMeasureLayouts = "57b0e3ea-cc01-4cc3-9e7e-6e97d1609b9f"
 
+# Unregistered in-repo packages — resolve by path so a plain `Pkg.instantiate()`
+# works without a manual `Pkg.develop` step (Julia 1.11+ [sources] feature).
+[sources]
+TextMeasure = { path = "../.." }
+TextMeasureLayouts = { path = "../layouts" }
+
 [compat]
 CairoMakie = "0.15"
 GeometryBasics = "0.5"
