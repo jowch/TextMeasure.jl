@@ -3,7 +3,8 @@ using Test
 using Cover
 using Random
 using SHA
-using TextMeasureLayouts: chord_intervals
+using TextMeasureLayouts: chord_intervals, PackedLayout, Placement
+using TextMeasure: FontMetrics
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -112,20 +113,35 @@ function _render_fixture(name)
 end
 
 # every data row of `pdffonts` output must have emb == "yes" (>=1 data row required).
+# Robust to poppler column-width variants: derive the emb column's char range from the
+# dashes separator line (groups of '-' = columns), then match which column the header
+# labels "emb" and read that exact slice from each data row.
 function _all_fonts_embedded(fonts::AbstractString)
-    lines = split(fonts, "\n")
+    lines = split(rstrip(fonts), "\n")
     length(lines) < 3 && return false
-    header = lines[1]
-    rng = findfirst("emb", header)
-    rng === nothing && return false
-    start = first(rng)
+    header, dashes = lines[1], lines[2]
+    occursin(r"^-+( +-+)*$", strip(dashes)) || return false   # 2nd line really is the separator
+    # column char-ranges from the dashes line
+    ranges = UnitRange{Int}[]
+    i = firstindex(dashes)
+    while i <= lastindex(dashes)
+        if dashes[i] == '-'
+            j = i
+            while j <= lastindex(dashes) && dashes[j] == '-'; j = nextind(dashes, j); end
+            push!(ranges, i:prevind(dashes, j)); i = j
+        else
+            i = nextind(dashes, i)
+        end
+    end
+    _slice(s, r) = (rr = intersect(r, eachindex(s)); isempty(rr) ? "" : strip(s[rr]))
+    embcol = findfirst(r -> _slice(header, r) == "emb", ranges)
+    embcol === nothing && return false
+    rng = ranges[embcol]
     any_data = false
     for row in lines[3:end]
         isempty(strip(row)) && continue
-        length(row) < start && continue
         any_data = true
-        field = strip(row[start:min(lastindex(row), start + 3)])
-        field == "yes" || return false
+        _slice(row, rng) == "yes" || return false
     end
     return any_data
 end
@@ -328,8 +344,16 @@ end
         @test c.dropcap.baseline > c.body_top
         @test c.dropcap.baseline < c.body_top + cfg.dropcap_lines * c.body.metrics.line_advance + 50
 
-        @test isempty(bbox_violations(c))
+        # drop-cap ink box: present, top at body_top, bottom at baseline (uppercase, no descender)
+        @test c.dropcap_bbox !== nothing
+        @test c.dropcap_bbox.top ≈ c.body_top atol=1e-6
+        @test c.dropcap_bbox.bottom ≈ c.dropcap.baseline atol=1e-6
+        @test c.dropcap_bbox.right > c.dropcap_bbox.left
+
+        @test isempty(bbox_violations(c))               # incl. body↔dropcap, dropcap↔inset
         @test body_wrap_honors_inset(c)
+        # no body word intrudes into the drop-cap ink box
+        @test !any(t -> t[1] === :body_dropcap, bbox_violations(c))
 
         @test c.inset_rect.left ≈ 54.0 + 240.0 atol=1e-9
         @test c.inset_rect.top  ≈ 54.0 + 200.0 atol=1e-9
@@ -367,6 +391,46 @@ end
         @test dropcap_bands_consecutive(c2)
     end
 
+    @testset "chord vertical exclusion is load-bearing" begin
+        # The y-axis protection lives here: a band that vertically STRADDLES the inset
+        # top must drop the inset's x-column, so no body word can be placed overlapping
+        # the inset vertically. Inset top mid-band (2.5·la) exercises a straddling band.
+        la = 12.0
+        top = 2.5 * la
+        f = RectExclusionChordFn(0.0, 500.0, 400.0, [BBox(200.0, top, 300.0, top + 100.0)], 0.0)
+        iv = chord_intervals(f, 2*la, 3*la)              # band 3 straddles `top`
+        @test iv == [(0.0, 200.0), (300.0, 500.0)]       # inset x-column removed
+        @test all(t -> t[2] <= 200.0 + 1e-9 || t[1] >= 300.0 - 1e-9, iv)
+        # the band ENTIRELY above the inset keeps full width (no exclusion)
+        @test chord_intervals(f, 0.0, la) == [(0.0, 500.0)]
+    end
+
+    @testset "overlap detectors fire (non-vacuous)" begin
+        # Hand-build a ComposedCover whose body word + drop cap + pull quote all sit
+        # INSIDE the inset, to prove body_wrap_honors_inset / bbox_violations actually
+        # return false/findings (the happy-path tests only ever see them empty/true).
+        pk = PackedLayout(Placement[], Int[], FontMetrics(8.0, 2.0, 12.0))
+        inset = BBox(100.0, 100.0, 200.0, 200.0)
+        bad_body = [BBox(125.0, 125.0, 180.0, 180.0)]            # inside inset AND over the cap box
+        dc_bad = BBox(120.0, 120.0, 150.0, 160.0)               # inside inset
+        pqp = Cover.PullQuotePlaced(PlacedText[], BBox(110.0, 110.0, 190.0, 130.0))  # inside inset
+        c = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[], bad_body,
+                          nothing, NaN, dc_bad, 3, inset, [], [pqp])
+        @test !body_wrap_honors_inset(c)
+        v = bbox_violations(c)
+        @test (:body_inset, 1, 0) in v
+        @test (:dropcap_inset, 0, 0) in v
+        @test (:pq_inset, 1, 0) in v
+        @test (:body_dropcap, 1, 0) in v                        # body word also inside the cap box
+
+        # clean control: same inset, body word well clear -> no findings
+        c2 = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[],
+                           [BBox(10.0, 10.0, 40.0, 30.0)], nothing, NaN, nothing, 3,
+                           inset, [], Cover.PullQuotePlaced[])
+        @test body_wrap_honors_inset(c2)
+        @test isempty(bbox_violations(c2))
+    end
+
     @testset "property: 20 random insets" begin
         # reference compose to get body_top / line_advance (independent of inset).
         ref = compose_cover(_make_cfg_raw(; inset_x=300, inset_y=400, inset_w=150, inset_h=150,
@@ -397,8 +461,13 @@ end
                 no_y = (pqy + 90.0 < iy) || (iy + ih < pqy)
                 (no_x || no_y) && break
             end
-            # fix #2: trial 1 uses gutter=0 with a mid-band inset top so the vertical
-            # _overlap(eps) check is exercised at its tightest (no gutter cushion).
+            # Trial 1 uses gutter=0 to remove the HORIZONTAL clearance cushion (tightest
+            # x-separation between body words and the inset). NOTE: this does NOT exercise
+            # a vertical overlap — given gutter≥0 and (ascent+descent)≤line_advance, a body
+            # word's box can never dip into the inset's vertical span (the straddling band
+            # is always excluded by the chord). That structural y-safety is tested directly
+            # at the chord level ("chord vertical exclusion is load-bearing"), and the
+            # _overlap detector's ability to fire is tested in "overlap detectors fire".
             gutter = t == 1 ? 0.0 : 6.0
             cfg = _make_cfg_raw(; inset_x=ix, inset_y=iy, inset_w=iw, inset_h=ih,
                                   pq_x=pqx, pq_y=pqy, pq_w=pqw, gutter=gutter)

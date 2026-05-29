@@ -112,6 +112,7 @@ struct ComposedCover
     body_word_bboxes :: Vector{BBox}
     dropcap          :: Union{Nothing,PlacedText}
     dropcap_baseline :: Float64        # NaN when no dropcap
+    dropcap_bbox     :: Union{Nothing,BBox}   # absolute ink box of the drop cap
     dropcap_lines    :: Int
     inset_rect       :: BBox
     inset_rings      :: Vector          # Vector{SvgRing} from svg.jl

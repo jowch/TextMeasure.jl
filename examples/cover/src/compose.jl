@@ -82,21 +82,37 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     D = cfg.dropcap_lines
     dropcap = nothing
     dropcap_baseline = NaN
+    dropcap_bbox = nothing
     dropcap_hole = nothing
     paras = [p.paragraph for p in cfg.body]
     capch = ""
     if has_dropcap
         capch = uppercase(string(first(paras[1])))
         paras[1] = paras[1][nextind(paras[1], 1):end]
-        # drop-cap target: baseline == D-th body line baseline; ascent spans to body top
+        # Target ascent to span D lines: the cap top should land at body_top and its
+        # baseline at the D-th body line. Derive the drop-cap font size from this target
+        # and the DROPCAP font's ascent at a reference size.
         target_ascent = (D - 1) * la + bmet.ascent
         ref = _mk(DROPCAP_FONT, 100.0)
         ref_asc = TextMeasure.font_metrics(ref).ascent
         dc_size = 100.0 * target_ascent / ref_asc
-        dc_be = _mk(DROPCAP_FONT, dc_size)
-        cap_w = TextMeasure.measure(dc_be, capch)
-        dropcap_baseline = body_top + target_ascent
+        dc_be  = _mk(DROPCAP_FONT, dc_size)
+        dc_met = TextMeasure.font_metrics(dc_be)
+        cap_w  = TextMeasure.measure(dc_be, capch)
+        # IMPORTANT (cross-check integrity): the baseline is derived from the DROPCAP
+        # font's MEASURED ascent at dc_size — NOT from `target_ascent` directly. This
+        # routes through dc_size + the drop-cap font's own metrics, a different
+        # computation path than shape_pack's body-metric line-D baseline. A wrong dc_size
+        # (or a non-linear ascent at small sizes) makes `dc_met.ascent` diverge from
+        # `target_ascent`, so `dropcap_baseline_aligned` fires — it is NOT a tautology.
+        dropcap_ascent = dc_met.ascent
+        dropcap_baseline = body_top + dropcap_ascent
         dropcap = PlacedText(capch, content_left, dropcap_baseline, dc_size, DROPCAP_FONT)
+        # Ink box (absolute): top = cap top (baseline − ascent), bottom = baseline. An
+        # uppercase drop cap has no descender, so the baseline is the visual bottom; using
+        # the font's metric descent here would over-claim and false-overlap line D+1.
+        dropcap_bbox = BBox(content_left, dropcap_baseline - dropcap_ascent,
+                            content_left + cap_w, dropcap_baseline)
         # hole in body-local frame: x covers cap + gap, y covers the first D lines
         dropcap_hole = BBox(content_left, 0.0, content_left + cap_w + DROPCAP_GAP, D * la)
     end
@@ -158,7 +174,7 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     end
 
     return ComposedCover((W,H), masthead, packed, body_top, body_runs, body_bboxes,
-                         dropcap, dropcap_baseline, D, inset_rect, inset_rings, pull_quotes)
+                         dropcap, dropcap_baseline, dropcap_bbox, D, inset_rect, inset_rings, pull_quotes)
 end
 
 # Distinct body-line baselines (body-local), sorted ascending.
@@ -189,9 +205,11 @@ end
     dropcap_baseline_aligned(c; tol=0.5) -> Bool
 
 True when the drop-cap baseline equals the `dropcap_lines`-th distinct body-line
-baseline within `tol` px. The drop-cap baseline is derived from font metrics in
-`compose_cover`; the body baseline comes independently from `shape_pack`'s band
-geometry — so this is a genuine cross-check of the measurement pipeline, not a
+baseline within `tol` px. The two sides come from DIFFERENT computations: the
+drop-cap baseline is `body_top +` the DROPCAP font's measured ascent at the derived
+`dc_size` (compose.jl), while the line-D baseline is `body_top + (D-1)·line_advance +`
+the BODY font ascent (`shape_pack`'s band geometry). A wrong `dc_size` derivation or a
+non-linear drop-cap ascent makes them diverge — so this is a real cross-check, not a
 tautology. Requires consecutive top bands (see [`dropcap_bands_consecutive`](@ref)).
 Vacuously true when there is no drop cap.
 """
@@ -206,14 +224,22 @@ end
 """
     bbox_violations(c) -> Vector{Tuple{Symbol,Int,Int}}
 
-Every overlapping pair among: body words vs inset, pull-quote boxes vs inset,
-pull-quote boxes vs body words, and pull-quote boxes vs each other. Empty ⇒ the
-"no overlap" invariant holds. Tuples are `(:kind, i, j)` for diagnostics.
+Every overlapping pair among: body words vs inset, body words vs the drop-cap ink
+box, the drop-cap box vs inset, pull-quote boxes vs inset, pull-quote boxes vs body
+words, and pull-quote boxes vs each other. Empty ⇒ the "no overlap" invariant holds.
+Tuples are `(:kind, i, j)` for diagnostics. The `:body_dropcap` / `:dropcap_inset`
+pairs guard the novel drop-cap geometry (`dc_size → cap_w → hole`): if the cap width
+or hole were miscomputed, body text would intrude into the cap box and this would
+catch it.
 """
 function bbox_violations(c::ComposedCover)
     v = Tuple{Symbol,Int,Int}[]
     for (i, b) in enumerate(c.body_word_bboxes)
         _overlap(b, c.inset_rect) && push!(v, (:body_inset, i, 0))
+        c.dropcap_bbox !== nothing && _overlap(b, c.dropcap_bbox) && push!(v, (:body_dropcap, i, 0))
+    end
+    if c.dropcap_bbox !== nothing
+        _overlap(c.dropcap_bbox, c.inset_rect) && push!(v, (:dropcap_inset, 0, 0))
     end
     for (qi, pq) in enumerate(c.pull_quotes)
         _overlap(pq.bbox, c.inset_rect) && push!(v, (:pq_inset, qi, 0))
