@@ -59,6 +59,11 @@ lon  = -73.3318
 lat  = 44.5311
 kind = "feature"
 
+# NOTE: Shelburne Museum sits ~10km south of Burlington; in projected page space their label
+# boxes collide, so place_poi_labels (simple offset placement, harder repel out of scope) may
+# DROP whichever loses the greedy contest — Shelburne in the current layout. This is by design:
+# the marker still draws; only the text label is skipped. The PDF golden floor tolerates ≤2 such
+# drops and the capital (Montpelier, isolated) is always placed.
 [[poi]]
 name = "Shelburne Museum"
 lon  = -73.2293
