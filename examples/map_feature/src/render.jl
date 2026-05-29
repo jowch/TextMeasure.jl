@@ -108,7 +108,7 @@ end
 
 """
     map_feature(state_polygon, stats, points_of_interest; dest="EPSG:5070",
-                body_text=DEFAULT_BODY, fontsize=12.0) -> CairoMakie.Figure
+                body_text=DEFAULT_BODY, fontsize=12.0) -> CairoMakie.Scene
 
 Render the feature page. `state_polygon` is a geographic `(lon,lat)` ring (single outer ring —
 CONUS/Vermont verified, see `PageProjection`); `stats` a `Dict{Symbol,Any}`

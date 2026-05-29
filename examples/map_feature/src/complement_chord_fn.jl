@@ -25,8 +25,10 @@ Returns a closure `(y_top, y_bottom) -> Vector{Tuple{Float64,Float64}}`. Per ban
   ascending & pairwise-disjoint (the `shape_pack` contract).
 
 The envelope is taken over the band's **full vertical span** `[y_top, y_bottom]` (not just the
-center scanline): `env_l` is the leftmost and `env_r` the rightmost edge-crossing over the whole
-band, sampled at ~1px steps. Because `shape_pack` calls with the band height = `line_advance`
+center scanline): `env_l` is the leftmost and `env_r` the rightmost x of the boundary over the
+whole band, computed **exactly** — `x` is linear in `y` along each edge, so the extremes occur
+only at the band-boundary crossings (`y_top`, `y_bottom`) or at polygon vertices strictly inside
+the band; no sampling. Because `shape_pack` calls with the band height = `line_advance`
 (≈ a line's `ascent + descent`), a word packed flush to `env_l` then clears the silhouette across
 its *entire* glyph height — not only at its baseline — so a slanted or concave facing edge cannot
 poke through the text the way a center-only scanline would allow. The envelope (rather than the

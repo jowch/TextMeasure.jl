@@ -43,7 +43,7 @@ end
     @test all(si -> !(si in placed_idx), pk.overflowed)
 
     desc = prep.metrics.descent
-    n_letterbox = 0; n_silhouette = 0
+    n_letterbox = 0; n_silhouette = 0; n_right = 0
     for p in pk.placements
         w  = prep.segments[p.segment_index].width
         x0, x1 = p.x, p.x + w
@@ -67,9 +67,14 @@ end
             n_silhouette += 1
             el, er = env
             @test x1 <= el + 1e-6 || x0 >= er - 1e-6
+            x0 >= er - 1e-6 && (n_right += 1)          # word placed EAST of the silhouette
         end
     end
     # Vermont is tall and fills most of the map region, so the prose genuinely wraps the
     # silhouette in many bands (not just a degenerate left rectangle).
     @test n_silhouette > 0
+    # BOTH-SIDES wrap (fill=:all headline): at least one body word is actually placed in the
+    # strip EAST of the silhouette — not merely allowed by the OR above. Pins the claim against
+    # silent regression to a left-only column.
+    @test n_right > 0
 end
