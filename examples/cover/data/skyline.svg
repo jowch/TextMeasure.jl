@@ -1,0 +1,14 @@
+<!-- SPDX-License-Identifier: MIT -->
+<svg viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="210" width="200" height="70" fill="#2b3a55"/>
+  <polygon points="20,210 20,120 55,120 55,210" fill="#3d5a80"/>
+  <polygon points="65,210 65,70 100,55 135,70 135,210" fill="#577590"/>
+  <rect x="150" y="100" width="35" height="110" fill="#3d5a80"/>
+  <polygon points="100,55 118,30 118,55" fill="#ee6c4d"/>
+  <circle cx="160" cy="45" r="16" fill="#f2cc8f"/>
+  <line x1="0" y1="210" x2="200" y2="210" stroke="#293241" stroke-width="2"/>
+  <rect x="30" y="140" width="8" height="10" fill="#e0fbfc"/>
+  <rect x="42" y="140" width="8" height="10" fill="#e0fbfc"/>
+  <rect x="80" y="95" width="8" height="12" fill="#e0fbfc"/>
+  <rect x="112" y="95" width="8" height="12" fill="#e0fbfc"/>
+</svg>

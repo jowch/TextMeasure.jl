@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+[meta]
+title    = "The Newer Yorker"
+subtitle = "A Correctness Exhibit"
+byline   = "by TextMeasure.jl"
+
+[layout]
+page_size     = "letter"
+margin_px     = 54
+dropcap_lines = 3
+gutter_px     = 7
+
+[inset]
+svg_path  = "skyline.svg"
+x_px      = 40
+y_px      = 250
+width_px  = 240
+height_px = 200
+
+[[body]]
+dropcap   = true
+paragraph = """
+There are no manual offsets on this page. Every baseline, every wrap point, and the drop cap that opens this column were computed by the measurement pipeline, not nudged by hand. Move the illustration a few pixels and re-render: the body text re-flows around its new footprint, the pull quote keeps its clearance, and the drop cap still lands on its line, because nothing here was hardcoded.
+"""
+
+[[body]]
+paragraph = """
+The exhibit measures once and lays out many times. The same prepared paragraph is packed around an inset-exclusion chord function that subtracts the illustration, the drop cap, and the pull quote from each scanline band. Correctness is asserted on the computed layout before a single glyph is drawn.
+"""
+
+[[pull_quote]]
+text        = "Measure once. Lay out many times. Never nudge."
+attribution = "— the thesis"
+x_px        = 330
+y_px        = 230
+width_px    = 160
