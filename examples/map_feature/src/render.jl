@@ -11,14 +11,19 @@
 #   (c) in bands that DO cross the silhouette, complement_chord_fn carves [env_l,env_r] → body
 #       wraps the silhouette's facing edge and never sits on it.
 #
-# NOTE: packing uses the single widest interval per band (overflow_strategy=:skip). For this
-# layout (map in the right ~55%, map column reserved off-silhouette) a band's usable run is
-# effectively the single left region, so :widest suffices and the thin right sliver is dropped by
-# min_chord_width. If a future layout yields two genuinely-wide runs per band, switch PACK_KW to
-# include `fill => :all` once impl-C2 merges it.
+# Packing uses `fill=:all` (impl-C2): a silhouette-crossing band offers TWO usable runs — the
+# left margin AND the strip right of the silhouette before the map's right edge — and both are
+# filled, so the prose wraps the state on BOTH sides (most VT bands yield two runs ≥ min_chord_width).
+# Letterbox bands (silhouette absent) collapse to the single left region (the map column is
+# reserved by the render combinator). overflow_strategy=:skip ⇒ no over-wide word is dumped atop
+# the map.
+#
+# Rendering is pixel-faithful: a `campixel!` Scene maps 1 data unit → 1 screen px exactly, so the
+# measured layout (MakieBackend at px_per_unit=1) is drawn at the same scale — glyph runs occupy
+# exactly their measured width and never overrun the silhouette envelope they were packed against.
 
 import CairoMakie
-const CM = CairoMakie
+const CM = CairoMakie   # re-exports Makie's Scene / campixel! / text! / poly! / scatter!
 
 const BODY_FONT    = "Liberation Serif"
 const DISPLAY_FONT = "DejaVu Sans"
@@ -31,8 +36,8 @@ const SIDEBAR_BOTTOM = 200.0    # masthead + sidebar glyphs all stay above this 
 const REGION_TOP     = 230.0    # body + map region top (a gutter below SIDEBAR_BOTTOM)
 const BYLINE_H       = 36.0
 
-# Packing kwargs — see NOTE above; add `fill => :all` when impl-C2 lands if bands warrant it.
-const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip)
+# Packing kwargs — see NOTE above.
+const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip, fill = :all)
 
 _map_left()      = MARGIN + 0.45 * (PAGE_W - 2MARGIN)
 _region_bottom() = PAGE_H - BYLINE_H - MARGIN
@@ -120,35 +125,34 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
     L = _compose_layout(state_polygon; dest=dest, body_text=body_text, fontsize=fontsize)
     backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
 
-    fig = CM.Figure(; size=(PAGE_W, PAGE_H), backgroundcolor=:white)
-    ax = CM.Axis(fig[1, 1]; aspect=CM.DataAspect())
-    CM.hidedecorations!(ax); CM.hidespines!(ax)
-    CM.limits!(ax, 0, PAGE_W, 0, PAGE_H)
-    flip(y) = PAGE_H - y       # block-top y → CairoMakie y-up
+    # Pixel-space scene: 1 data unit == 1 screen px (campixel!), so measured widths render 1:1.
+    scene = CM.Scene(; size=(PAGE_W, PAGE_H), backgroundcolor=:white)
+    CM.campixel!(scene)
+    flip(y) = PAGE_H - y       # block-top y → pixel-space y-up
 
     # masthead + subtitle (top band, all glyphs above SIDEBAR_BOTTOM)
-    CM.text!(ax, MARGIN, flip(MARGIN + 44); text=get(stats, :masthead, "STATE"),
-             font=DISPLAY_FONT, fontsize=54, align=(:left, :baseline), color=:black, space=:data)
-    CM.text!(ax, MARGIN, flip(MARGIN + 66); text=get(stats, :subtitle, ""),
-             font=BODY_FONT, fontsize=15, align=(:left, :baseline), color=(:black, 0.7), space=:data)
+    CM.text!(scene, MARGIN, flip(MARGIN + 44); text=get(stats, :masthead, "STATE"),
+             font=DISPLAY_FONT, fontsize=54, align=(:left, :baseline), color=:black)
+    CM.text!(scene, MARGIN, flip(MARGIN + 66); text=get(stats, :subtitle, ""),
+             font=BODY_FONT, fontsize=15, align=(:left, :baseline), color=(:black, 0.7))
 
     # sidebar big-number stats (still above SIDEBAR_BOTTOM)
-    CM.text!(ax, MARGIN, flip(MARGIN + 98); text="POP $(stats[:population])",
-             font=DISPLAY_FONT, fontsize=22, align=(:left, :baseline), color=:seagreen, space=:data)
-    CM.text!(ax, MARGIN, flip(MARGIN + 122); text="MEDIAN INCOME \$$(stats[:median_income_usd])",
-             font=DISPLAY_FONT, fontsize=14, align=(:left, :baseline), color=(:black, 0.8), space=:data)
-    CM.text!(ax, MARGIN, flip(MARGIN + 144); text="CAPITAL $(stats[:capital])",
-             font=DISPLAY_FONT, fontsize=14, align=(:left, :baseline), color=(:black, 0.8), space=:data)
+    CM.text!(scene, MARGIN, flip(MARGIN + 98); text="POP $(stats[:population])",
+             font=DISPLAY_FONT, fontsize=22, align=(:left, :baseline), color=:seagreen)
+    CM.text!(scene, MARGIN, flip(MARGIN + 122); text="MEDIAN INCOME \$$(stats[:median_income_usd])",
+             font=DISPLAY_FONT, fontsize=14, align=(:left, :baseline), color=(:black, 0.8))
+    CM.text!(scene, MARGIN, flip(MARGIN + 144); text="CAPITAL $(stats[:capital])",
+             font=DISPLAY_FONT, fontsize=14, align=(:left, :baseline), color=(:black, 0.8))
 
     # state silhouette fill + outline
-    CM.poly!(ax, [CM.Point2f(p[1], flip(p[2])) for p in L.poly_px];
+    CM.poly!(scene, [CM.Point2f(p[1], flip(p[2])) for p in L.poly_px];
              color=(:seagreen, 0.18), strokecolor=:seagreen, strokewidth=1.5)
 
     # body text at each placement (baseline-aligned)
     for pl in L.pk.placements
         s = L.prep.segments[pl.segment_index].str
-        CM.text!(ax, pl.x, flip(pl.y); text=s, font=BODY_FONT, fontsize=fontsize,
-                 align=(:left, :baseline), color=:black, space=:data)
+        CM.text!(scene, pl.x, flip(pl.y); text=s, font=BODY_FONT, fontsize=fontsize,
+                 align=(:left, :baseline), color=:black)
     end
 
     # POIs: markers + non-overlapping labels
@@ -157,26 +161,26 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
     boxes = place_poi_labels(anchors, sizes; offset=6.0, margin=2.0)
     for (i, p) in enumerate(points_of_interest)
         a = anchors[i]
-        CM.text!(ax, a[1], flip(a[2]); text=string(_marker_glyph(p.kind)),
+        CM.text!(scene, a[1], flip(a[2]); text=string(_marker_glyph(p.kind)),
                  font=DISPLAY_FONT, fontsize=(p.kind === :capital ? 18 : 12),
-                 align=(:center, :center), color=:firebrick, space=:data)
+                 align=(:center, :center), color=:firebrick)
         b = boxes[i]
         b === nothing && continue
-        CM.text!(ax, b.x, flip(b.y + b.h); text=p.name, font=DISPLAY_FONT,
+        CM.text!(scene, b.x, flip(b.y + b.h); text=p.name, font=DISPLAY_FONT,
                  fontsize=(p.kind === :capital ? fontsize + 2 : fontsize),
-                 align=(:left, :baseline), color=:black, space=:data)
+                 align=(:left, :baseline), color=:black)
     end
 
     # byline (bottom)
-    CM.text!(ax, MARGIN, flip(PAGE_H - MARGIN + 12); text=get(stats, :byline, ""),
-             font=BODY_FONT, fontsize=11, align=(:left, :baseline), color=(:black, 0.7), space=:data)
+    CM.text!(scene, MARGIN, flip(PAGE_H - MARGIN + 12); text=get(stats, :byline, ""),
+             font=BODY_FONT, fontsize=11, align=(:left, :baseline), color=(:black, 0.7))
 
-    return fig
+    return scene
 end
 
-"""    render_to_pdf(fig, path) -> path   — export with selectable (embedded) text."""
-function render_to_pdf(fig::CM.Figure, path::AbstractString)
-    CM.save(path, fig; pt_per_unit=1.0)
+"""    render_to_pdf(scene, path) -> path   — export with selectable (embedded) text."""
+function render_to_pdf(scene::CM.Scene, path::AbstractString)
+    CM.save(path, scene; pt_per_unit=1.0)
     return path
 end
 
