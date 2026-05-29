@@ -19,31 +19,31 @@ using Test
     bufA = CellBuffer(g.height, g.width); draw!(bufA, g)
     bufB = CellBuffer(g.height, g.width); draw!(bufB, g)
     @test bufA.chars == bufB.chars && bufA.fg == bufB.fg
-    # directional ship glyph (φ-nose, 8-way octant)
+    # single 8-way arrow ship glyph
     g.debug = false
     g.ship.alive = true; g.ship.invuln = 0; g.ship.charge = 0
+    empty!(g.asteroids); empty!(g.shards); empty!(g.projectiles)   # isolate the ship
     g.ship.x = 40.0; g.ship.y = 12.0
     sx = round(Int, g.ship.x); sy = round(Int, g.ship.y)
-    # φ=0 ⇒ nose-up; the OLD wings (╱╲) and plume (┃) must be GONE.
+    # single 8-way arrow at the ship cell — no separate hull or nose
     g.ship.φ = 0.0
     b0 = CellBuffer(g.height, g.width); draw!(b0, g)
-    @test b0.chars[sy, sx]     == '▮'            # hull at centre
-    @test b0.chars[sy - 1, sx] == '▲'            # nose one cell up
-    @test b0.chars[sy, sx - 1] != '╱' && b0.chars[sy, sx + 1] != '╲'   # wings removed
-    @test b0.chars[sy + 1, sx] != '┃'            # downward plume removed
-    # φ=π/2 ⇒ facing RIGHT ⇒ nose '▶' one cell to the right (catches a CCW octant table)
+    @test b0.chars[sy, sx]     == '↑'      # points up at φ=0
+    @test b0.chars[sy, sx]     != '▮'      # old hull gone
+    @test b0.chars[sy - 1, sx] == ' '      # no separate nose cell above
+    @test b0.chars[sy + 1, sx] == ' '      # no hull/plume below
     g.ship.φ = π/2
     b1 = CellBuffer(g.height, g.width); draw!(b1, g)
-    @test b1.chars[sy, sx + 1] == '▶'
-    # φ=π/4 ⇒ NE ⇒ nose '◥' one cell up-right
+    @test b1.chars[sy, sx] == '→'          # faces right (catches a CCW table)
     g.ship.φ = π/4
-    bne = CellBuffer(g.height, g.width); draw!(bne, g)
-    @test bne.chars[sy - 1, sx + 1] == '◥'
-    # charge>0 ⇒ the charge glyph sits one cell BEYOND the nose along φ
+    b2 = CellBuffer(g.height, g.width); draw!(b2, g)
+    @test b2.chars[sy, sx] == '↗'          # diagonal
+    # charge indicator one cell along φ (up at φ=0)
     g.ship.φ = 0.0; g.ship.charge = 1
     bc = CellBuffer(g.height, g.width); draw!(bc, g)
-    @test bc.chars[sy - 2, sx] == AsteroidTUI.CHARGE_GLYPH[2]    # charge 1 ⇒ CHARGE_GLYPH[1+1], two cells up at φ=0
-    g.ship.charge = 0                                 # reset so later asserts (if any) aren't perturbed
+    @test bc.chars[sy, sx]     == '↑'                 # ship still the arrow
+    @test bc.chars[sy - 1, sx] == AsteroidTUI.CHARGE_GLYPH[2]     # charge glyph one cell ahead
+    g.ship.charge = 0
 end
 
 @testset "_rotate_poly rotates vertices by θ" begin

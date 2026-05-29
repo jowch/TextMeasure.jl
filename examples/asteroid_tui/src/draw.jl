@@ -153,25 +153,21 @@ function _draw_shard!(buf::CellBuffer, sh, debug::Bool)
     return buf
 end
 
-# Ship: a cyan hull at (sx,sy) with a directional NOSE one cell along heading φ
-# (8-way octant table), and — while charging — the charge glyph one cell BEYOND the
-# nose along φ. Pure function of g (no RNG/clock): same state ⇒ same cells. At φ=0
-# the nose is '▲' (nose-up), matching the golden's pinned pose.
-# φ increases CLOCKWISE from up, so the table must run CW: k·45° = N,NE,E,SE,S,SW,W,NW.
-# (A CCW table makes the nose point backwards — e.g. '◀' while facing right.)
-const SHIP_OCTANT = ('▲', '◥', '▶', '◢', '▼', '◣', '◀', '◤')  # N NE E SE S SW W NW
+# Ship: a single directional ARROW glyph at the ship cell, pointing along heading φ
+# (8-way). While charging, the charge glyph sits one cell ahead along φ. Pure function
+# of g. φ increases CLOCKWISE from up, so the table runs CW: N NE E SE S SW W NW.
+const SHIP_ARROW = ('↑', '↗', '→', '↘', '↓', '↙', '←', '↖')  # N NE E SE S SW W NW
 
 function _draw_ship!(buf::CellBuffer, g)
     ship_visible(g) || return buf
     s = g.ship
     sx = round(Int, s.x); sy = round(Int, s.y)
-    dx, dy = sin(s.φ), -cos(s.φ)
-    nose = SHIP_OCTANT[mod(round(Int, s.φ / (π/4)), 8) + 1]   # mod handles negative φ
-    put_char!(buf, sy, sx, '▮'; fg = COL_SHIP, bold = true)                              # hull
-    put_char!(buf, round(Int, s.y + dy), round(Int, s.x + dx), nose; fg = COL_SHIP, bold = true)  # nose
+    arrow = SHIP_ARROW[mod(round(Int, s.φ / (π/4)), 8) + 1]
+    put_char!(buf, sy, sx, arrow; fg = COL_SHIP, bold = true)
     if s.charge > 0
-        put_char!(buf, round(Int, s.y + 2dy), round(Int, s.x + 2dx),
-                  CHARGE_GLYPH[s.charge + 1]; fg = COL_BEAM, bold = true)
+        dx, dy = sin(s.φ), -cos(s.φ)
+        put_char!(buf, round(Int, s.y + dy), round(Int, s.x + dx),
+                  CHARGE_GLYPH[s.charge + 1]; fg = COL_BEAM, bold = true)   # one cell ahead
     end
     return buf
 end
