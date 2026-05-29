@@ -1,40 +1,36 @@
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                            0.22                        
-                                                                                           rad per                      
-                                                                                             second.                    
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                             radar-bright,                                              
-                                                              spinning                                ┌─ d:075m v:0.24µ 
-                                                              at                                                 carbona
-                                                                                                              drifter   
-                                                                                                            BD-754      
-                                                                                                          composed of   
-                                                                                                          magnetite,    
-                                                                                                         ancient and    
-                                                                                                         cold, spinning 
-                      composed                                                                            at 0.36 rad   
-                     of                                                                                   per second.   
-                    porous                                                                                              
-                   dust,                                                        ┌─ d:106m v:0.15µ ─┐                    
-                                                                                       M-type                           
-                                                                                    drifter                             
-                                                                                   KR-470                               
-                                                                                  composed of                           
-                                                                                  magnetite,                            
-                                                                                 spectrchondritic                       
-                                                                                 spinnidrifter.29                       
-                                                                                 rad perZL-158d.                        
-                                                                                                                        
-                                                                                                                        
-                                                           ▲                                                            
-                                                                                                                        
-                                                                                                                        
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                  ┌────────────────┐              │
+│                                                                                  │ d:060m v:0.19µ │              │
+│                     ┌────────────────┐                                           └────────┴───────┘              │
+│                     │ d:100m v:0.24µ │                                                    │                      │
+│                     └────────┴───────┘                                                 Porous,                   │
+│                              │                                                        fast,                      │
+│                        Born                                                          and                         │
+│                       from the                                                       faintly      ∘·             │
+│                       shattering of                                                  glittering,                 │
+│                      some long-dead                                                  it drifts                   │
+│                 ·    world, this                                                      where the                  │
+│                  ·∘ drifting massif of                                                sunlight                   │
+│                    nickel and shadowed                                                finally                    │
+│                    ice has wandered                                                   grows                      │
+│                    the cold reaches for                                               too                        │
+│                    an age, its pitted                                                  thin                      │
+│                    face a record of                                                                              │
+│                    every blow the dark                                                                           │
+│                    has dealt it,                                                                                 │
+│                    tumbling on without                                                                           │
+│                     haste or heading                                                                             │
+│                     through the long    ··                                                                       │
+│                      night between        ···                                                                    │
+│                       the                    ··                                                                  │
+│                        scattered               ···                                                               │
+│                        stars.                     ··                                                             │
+│                                                     ··                                                           │
+│                                                       ··                                                         │
+│                                                        ▲                                                         │
+│                                                       ╱▮╲                                                        │
+│                                                        ┃                                                         │
+│                                                        ┋                                                         │
+│                                                                                                                  │
+│                                                                                                                  │
+└─ TextMeasure.jl · Asteroid TUI ──────────────────────────────────────────────────────────────────────────────────┘

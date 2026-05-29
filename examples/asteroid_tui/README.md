@@ -42,12 +42,16 @@ overlay, `q` quits.
 julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.test()'
 ```
 
-The suite drives a deterministic, seeded 60-tick scenario, checksums the resulting
-`CellBuffer` against a committed golden (`test/golden/frame60.sha256`), and asserts
-**glyph preservation**: when an asteroid is hit, `subprep` slices its already
--measured prose so every word survives in exactly one shard, in original order
-(`test/test_fracture.jl`). A human-readable snapshot of the full 120×40 golden
-frame lives at `test/golden/frame60.txt`.
+The suite checks three things independently:
+
+- **Render regression** — a deterministic, seeded showcase scene is drawn to a
+  `CellBuffer` and checksummed against a committed golden (`test/golden/frame60.sha256`);
+  a human-readable snapshot of the 116×36 frame lives at `test/golden/frame60.txt`.
+- **Glyph preservation** (`test/test_fracture.jl`) — when an asteroid is hit, `subprep`
+  slices its already-measured prose so every word survives in exactly one shard, in
+  original order (`rebuilt == original`).
+- **Tick-loop determinism / physics** (`test/test_game.jl`) — seeded `tick!` over the
+  game core (motion, charge, beam, respawn, invulnerability).
 
 ### The golden frame
 

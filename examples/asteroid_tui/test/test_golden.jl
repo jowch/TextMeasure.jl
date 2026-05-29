@@ -1,53 +1,52 @@
 # SPDX-License-Identifier: MIT
-using AsteroidTUI: new_game, tick!, draw!, Input, ScriptedInput, next_input!, CellBuffer,
-                   checksum, to_text
+using AsteroidTUI: new_game, draw!, CellBuffer, checksum, to_text, CellBackend, ship_visible
+import TextMeasure
 using Random
-using Test
 
 const GOLDEN_DIR = joinpath(@__DIR__, "golden")
 
-# Deterministic 60-tick scenario: charge straight up to max, release to fire, then
-# drift. The ship starts at the buffer center facing up (φ=0), so the beam travels
-# straight up the column; `_run_golden` parks asteroid 1 directly in that column so
-# the hit is GUARANTEED and deterministic (exercising voronoi_shatter + subprep).
-# MINOR #6: the drift rng is hoisted OUT of the loop so it actually varies tick to
-# tick (re-seeding inside would give a constant thrust — deterministic but misleading).
-function _scripted_seq()
-    seq = Input[]
-    drift_rng = Xoshiro(99)
-    for _ in 1:10; push!(seq, Input(fire=true));  end          # charge to max (caps at 5)
-    push!(seq, Input(fire=false))                              # release → launch beam up
-    for _ in 1:49; push!(seq, Input(thrust=(rand(drift_rng) > 0.5))); end
-    return seq
-end
+# Curated showcase prose — long enough that the dominant silhouette fills as a real
+# shaped-text MASS (the blob fills to the prose's glyph count, so a short blurb would
+# spread thin across a large shape). Hand-tuned copy, not the procedural template.
+const _HERO_PROSE =
+    "Born from the shattering of some long-dead world, this drifting massif of nickel and " *
+    "shadowed ice has wandered the cold reaches for an age, its pitted face a record of every " *
+    "blow the dark has dealt it, tumbling on without haste or heading through the long night " *
+    "between the scattered stars."
+const _MED_PROSE =
+    "Porous, fast, and faintly glittering, it drifts where the sunlight finally grows too thin " *
+    "to warm a stone."
 
+_prep(s) = TextMeasure.prepare(CellBackend(), s)
+
+# The committed showcase scene (design-reviewer pick, FEATURABLE): a single dominant
+# rounded text-mass (left-center, the engine shaping ~300 chars of prose into a
+# silhouette) + a smaller receding intact asteroid (upper-right) + the hunting ship
+# with thrust plume. Hand-placed for composition; velocities are NONZERO so the stat
+# readouts and the motion trails show the field in motion even in a still frame. The
+# silhouette POLYGONS come from `Xoshiro(38)` via `new_game`, so the whole frame is
+# deterministic and reproducible. This is a STATIC composed frame (no tick loop): the
+# headless tick-loop / determinism path is covered by test_game.jl, and the
+# order-exact fracture glyph-preservation acceptance by test_fracture.jl. This golden
+# is the render-regression anchor for the gallery showcase frame.
 function _run_golden()
-    # Showcase scene tuned to read cleanly as a presentation frame (operator's
-    # README-quality bar): 3 asteroids (uncrowded) at seed 45, which is verified to
-    # produce ZERO cross-entity glyph collisions and ZERO off-screen clipping at
-    # tick 60, so every label is individually legible (no run-together mangling, no
-    # orphaned edge fragments). The fracture still happens (shards scatter outward —
-    # see fracture_asteroid!), so the frame shows intact prose-asteroids plus a clean
-    # exploded-shard cluster.
-    g = new_game(Xoshiro(45); width=120, height=40, n_asteroids=3)
-    # Park asteroid 1 directly above the ship, stationary, so the straight-up beam
-    # reliably intersects it (deterministic fracture). Asteroid is mutable.
-    a = g.asteroids[1]
-    a.x = g.ship.x; a.y = g.ship.y - 6.0
-    a.vx = 0.0; a.vy = 0.0; a.ω = 0.0
-    a.radius = max(a.radius, 5.0)
-    si = ScriptedInput(_scripted_seq())
+    g = new_game(Xoshiro(38); width = 116, height = 36, n_asteroids = 2)
+    g.ship.x = 58.0; g.ship.y = 31.0; g.ship.φ = 0.0; g.ship.vx = 0.0; g.ship.vy = -0.15
+    a1, a2 = g.asteroids
+    a1.x = 32.0; a1.y = 18.0; a1.vx =  0.22; a1.vy = 0.10; a1.ω =  0.012; a1.radius = 10.0; a1.prep = _prep(_HERO_PROSE)
+    a2.x = 93.0; a2.y = 12.0; a2.vx = -0.18; a2.vy = 0.06; a2.ω = -0.02;  a2.radius =  6.0; a2.prep = _prep(_MED_PROSE)
     buf = CellBuffer(g.height, g.width)
-    for _ in 1:60
-        tick!(g, next_input!(si))
-    end
     draw!(buf, g)
     return g, buf
 end
 
-@testset "golden frame (60 ticks)" begin
+@testset "golden showcase frame" begin
     g, buf = _run_golden()
-    @test length(g.shards) >= 2                       # a fracture happened in-run
+    # Non-vacuous scene assertions (the frame is the gallery showcase, not a fracture).
+    @test length(g.asteroids) == 2
+    @test ship_visible(g)
+    @test count(!=(' '), buf.chars) > 200            # the dominant mass actually fills
+
     cs = checksum(buf)
     golden_path = joinpath(GOLDEN_DIR, "frame60.sha256")
     if get(ENV, "UPDATE_GOLDEN", "") == "1"
@@ -56,12 +55,9 @@ end
         write(joinpath(GOLDEN_DIR, "frame60.txt"), to_text(buf))
     end
     @test isfile(golden_path)
-    @test cs == strip(read(golden_path, String))      # regression anchor
+    @test cs == strip(read(golden_path, String))     # regression anchor
 
-    # NOTE on glyph preservation: the order-exact "each glyph once, IN ORDER"
-    # acceptance is enforced non-vacuously in test_fracture.jl
-    # (`rebuilt == original` against the specific shards a fracture produces).
-    # We deliberately do NOT re-check glyph order here against the time-evolved
-    # shard pool (43 ticks post-fracture, shards drift/expire) — a membership test
-    # at this layer would be order-insensitive and weak, so it is omitted by design.
+    # NOTE: fracture glyph-preservation (each glyph once, IN ORDER) is enforced
+    # non-vacuously in test_fracture.jl; tick-loop determinism in test_game.jl. This
+    # golden pins the *rendered showcase frame* only.
 end
