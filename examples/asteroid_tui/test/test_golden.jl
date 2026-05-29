@@ -21,8 +21,8 @@ _prep(s) = TextMeasure.prepare(CellBackend(), s)
 
 # The committed showcase scene (design-reviewer pick, FEATURABLE): a single dominant
 # rounded text-mass (left-center, the engine shaping ~300 chars of prose into a
-# silhouette) + a smaller receding intact asteroid (upper-right) + the ship (▲ nose
-# above ▮ hull, 8-way directional glyph). Hand-placed for composition; velocities are
+# silhouette) + a smaller receding intact asteroid (upper-right) + the ship (a single
+# 8-way arrow glyph — `↑` at φ=0). Hand-placed for composition; velocities are
 # NONZERO so the stat readouts show the field in motion even in a still frame. The
 # silhouette POLYGONS come from `Xoshiro(38)` via `new_game`, so the whole frame is
 # deterministic and reproducible. This is a STATIC composed frame (`draw!` only, no
