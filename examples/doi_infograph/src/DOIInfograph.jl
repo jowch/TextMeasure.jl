@@ -14,9 +14,9 @@ unusable alongside CairoMakie, so the S2 client is a thin HTTP wrapper here).
 module DOIInfograph
 
 using TextMeasure
-# `measure` / `font_metrics` are intentionally NOT exported by TextMeasure (backend
-# contract); import them explicitly so bare calls resolve after `using TextMeasure`.
-import TextMeasure: measure, font_metrics
+# `measure` is intentionally NOT exported by TextMeasure (backend contract); import it
+# explicitly so bare `measure(...)` calls resolve after `using TextMeasure`.
+import TextMeasure: measure
 using TextMeasureLayouts
 import HTTP, JSON3
 import TOML

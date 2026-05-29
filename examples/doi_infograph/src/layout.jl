@@ -17,61 +17,88 @@ _backend(fam::AbstractString, fs::Real) = MakieBackend(; font=fam, fontsize=Floa
 # Title autoshrink  (M2: fits(fs_min) guard + explicit clip contract)
 # ---------------------------------------------------------------------------
 
-# Ellipsize `lines` down to ≤2 lines that fit `box_width` at `backend`.
-function _clip_to_two(lines::Vector{String}, backend, box_width::Real)
-    length(lines) <= 2 && return lines
-    first_line = lines[1]
-    second = lines[2]
+# Truncate ONE line to fit `box_width` at `backend`, appending an ellipsis. Works on an
+# atomic (space-free) token by dropping trailing characters — TextMeasure only breaks at
+# whitespace, so an over-wide single token can only be shortened, not wrapped.
+function _fit_line(s::AbstractString, backend, box_width::Real)
+    measure(backend, s) <= box_width && return String(s)
+    ell = "…"; chars = collect(s)
+    for n in (length(chars) - 1):-1:0
+        cand = String(chars[1:n]) * ell
+        measure(backend, cand) <= box_width && return cand
+    end
+    return ell
+end
+
+# Reduce a layout's lines to ≤2 lines, each ≤ box_width. Returns (lines, clipped).
+# Handles BOTH overflow modes: 3+ lines (drop tail into an ellipsized line 2) AND a single
+# over-wide atomic token on a line (character-truncate it).
+function _clip_lines(lines::Vector{String}, backend, box_width::Real)
+    if length(lines) <= 1
+        only = isempty(lines) ? "" : lines[1]
+        fitted = _fit_line(only, backend, box_width)
+        return (String[fitted], fitted != only)
+    end
+    l1 = lines[1]
+    if measure(backend, l1) > box_width            # over-wide token already on line 1
+        return (String[_fit_line(l1, backend, box_width)], true)
+    end
     ell = "…"
-    # greedily append following words to the 2nd line, then trim to fit with an ellipsis
-    rest = join(lines[2:end], " ")
-    words = split(rest)
+    rest = split(join(lines[2:end], " "))
     acc = String[]
-    for w in words
-        cand = isempty(acc) ? w : join(vcat(acc, w), " ")
-        if measure(backend, cand * ell) > box_width
-            break
+    clipped = length(lines) > 2                    # 3+ lines ⇒ we will drop tail content
+    for w in rest
+        cand = isempty(acc) ? String(w) : join(vcat(acc, String(w)), " ")
+        if measure(backend, cand) > box_width
+            clipped = true; break
         end
         push!(acc, String(w))
     end
-    second = (isempty(acc) ? "" : join(acc, " ")) * ell
-    return [first_line, second]
+    l2 = join(acc, " ")
+    clipped && (l2 = _fit_line(l2 * ell, backend, box_width))
+    return (String[l1, l2], clipped)
 end
 
 """
     title_autoshrink(title; box_width, fs_min=14.0, fs_max=48.0, tol=0.5)
-        -> (; fontsize, nlines, lines, clipped)
+        -> (; fontsize, nlines, lines, clipped, line_advance)
 
-Largest fontsize in `[fs_min, fs_max]` (±`tol`) such that `title` wraps to ≤2 lines in
-`box_width`. Contract: the returned `lines` is ALWAYS ≤2 lines and never overflows
-`box_width`. If even `fs_min` needs 3+ lines, returns `fs_min` with the 2nd line
-ellipsized (`clipped=true`). Destructures positionally as `(fontsize, nlines) = ...`
-(NamedTuple iterates its values in field order).
+Largest fontsize in `[fs_min, fs_max]` (±`tol`) such that `title` wraps to ≤2 lines whose
+max line width fits `box_width`. Contract: the returned `lines` is ALWAYS ≤2 lines and
+ALWAYS fits `box_width` — including the pathological case of a single unbreakable token
+wider than the box, which is character-truncated with an ellipsis (`clipped=true`). If a
+fit is impossible at `fs_max`, the search clamps to `fs_min` and clips. Destructures
+positionally as `(fontsize, nlines) = ...` (NamedTuple iterates its values in field order).
 """
 function title_autoshrink(title::AbstractString; box_width::Real,
                           fs_min::Real=14.0, fs_max::Real=48.0, tol::Real=0.5)
     lay_at(fs) = layout(prepare(_backend(SANS, fs), title); max_width=box_width)
-    fits(fs)   = length(lay_at(fs).lines) <= 2
+    # BOTH halves of the contract: ≤2 lines AND the widest line fits the box. The width
+    # check catches an over-wide atomic token (which lays out to 1 line yet overflows).
+    fits(lay)  = length(lay.lines) <= 2 && lay.size[1] <= box_width
     lo, hi = Float64(fs_min), Float64(fs_max)
 
-    if fits(hi)                                   # already fits at max size
-        lay = lay_at(hi)
-        return (; fontsize=hi, nlines=length(lay.lines),
-                  lines=String[l.str for l in lay.lines], clipped=false)
+    layhi = lay_at(hi)
+    if fits(layhi)                                # already fits at max size
+        return (; fontsize=hi, nlines=length(layhi.lines),
+                  lines=String[l.str for l in layhi.lines], clipped=false,
+                  line_advance=layhi.metrics.line_advance)
     end
-    if !fits(lo)                                  # never fits in ≤2 lines → clamp + clip
-        lay  = lay_at(lo)
-        kept = _clip_to_two(String[l.str for l in lay.lines], _backend(SANS, lo), box_width)
-        return (; fontsize=lo, nlines=length(kept), lines=kept, clipped=true)
+    laylo = lay_at(lo)
+    if !fits(laylo)                               # impossible to fit → clamp + clip
+        lines, clipped = _clip_lines(String[l.str for l in laylo.lines], _backend(SANS, lo), box_width)
+        return (; fontsize=lo, nlines=length(lines), lines=lines, clipped=clipped,
+                  line_advance=laylo.metrics.line_advance)
     end
     best = lo                                     # binary search for largest fitting fs
     while hi - lo > tol
         mid = (lo + hi) / 2
-        if fits(mid); best = mid; lo = mid else hi = mid end
+        if fits(lay_at(mid)); best = mid; lo = mid else hi = mid end
     end
     lay = lay_at(best)
     return (; fontsize=best, nlines=length(lay.lines),
-              lines=String[l.str for l in lay.lines], clipped=false)
+              lines=String[l.str for l in lay.lines], clipped=false,
+              line_advance=lay.metrics.line_advance)
 end
 
 # ---------------------------------------------------------------------------
@@ -86,6 +113,9 @@ _author_label(a::AuthorRef) =
 
 Greedily fit author labels into `row_width`. If all fit, returns `(authors, false)`.
 Otherwise returns the prefix that fits alongside a reserved `et al.` slot, and `true`.
+`row_width` is advisory: at least one author is always shown, so a single label wider than
+`row_width` (plus `et al.`) is kept anyway and will overflow — acceptable for real author
+names, which are far narrower than a title box.
 """
 function fit_authors(authors::Vector{AuthorRef}, backend; row_width::Real,
                      sep::AbstractString=", ", etal_str::AbstractString=" et al.")
@@ -158,13 +188,13 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    wrap_pills(pills, backend; strip_width, pad=14.0, gap=6.0) -> Vector{Vector{String}}
+    wrap_pills(pills, backend; strip_width, pad=8.0, gap=6.0) -> Vector{Vector{String}}
 
 Greedy row-wrap of concept pills (each an atomic segment of width `measure+2·pad`) into
 `strip_width`, separated horizontally by `gap`. A pill wider than the strip gets its own row.
 """
 function wrap_pills(pills::Vector{<:AbstractString}, backend; strip_width::Real,
-                    pad::Real=14.0, gap::Real=6.0)
+                    pad::Real=8.0, gap::Real=6.0)
     rows = Vector{String}[]
     cur = String[]; w = 0.0
     for p in pills
@@ -190,7 +220,9 @@ const _SPARK_BLOCKS = collect("▁▂▃▄▅▆▇█")
     citation_sparkline(by_year, backend; target_width) -> String
 
 Unicode block-character sparkline of the citation timeline, padded/trimmed so its measured
-width matches `target_width` within ±1 glyph.
+width matches `target_width` to within one block-glyph advance. "One glyph" is the WIDEST
+block advance, so the bound holds regardless of which block is added/removed (block advances
+can differ; padding uses the lowest block `▁`, the tolerance uses the widest).
 """
 function citation_sparkline(by_year::Vector{Tuple{Int,Int}}, backend; target_width::Real)
     isempty(by_year) && return ""
@@ -199,7 +231,9 @@ function citation_sparkline(by_year::Vector{Tuple{Int,Int}}, backend; target_wid
     n  = length(_SPARK_BLOCKS)
     chars = [_SPARK_BLOCKS[clamp(ceil(Int, c / mx * n), 1, n)] for c in counts]
     s = String(chars)
-    glyphw = measure(backend, string(_SPARK_BLOCKS[1]))
+    # tolerance = widest block advance, so the ±1-glyph bound holds for any block (the test
+    # and docstring agree on this); padding still uses the lowest block (low-citation years).
+    glyphw = maximum(measure(backend, string(c)) for c in _SPARK_BLOCKS)
     glyphw <= 0 && return s
     while target_width - measure(backend, s) > glyphw            # pad with low blocks
         s *= string(_SPARK_BLOCKS[1])
@@ -293,7 +327,7 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
 
     # --- title (autoshrink, ≤2 lines guaranteed) ---
     t = title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=min(40.0, 0.11H))
-    tla = prepare(_backend(SANS, t.fontsize), "M").metrics.line_advance   # baseline-to-baseline
+    tla = t.line_advance                          # baseline-to-baseline (from the autoshrink layout)
     for ln in t.lines
         _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SANS, color=_INK)
         y += tla
@@ -343,9 +377,9 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
             seg = prep.segments[p.segment_index]
             _text!(sc, f, M + p.x, body_top + p.y, seg.str; fontsize=body_fs, font=SERIF, color=_INK)
         end
-        # drop cap glyph
+        # drop cap glyph (baseline ≈ first body line's baseline)
         dcfs = 3 * body_fs
-        _text!(sc, f, M, body_top + la + dcfs*0.0 + (prep.metrics.ascent), string(first(strip(body)));
+        _text!(sc, f, M, body_top + la + prep.metrics.ascent, string(first(strip(body)));
                fontsize=dcfs, font=SERIF, color=_ACCENT, align=(:left, :baseline))
         y = body_top + body_h + 10
     else

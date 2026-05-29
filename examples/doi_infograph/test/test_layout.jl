@@ -36,6 +36,21 @@ const _D = DOIInfograph
         @test endswith(r.lines[end], "…")
     end
 
+    @testset "width contract: over-wide unbreakable token is clipped to fit" begin
+        # a single ~60-char token with no whitespace cannot wrap (TextMeasure breaks only at
+        # whitespace) and is wider than the box even at fs_min → must be char-truncated, not
+        # returned over-wide. This is the width half of the M2/M3 contract.
+        giant = "Gross"^12                         # 60 chars, no spaces, atomic
+        box = 200.0
+        r = title_autoshrink(giant; box_width=box, fs_min=14.0, fs_max=48.0)
+        @test r.nlines <= 2
+        @test r.clipped == true
+        @test r.fontsize == 14.0                   # clamped to min, still cannot fit unbroken
+        b = _D._backend(_D.SANS, r.fontsize)
+        @test all(ln -> measure(b, ln) <= box + 1e-6, r.lines)   # size[1] ≤ box_width
+        @test endswith(r.lines[end], "…")
+    end
+
     @testset "M3: slot-4 long title renders ≤2 lines, no overflow" begin
         # the 125-char arXiv title is the declared autoshrink stress; verify the rendered
         # title is ≤2 lines AND every line fits the title box at the chosen fontsize.
