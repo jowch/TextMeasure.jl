@@ -75,3 +75,31 @@ boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
     end
     @test n_west > 0 && n_east > 0                           # both columns genuinely populated
 end
+
+@testset "POI labels are OUTBOARD: clear of the silhouette and on the correct side margin" begin
+    L = MapFeature._compose_layout(load_vermont(), load_pois())
+    poly, mc = L.poly_px, L.map_center
+    left_x = MapFeature.MARGIN
+    right_x = MapFeature.PAGE_W - MapFeature.MARGIN
+    placed = 0
+    for (i, p) in enumerate(load_pois())
+        b = L.labelboxes[i]; b === nothing && continue
+        placed += 1
+        a = L.anchors[i]
+        # (1) label sits at its side's page margin (outboard), not floating mid-column/on the map
+        if a[1] < mc
+            @test isapprox(b.x, left_x; atol=1e-6)              # west: left-anchored at the margin
+        else
+            @test isapprox(b.x + b.w, right_x; atol=1e-6)       # east: right edge on the margin
+        end
+        # (2) label box is horizontally clear of the silhouette envelope over its whole height
+        env = envelope_over(poly, b.y, b.y + b.h)
+        if env !== nothing
+            el, er = env
+            @test b.x + b.w <= el + 1e-6 || b.x >= er - 1e-6
+        end
+        # (3) within the page content box
+        @test b.y >= L.region_top - 1e-6 && b.y + b.h <= L.region_bottom + 1e-6
+    end
+    @test placed >= length(load_pois()) - 2                     # at most a couple dropped
+end

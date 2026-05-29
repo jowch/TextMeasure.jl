@@ -41,9 +41,14 @@ const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip)   # fill def
 
 _region_bottom() = PAGE_H - MARGIN - FOOTER_CLEAR
 
-_marker_glyph(kind::Symbol) = kind === :capital ? '★' :
-                              kind === :city     ? '●' :
-                              kind === :landmark ? '◆' : '▲'
+# Marker glyph by role; :feature splits into water (≈) vs peak (▲) so the legend stays consistent.
+function _marker_glyph(p::POI)
+    p.kind === :capital  && return '★'
+    p.kind === :city     && return '●'
+    p.kind === :landmark && return '◆'
+    occursin(r"lake|river|pond"i, p.name) && return '≈'   # water feature, not a summit
+    return '▲'                                            # peak / mountain feature
+end
 
 # 643077 -> "643,077"
 _commas(n::Integer) = replace(string(n), r"(?<=[0-9])(?=(?:[0-9]{3})+$)" => ",")
@@ -111,8 +116,9 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
         (TextMeasure.measure(label_backend, p.name) * wscale + 4.0,
          (p.kind === :capital ? SZ_SUBHEAD + 3.0 : SZ_BODY + 2.0))
     end
-    canvas = (MARGIN, region_top, PAGE_W - MARGIN, region_bottom)
-    labelboxes = place_poi_labels(anchors, sizes; offset=7.0, margin=2.0, bounds=canvas)
+    # OUTBOARD labels: pushed to the page side-margins (clear of silhouette AND prose), leader-linked.
+    labelboxes = place_margin_labels(anchors, sizes, map_center, MARGIN, PAGE_W - MARGIN,
+                                     region_top, region_bottom)
 
     # Grow placed label boxes into body-exclusion rects (+2px x; ±ascent/descent y for adjacent bands).
     bm = TextMeasure.font_metrics(body_backend)
@@ -179,14 +185,23 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
         end
     end
 
-    # POIs: RED markers + the labels placed in _compose_layout (the boxes the body flowed around)
+    # leader lines (1px gray) from each outboard label's inner edge to its on-map dot — drawn first
+    leader = CM.RGBAf(0.420, 0.447, 0.502, 0.55)
+    for (i, _) in enumerate(points_of_interest)
+        b = L.labelboxes[i]; b === nothing && continue
+        a = L.anchors[i]
+        inner_x = a[1] < L.map_center ? b.x + b.w : b.x        # edge of the box facing the map
+        CM.lines!(scene, [inner_x, a[1]], [flip(b.y + b.h/2), flip(a[2])];
+                  color=leader, linewidth=1.0)
+    end
+
+    # RED markers on the dots, then the outboard labels
     for (i, p) in enumerate(points_of_interest)
         a = L.anchors[i]
-        CM.text!(scene, a[1], flip(a[2]); text=string(_marker_glyph(p.kind)),
+        CM.text!(scene, a[1], flip(a[2]); text=string(_marker_glyph(p)),
                  font=SANS, fontsize=(p.kind === :capital ? 16 : 11),
                  align=(:center, :center), color=C_RED)
-        b = L.labelboxes[i]
-        b === nothing && continue
+        b = L.labelboxes[i]; b === nothing && continue
         CM.text!(scene, b.x, flip(b.y + b.h); text=p.name, font=SANS,
                  fontsize=(p.kind === :capital ? SZ_SUBHEAD : SZ_BODY),
                  align=(:left, :baseline), color=C_TEXT)
