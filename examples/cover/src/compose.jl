@@ -179,7 +179,14 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
 
     # ---- pack the body ----
     # fill=:all flows body text on BOTH sides of the inset (see FILL_MODE / TWO_SIDED_WRAP).
-    packed = shape_pack(body_prep, chord; line_advance = la, min_chord_width = 24.0,
+    # min_chord_width = the widest body word: any interval kept is wide enough to hold the
+    # first word, so :widest_row NEVER overflow-places an over-wide word past the inset edge
+    # (which would put body text on top of the inset). Strips too narrow for the widest word
+    # are skipped, and their words flow to a wider interval / the next band — no overlap, no
+    # dropped text. Content-adaptive, so it holds for any body.
+    max_word = maximum((s.width for s in body_prep.segments if s.kind === :word); init = 0.0)
+    mcw = max(24.0, max_word + 1.0)
+    packed = shape_pack(body_prep, chord; line_advance = la, min_chord_width = mcw,
                         fill = FILL_MODE)
 
     # ---- absolute body runs + bboxes ----

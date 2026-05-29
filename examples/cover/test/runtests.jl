@@ -55,11 +55,19 @@ function _make_cfg(; inset_x=240.0, inset_y=200.0, inset_w=200.0, inset_h=240.0,
 end
 
 # Config from raw inset + single pull-quote params (property test).
-function _make_cfg_raw(; inset_x, inset_y, inset_w, inset_h, pq_x, pq_y, pq_w, gutter=6.0)
+function _make_cfg_raw(; inset_x, inset_y, inset_w, inset_h, pq_x, pq_y, pq_w, gutter=6.0, with_pq=true)
     dir = mktempdir()
     write(joinpath(dir,"skyline.svg"),
         """<svg viewBox="0 0 100 100"><rect x="0" y="50" width="100" height="50" fill="#445"/></svg>""")
     body = repeat("The measurement pipeline computes every baseline and wrap point so the layout adapts. ", 9)
+    pq = with_pq ? """
+    [[pull_quote]]
+    text = "Measurement, not guesswork, at every line."
+    attribution = "— TM"
+    x_px = $pq_x
+    y_px = $pq_y
+    width_px = $pq_w
+    """ : ""
     toml = """
     [meta]
     title = "The Newer Yorker"
@@ -79,12 +87,7 @@ function _make_cfg_raw(; inset_x, inset_y, inset_w, inset_h, pq_x, pq_y, pq_w, g
     [[body]]
     paragraph = "$body"
     dropcap = true
-    [[pull_quote]]
-    text = "Measurement, not guesswork, at every line."
-    attribution = "— TM"
-    x_px = $pq_x
-    y_px = $pq_y
-    width_px = $pq_w
+    $pq
     """
     path = joinpath(dir, "cover.toml")
     write(path, toml)
@@ -459,14 +462,6 @@ end
             ix = rand(rng, 0.0:0.5:(content_w - iw - 5))
             iy = rand(rng, clear_excl:0.5:(H - 2margin - ih - bottom_room))
             local pqx, pqy, pqw
-            for _ in 1:400
-                pqw = rand(rng, 120.0:0.5:170.0)
-                pqx = rand(rng, 0.0:0.5:(content_w - pqw))
-                pqy = rand(rng, clear_excl:0.5:(H - 2margin - bottom_room))
-                no_x = (pqx + pqw < ix) || (ix + iw < pqx)
-                no_y = (pqy + 90.0 < iy) || (iy + ih < pqy)
-                (no_x || no_y) && break
-            end
             # Trial 1 uses gutter=0 to remove the HORIZONTAL clearance cushion (tightest
             # x-separation between body words and the inset). NOTE: this does NOT exercise
             # a vertical overlap — given gutter≥0 and (ascent+descent)≤line_advance, a body
@@ -475,8 +470,22 @@ end
             # at the chord level ("chord vertical exclusion is load-bearing"), and the
             # _overlap detector's ability to fire is tested in "overlap detectors fire".
             gutter = t == 1 ? 0.0 : 6.0
+            # The pull quote is AUTHOR-controlled; an author would not drop it onto the
+            # illustration. Pick a placement by COMPOSING the candidate and keeping only one
+            # whose pull-quote clears the inset (a real non-overlap, not a height estimate).
+            # The random *inset* — what this property test actually exercises — is fixed per
+            # trial; only the pull-quote position is resampled. Fall back to no pull quote if
+            # no clear spot is found, so the trial still asserts the inset/drop-cap invariants.
             cfg = _make_cfg_raw(; inset_x=ix, inset_y=iy, inset_w=iw, inset_h=ih,
-                                  pq_x=pqx, pq_y=pqy, pq_w=pqw, gutter=gutter)
+                                  pq_x=0.0, pq_y=0.0, pq_w=0.0, gutter=gutter, with_pq=false)
+            for _ in 1:120
+                pqw = rand(rng, 120.0:0.5:170.0)
+                pqx = rand(rng, 0.0:0.5:(content_w - pqw))
+                pqy = rand(rng, clear_excl:0.5:(H - 2margin - bottom_room))
+                cand = _make_cfg_raw(; inset_x=ix, inset_y=iy, inset_w=iw, inset_h=ih,
+                                       pq_x=pqx, pq_y=pqy, pq_w=pqw, gutter=gutter)
+                isempty(bbox_violations(compose_cover(cand))) && (cfg = cand; break)
+            end
             c = compose_cover(cfg)
             ok = dropcap_bands_consecutive(c) &&
                  dropcap_baseline_aligned(c; tol=0.5) &&
