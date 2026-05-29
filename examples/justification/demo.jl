@@ -44,9 +44,9 @@ const RIVER_COL = RGBf(0.86, 0.21, 0.18)   # warm red for river channels
 # top→bottom. (Using yreversed instead double-flipped the content; see git history.)
 _baseline(prep, i) = prep.metrics.ascent + (i - 1) * prep.metrics.line_advance * LEAD
 
-# Draw one justified column into `ax` (data units = px; block-top frame via yreversed).
+# Draw one justified column into `ax` (data units = px; y negated for Makie's y-up axis).
 # Returns the rendered block height.
-function _draw_column!(ax, prep, lay::JustifiedLayout, colwidth; show_rivers::Bool)
+function _draw_column!(ax, prep, lay::JustifiedLayout; show_rivers::Bool)
     space_w = prep.segments[2].width
     nlines = length(lay.lines)
     total_h = nlines == 0 ? FONTSIZE : _baseline(prep, nlines) + prep.metrics.descent
@@ -78,56 +78,66 @@ function _draw_column!(ax, prep, lay::JustifiedLayout, colwidth; show_rivers::Bo
     end
     text!(ax, xs, ys; text=strs, align=(:left, :baseline), font=BODY_FONT,
           fontsize=FONTSIZE, markerspace=:data, color=:black)
-
-    # Faint measure rule at the right edge of the column.
-    lines!(ax, [colwidth, colwidth], [0.3 * FONTSIZE, -total_h];
-           color=(:gray, 0.35), linewidth=1, linestyle=:dash)
     return total_h
 end
+
+# Configure one fixed-size, decoration-free axis sized 1:1 to its content (no letterboxing).
+function _column_axis(cell, prep, lay, w, title, titlecolor)
+    total_h = _baseline(prep, length(lay.lines)) + prep.metrics.descent
+    xlo, xhi = -8.0, w + 14.0
+    ylo, yhi = -(total_h + 0.6 * FONTSIZE), 0.9 * FONTSIZE   # y-up: line 1 near the top
+    ax = Axis(cell; title=title, titlefont=LABEL_FONT, titlesize=11 * SCALE, titlegap=6,
+              titlecolor=titlecolor, backgroundcolor=:white, halign=:left, valign=:top,
+              width=xhi - xlo, height=yhi - ylo)
+    hidedecorations!(ax); hidespines!(ax)
+    limits!(ax, xlo, xhi, ylo, yhi)
+    return ax
+end
+
+_badge(alg, measure, lay, nr) =
+    "$(alg) · $(measure)\nbadness $(round(lay.total_badness; digits=1)) · " *
+    "$(nr) river" * (nr == 1 ? "" : "s")
 
 function render_comparison(outpath::AbstractString=joinpath(@__DIR__, "comparison.pdf"))
     backend = MakieBackend(; font=BODY_FONT, fontsize=FONTSIZE, px_per_unit=1.0)
     prep = prepare(backend, CANONICAL_PARAGRAPH)
     space_w = prep.segments[2].width
 
-    cols = [
-        ("Greedy",       "generous measure", greedy_justify(prep; max_width=WIDE_PX),   WIDE_PX,   false),
-        ("Greedy",       "tight measure",    greedy_justify(prep; max_width=NARROW_PX), NARROW_PX, true),
-        ("Knuth–Plass",  "tight measure",    knuth_plass(prep; max_width=NARROW_PX),    NARROW_PX, true),
-    ]
+    A = greedy_justify(prep; max_width=WIDE_PX)     # generous measure — baseline (0 rivers)
+    B = greedy_justify(prep; max_width=NARROW_PX)    # tight measure, greedy — pools rivers
+    C = knuth_plass(prep;    max_width=NARROW_PX)    # tight measure, K-P — minimizes them
+    nA = length(find_rivers(A; align_tol=space_w))
+    nB = length(find_rivers(B; align_tol=space_w))
+    nC = length(find_rivers(C; align_tol=space_w))
+    green = RGBf(0.13, 0.40, 0.20)
 
-    # Each column's axis box is fixed to its OWN content size (1 data unit = 1 px), so text
-    # fills the panel with no DataAspect letterboxing. Top-aligned so the three panels read
-    # as a deliberate comparison strip; resize_to_layout! trims the figure to the content.
-    fig = Figure(backgroundcolor=:white)
-    Label(fig[0, 1:3], "Greedy line-breaking pools rivers; Knuth–Plass minimizes them";
-          font=LABEL_FONT, fontsize=14 * SCALE, halign=:center, padding=(0, 0, 2, 6))
+    # Balanced composition (avoids the wide-ribbon aspect of three columns in a row): the
+    # generous-measure baseline (A) spans the top full width; the two TIGHT-measure columns
+    # — greedy (B) vs Knuth–Plass (C) — sit side by side beneath it, so the key comparison
+    # stays side-by-side at equal height. Each axis box is fixed 1:1 to its content (no
+    # DataAspect letterboxing); resize_to_layout! trims the figure to the content.
+    fig = Figure(backgroundcolor=:white, figure_padding=(10, 10, 8, 8))
+    Label(fig[1, 1:2], "Greedy line-breaking pools rivers; Knuth–Plass minimizes them";
+          font=LABEL_FONT, fontsize=15 * SCALE, halign=:left, padding=(0, 0, 2, 4))
 
-    for (c, (alg, measure, lay, w, show_rivers)) in enumerate(cols)
-        nr = length(find_rivers(lay; align_tol=space_w))
-        title = "$(alg) · $(measure)\nbadness $(round(lay.total_badness; digits=1)) · " *
-                "$(nr) river" * (nr == 1 ? "" : "s")
-        total_h = _baseline(prep, length(lay.lines)) + prep.metrics.descent
-        xlo, xhi = -8.0, w + 14.0
-        # y-up axis: top = +0.9·FONTSIZE (just above line-1 baseline), bottom = -(total_h+pad).
-        ylo, yhi = -(total_h + 0.7 * FONTSIZE), 0.9 * FONTSIZE
-        ax = Axis(fig[1, c]; title=title, titlefont=LABEL_FONT, titlesize=11 * SCALE,
-                  titlegap=6, titlecolor=(c == 3 ? RGBf(0.13, 0.40, 0.20) : :black),
-                  backgroundcolor=:white, valign=:top,
-                  width=xhi - xlo, height=yhi - ylo)
-        hidedecorations!(ax); hidespines!(ax)
-        _draw_column!(ax, prep, lay, w; show_rivers=show_rivers)
-        limits!(ax, xlo, xhi, ylo, yhi)   # 1:1 with the fixed box ⇒ no letterboxing
-    end
+    axA = _column_axis(fig[2, 1:2], prep, A, WIDE_PX, _badge("Greedy", "generous measure", A, nA), :black)
+    _draw_column!(axA, prep, A; show_rivers=false)
 
-    Label(fig[2, 1:3],
+    axB = _column_axis(fig[3, 1], prep, B, NARROW_PX, _badge("Greedy", "tight measure", B, nB), :black)
+    _draw_column!(axB, prep, B; show_rivers=true)
+
+    axC = _column_axis(fig[3, 2], prep, C, NARROW_PX, _badge("Knuth–Plass", "tight measure", C, nC), green)
+    _draw_column!(axC, prep, C; show_rivers=true)
+
+    Label(fig[4, 1:2],
           "Same paragraph, set three ways. A river (red) is a run of inter-word gaps " *
-          "aligned across ≥3 lines.\nAt a tight measure greedy pools them; Knuth–Plass " *
+          "aligned across ≥3 lines. At a tight\nmeasure greedy pools them; Knuth–Plass " *
           "minimizes total badness and breaks them up — at roughly half the badness.";
-          font=LABEL_FONT, fontsize=9 * SCALE, color=(:black, 0.65), halign=:center,
-          justification=:center, padding=(0, 0, 12, 2))
+          font=LABEL_FONT, fontsize=9 * SCALE, color=(:black, 0.6), halign=:left,
+          justification=:left, padding=(0, 0, 10, 0))
 
-    rowgap!(fig.layout, 6)
+    rowgap!(fig.layout, 8)
+    colgap!(fig.layout, 16)
     resize_to_layout!(fig)
     save(outpath, fig)
     return abspath(outpath)
