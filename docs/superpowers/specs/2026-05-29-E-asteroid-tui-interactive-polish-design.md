@@ -421,6 +421,8 @@ not trusted on report.
   `test-logs/$CLAUDE_CODE_SESSION_ID.log` per the root CLAUDE.md.
 - `examples/asteroid_tui/Manifest.toml` stays **gitignored** ([[demos-manifest-not-committed]]);
   commit `Project.toml` only and instantiate on a fresh clone.
+- The demo project pins `julia = "1.12"` and `Tachikoma = "2.1.0"` (`Project.toml`); new code and
+  tests must stay within that floor and must not need a Tachikoma API beyond 2.1.0's surface.
 
 ## Files touched
 
@@ -435,7 +437,7 @@ not trusted on report.
 | `run.jl` | rewrite the controls banner (`run.jl:3-5`) for twin-stick |
 | `test/test_gameloop.jl`, `test/test_game.jl`, `test/test_draw.jl` | new `Input` field set; replace `test_game.jl:13` turn-assertion; harden index-identity asserts (`test_gameloop.jl:101`, `test_game.jl:22-23`); keep `test_draw.jl:18-21` determinism; new headless collision/death/replenish + `sweep_stale!`/`fold_input`/wrap-delta unit tests |
 | `test/test_fracture.jl` | callers pass `impact` as a cell-space offset (new frame contract); keep lossless-glyph-preservation assertions |
-| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified; update the stale "thrust plume" comment in `test_golden.jl:27` (block `:21-31`) |
+| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified; update the stale "thrust plume" comment in `test_golden.jl:24-25` (block `:21-31`) |
 
 ## Open tuning knobs (resolved at implementation, not design)
 
