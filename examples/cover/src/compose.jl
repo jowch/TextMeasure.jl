@@ -6,16 +6,17 @@
 # checked against the value it returns, per the issue's "verify at layout time" rule.
 
 # Fixed display metrics (points). Fonts are pinned constants (Cover.jl).
-const TITLE_SIZE    = 44.0
+const TITLE_SIZE    = 52.0
 const SUBTITLE_SIZE = 18.0
-const BYLINE_SIZE   = 12.0
+const BYLINE_SIZE   = 11.0
 const BODY_SIZE     = 11.0
-const PQ_SIZE       = 14.0
+const PQ_SIZE       = 15.0
 const PQ_ATTR_SIZE  = 11.0
-const SUBTITLE_GAP  = 6.0
-const BYLINE_GAP    = 10.0
-const BODY_GAP      = 20.0
+const SUBTITLE_GAP  = 7.0
+const BYLINE_GAP    = 9.0
+const BODY_GAP      = 22.0
 const DROPCAP_GAP   = 6.0      # horizontal space after the drop cap
+const PQ_RULE_GAP   = 6.0      # gap between a pull-quote and its bracketing rules
 
 # WRAP-AROUND (#H ↔ #C2, WIRED): with `fill=:all`, shape_pack packs EVERY disjoint
 # interval per band left-to-right, so body text flows on BOTH sides of a centered inset
@@ -52,6 +53,7 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
 
     # ---- masthead ----
     masthead = PlacedText[]
+    rules = NTuple{4,Float64}[]
     tb = _mk(TITLE_FONT, TITLE_SIZE);     tm = TextMeasure.font_metrics(tb)
     cur = content_top + tm.ascent
     title_w = TextMeasure.measure(tb, cfg.title)
@@ -71,6 +73,9 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
         push!(masthead, PlacedText(cfg.byline, content_left + (content_w - bw)/2, cur, BYLINE_SIZE, BYLINE_FONT))
         cur += bm.descent
     end
+    # editorial hairline separating the masthead from the body column
+    rule_y = cur + BODY_GAP * 0.5
+    push!(rules, (content_left, rule_y, content_right, rule_y))
     body_top = cur + BODY_GAP
 
     # ---- body backend / metrics ----
@@ -134,19 +139,26 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     pq_holes = BBox[]
     for pq in cfg.pull_quotes
         pql = pq.x_px + m; pqt = pq.y_px + m
+        # top hairline of the callout, then the quote text, then a bottom hairline.
+        top_rule_y = pqt
+        text_top   = top_rule_y + PQ_RULE_GAP
         lay = layout(prepare(pq_be, pq.text); max_width = pq.width_px)
         runs = PlacedText[]
         for ln in lay.lines
-            push!(runs, PlacedText(ln.str, pql + ln.x, pqt + ln.baseline, PQ_SIZE, PQ_FONT))
+            cx = pql + (pq.width_px - ln.width) / 2        # centered callout lines
+            push!(runs, PlacedText(ln.str, cx, text_top + ln.baseline, PQ_SIZE, PQ_FONT))
         end
-        pq_h = lay.size[2]
+        text_bottom = text_top + lay.size[2]
         if !isempty(pq.attribution)
-            ab = pqt + pq_h + PQ_ATTR_SIZE * 0.4 + pqam.ascent
+            ab = text_bottom + PQ_ATTR_SIZE * 0.4 + pqam.ascent
             aw = TextMeasure.measure(pqa_be, pq.attribution)
             push!(runs, PlacedText(pq.attribution, pql + pq.width_px - aw, ab, PQ_ATTR_SIZE, PQ_ATTR_FONT))
-            pq_h = (ab + pqam.descent) - pqt
+            text_bottom = ab + pqam.descent
         end
-        bbox = BBox(pql, pqt, pql + pq.width_px, pqt + pq_h)
+        bot_rule_y = text_bottom + PQ_RULE_GAP
+        push!(rules, (pql, top_rule_y, pql + pq.width_px, top_rule_y))
+        push!(rules, (pql, bot_rule_y, pql + pq.width_px, bot_rule_y))
+        bbox = BBox(pql, top_rule_y, pql + pq.width_px, bot_rule_y)
         push!(pull_quotes, PullQuotePlaced(runs, bbox))
         push!(pq_holes, bbox)
     end
@@ -176,7 +188,8 @@ function compose_cover(cfg::CoverConfig)::ComposedCover
     end
 
     return ComposedCover((W,H), masthead, packed, body_top, body_runs, body_bboxes,
-                         dropcap, dropcap_baseline, dropcap_bbox, D, inset_rect, inset_rings, pull_quotes)
+                         dropcap, dropcap_baseline, dropcap_bbox, D, inset_rect, inset_rings,
+                         pull_quotes, rules)
 end
 
 # Distinct body-line baselines (body-local), sorted ascending.

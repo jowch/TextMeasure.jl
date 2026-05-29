@@ -415,7 +415,7 @@ end
         dc_bad = BBox(120.0, 120.0, 150.0, 160.0)               # inside inset
         pqp = Cover.PullQuotePlaced(PlacedText[], BBox(110.0, 110.0, 190.0, 130.0))  # inside inset
         c = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[], bad_body,
-                          nothing, NaN, dc_bad, 3, inset, [], [pqp])
+                          nothing, NaN, dc_bad, 3, inset, [], [pqp], NTuple{4,Float64}[])
         @test !body_wrap_honors_inset(c)
         v = bbox_violations(c)
         @test (:body_inset, 1, 0) in v
@@ -426,7 +426,7 @@ end
         # clean control: same inset, body word well clear -> no findings
         c2 = ComposedCover((300.0, 300.0), PlacedText[], pk, 0.0, PlacedText[],
                            [BBox(10.0, 10.0, 40.0, 30.0)], nothing, NaN, nothing, 3,
-                           inset, [], Cover.PullQuotePlaced[])
+                           inset, [], Cover.PullQuotePlaced[], NTuple{4,Float64}[])
         @test body_wrap_honors_inset(c2)
         @test isempty(bbox_violations(c2))
     end

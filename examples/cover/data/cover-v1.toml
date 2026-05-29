@@ -14,10 +14,10 @@ gutter_px     = 7
 # sides and then re-merges to full width below it (fill=:all two-sided wrap).
 [inset]
 svg_path  = "skyline.svg"
-x_px      = 177
+x_px      = 172
 y_px      = 196
-width_px  = 150
-height_px = 150
+width_px  = 160
+height_px = 160
 
 [[body]]
 dropcap   = true
@@ -37,7 +37,27 @@ Because the packer fills every interval a band offers, the column wraps on both 
 
 [[body]]
 paragraph = """
-Widen the inset, narrow it, or slide it toward either edge of the column, and the surrounding prose simply rebalances around the new shape. The measurements do not care where the picture lands. They report how much room each line has, and the greedy packer takes it from there.
+Type is measured before it is drawn. Each word takes its advance width from the very font the renderer will use, so the wrap the engine predicts is the wrap that you see, down to the pixel, with no quiet disagreement between the plan and the printed page.
+"""
+
+[[body]]
+paragraph = """
+The drop cap is no exception to the rule. Its size is solved from the body line height so that its cap sits on the first line and its foot rests on the last, and the text steps neatly around its box without anyone ever reaching for a ruler.
+"""
+
+[[body]]
+paragraph = """
+A pull quote is simply another region the text agrees to avoid. Drop it anywhere into the column and the prose parts cleanly around it, the way water finds its level, because this layout is a consequence of measurement rather than a long series of nudges.
+"""
+
+[[body]]
+paragraph = """
+Widen the inset, narrow it, or slide it toward either edge of the column, and the surrounding prose rebalances around the new shape. The measurements do not care where the picture lands. They report how much room each line has, and the greedy packer takes it from there.
+"""
+
+[[body]]
+paragraph = """
+Change the page from letter to A4 and the margins, the column, and the wrap all follow without complaint. The cover is not a fixed arrangement of boxes. It is a function of its inputs, evaluated fresh every single time that you ask the engine for it.
 """
 
 [[body]]
@@ -46,8 +66,8 @@ So the page is a proof rather than a paste up. What you are reading flowed aroun
 """
 
 [[pull_quote]]
-text        = "Measure once. Lay out many times. Never nudge."
+text        = "The page is a proof, not a paste-up."
 attribution = "— the thesis"
-x_px        = 40
-y_px        = 600
-width_px    = 170
+x_px        = 150
+y_px        = 470
+width_px    = 204

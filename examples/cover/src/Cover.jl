@@ -117,6 +117,7 @@ struct ComposedCover
     inset_rect       :: BBox
     inset_rings      :: Vector          # Vector{SvgRing} from svg.jl
     pull_quotes      :: Vector{PullQuotePlaced}
+    rules            :: Vector{NTuple{4,Float64}}   # editorial hairlines (x1,y1,x2,y2), abs
 end
 
 include("config.jl")

@@ -36,6 +36,11 @@ function render_scene(c::ComposedCover)
             MK.lines!(sc, seg; color = _rgb(r.stroke), linewidth = r.stroke_width)
         end
     end
+    # editorial hairlines (masthead separator + pull-quote brackets)
+    for (x1, y1, x2, y2) in c.rules
+        MK.lines!(sc, [MK.Point2f(x1, H - y1), MK.Point2f(x2, H - y2)];
+                  color = :black, linewidth = 0.8)
+    end
     # masthead + body + drop cap + pull quotes
     for t in c.masthead; _draw_text!(sc, H, t); end
     c.dropcap !== nothing && _draw_text!(sc, H, c.dropcap)
