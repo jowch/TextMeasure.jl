@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> The release tag (v0.2.0) is **deferred** until the Asteroid TUI demo (#E, draft
+> PR [#26](https://github.com/jowch/TextMeasure.jl/pull/26)) lands; the work below
+> stays under `[Unreleased]` until then.
+
 ### Added
+
+#### Engine
 
 - `subprep(prep, r)` + `Prepared(; segments, metrics)` kwargs constructor: slice a
   `Prepared` over a segment sub-range, reusing measured widths (no re-measurement).
@@ -30,5 +36,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `layout(prep; max_width, align, lineheight)`: pure greedy line-breaking over a `Prepared`,
   producing aligned lines and overall block extent.
 - `line_top(lay, ln)`: top-left y of a laid-out line (block top = 0).
+
+#### Examples / demos
+
+A gallery of measurement-driven layout demos under [`examples/`](examples/) (indexed by
+[`examples/README.md`](examples/README.md)), each a self-contained Julia project:
+
+- **`examples/layouts`** — `TextMeasureLayouts`: shared `shape_pack` shape-conforming text
+  packing (#C) with multi-interval per-band packing (#C2, unblocks two-sided wrap), plus the
+  stretch `knuth_plass` / `greedy_justify` justification utilities (#K).
+- **`examples/silhouettes`** — `Silhouettes` (#D): procedural asteroid polygons, Voronoi
+  shatter, and rasterization built on `DelaunayTriangulation`/`GeometryOps`.
+- **`examples/doi_infograph`** — DOIInfograph (#F): adaptive, measurement-driven
+  academic-paper infographic generator; the README hero is a 6-up grid of six papers composed
+  by one template (offline from a committed API cache).
+- **`examples/map_feature`** — MapFeature (#G): a CairoMakie state map-feature page with
+  editorial prose wrapping around the silhouette as an irregular obstacle (Vermont, offline).
+- **`examples/cover`** — Cover (#H): the "Newer Yorker" correctness exhibit — a vector-PDF
+  editorial cover whose every offset is measurement-derived (no manual offsets).
+- **`examples/justification`** — a greedy-vs-Knuth–Plass justification comparison exhibit
+  with river detection (#K).
+
+In progress: the **Asteroid TUI** demo (#E) — draft PR
+[#26](https://github.com/jowch/TextMeasure.jl/pull/26), not yet on `main`.
 
 [Unreleased]: https://github.com/jowch/TextMeasure.jl/tree/main
