@@ -15,15 +15,17 @@ mutable struct GameState
     tick_count::Int
     debug::Bool
     prev_fire::Bool                  # for release-to-launch edge detection
+    prev_debug::Bool                 # edge-triggered debug toggle
     respawn_in::Int                  # ticks until ship respawns (when dead)
     last_hit_glyphs::Vector{String}  # words of the most recently fractured asteroid (for tests)
+    n_target::Int                    # replenish target (starting n_asteroids)
 end
 
 const CHARGE_MAX = 5
-const INVULN_TICKS = 120             # ~2s at 60fps
-const THRUST = 0.05
-const TURN   = 0.12
-const FRICTION = 0.98
+const INVULN_TICKS = 120             # ~2s; (120÷10)%2==0 ⇒ ship_visible at tick 0
+const MOVE_ACCEL = 0.18              # per-axis velocity added per held strafe key
+const FRICTION   = 0.90              # light friction; crisp strafe stop
+const SHATTER_CLOSING = 0.9          # asteroid closing-speed: ≥ ⇒ fracture, < ⇒ bounce
 
 _wrap(v, hi) = mod(v, hi)
 
@@ -70,11 +72,11 @@ Seeded initial state. All randomness flows from `rng` (pass `Xoshiro(seed)` for 
 reproducible game — the golden test relies on this).
 """
 function new_game(rng::Xoshiro = Xoshiro(0); width=120, height=40, n_asteroids=5)
-    ship = Ship(width/2, height/2, 0.0, 0.0, 0.0, 0, true, 0)
+    ship = Ship(width/2, height/2, 0.0, 0.0, 0.0, 0, true, INVULN_TICKS)
     asteroids = [_spawn_asteroid(rng, width, height) for _ in 1:n_asteroids]
     beam = Beam(false, 0.0, 0.0, 0.0, 0, 0)
     return GameState(width, height, ship, asteroids, Shard[], beam, rng, 0, false,
-                     false, 0, String[])
+                     false, false, 0, String[], n_asteroids)
 end
 
 # --- physics -----------------------------------------------------------------
@@ -82,10 +84,13 @@ end
 function _advance_ship!(g::GameState, in::Input)
     s = g.ship
     s.alive || return
-    in.left  && (s.φ -= TURN)
-    in.right && (s.φ += TURN)
-    if in.thrust
-        s.vx += THRUST * sin(s.φ); s.vy -= THRUST * cos(s.φ)
+    in.aim !== nothing && (s.φ = aim_heading(s.x, s.y, in.aim[1], in.aim[2]))
+    ax = (in.right ? 1.0 : 0.0) - (in.left ? 1.0 : 0.0)
+    ay = (in.down  ? 1.0 : 0.0) - (in.up   ? 1.0 : 0.0)
+    if ax != 0.0 || ay != 0.0
+        inv = 1.0 / hypot(ax, ay)                  # normalise diagonals
+        s.vx += MOVE_ACCEL * ax * inv
+        s.vy += MOVE_ACCEL * ay * inv
     end
     s.vx *= FRICTION; s.vy *= FRICTION
     s.x = _wrap(s.x + s.vx, g.width); s.y = _wrap(s.y + s.vy, g.height)
@@ -252,7 +257,8 @@ fully reproducible.
 """
 function tick!(g::GameState, in::Input)
     _handle_respawn!(g)
-    in.debug && (g.debug = !g.debug)
+    in.debug && !g.prev_debug && (g.debug = !g.debug)   # toggle once per press
+    g.prev_debug = in.debug
     _advance_ship!(g, in)
     _advance_asteroids!(g)
     _handle_charge_and_beam!(g, in)

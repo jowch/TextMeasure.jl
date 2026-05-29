@@ -12,9 +12,14 @@
 # `drain_to_tachikoma!`, AND `_present` are all exercised without a TTY.
 #
 # What STILL genuinely requires a live TTY (human tier-2/3 only, not unit-testable):
-#   - `_poll_input` raw-mode keypress capture (reading actual keystrokes)
+#   - `_poll_input!` raw-mode keypress + mouse capture (reading actual events)
 #   - the visible on-screen render and real ≥30fps wall-clock pacing
 #   - the *visible* respawn blink / `?` debug overlay
+#
+# Twin-stick controls: WASD/arrows STRAFE the ship (direct velocity, no turning), the
+# mouse aims (the nose points at the cursor), LMB or Space charges (release to fire).
+# Held keys are tracked with a short decay window (key-repeat driven), so motion stays
+# smooth across frames without per-key release events.
 import Tachikoma as TK
 
 # Drain a renderer-agnostic CellBuffer into a Tachikoma Buffer (1-based x=col, y=row).
@@ -82,8 +87,10 @@ terminal-backed callbacks: poll keys → `tick!` → `draw!` → drain → prese
 Two modes, selected by `interactive`:
 
   * **Interactive** (a real TTY): enters the alternate screen + raw mode via
-    `enter_tui!`, polls real keystrokes each frame, presents at ~30fps, and ALWAYS
-    restores the terminal (`leave_tui!`) on quit *or* error. Linux/macOS (ANSI).
+    `enter_tui!`, enables any-motion mouse reporting, polls real key + mouse events each
+    frame into a stateful `InputState` (held-key decay + cursor + LMB), presents at
+    ~30fps, and ALWAYS restores the terminal (`leave_tui!`) on quit *or* error.
+    Linux/macOS (ANSI).
   * **Headless** (no TTY, or an explicit `io`): builds the `Terminal` over an
     `IOBuffer` (or the supplied `io`) with an explicit `size`, so it never queries a
     TTY. It takes no keys (`Input()` each frame), runs the *real* present path
@@ -93,8 +100,8 @@ Two modes, selected by `interactive`:
 
 `max_frames` bounds the loop (used by the smoke test and any scripted run).
 
-Key map (interactive): arrows / `wasd` turn & thrust, space charges (release to
-fire), `?` toggles the debug overlay, `q` / `Esc` / `Ctrl-C` quit.
+Key map (interactive): `wasd` / arrows STRAFE (the mouse aims the ship), LMB or space
+charges (release to fire), `?` toggles the debug overlay, `q` / `Esc` / `Ctrl-C` quit.
 """
 function run_game(; width = 120, height = 40, seed = 0, max_frames = nothing,
                   io::Union{IO,Nothing} = nothing,
@@ -106,13 +113,16 @@ function run_game(; width = 120, height = 40, seed = 0, max_frames = nothing,
         # `size = (cols, rows)` is the correct kwarg shape (a NamedTuple): the
         # `Terminal(; size)` constructor reads `size.cols`/`size.rows`. Passing a
         # `Rect` here throws `FieldError: Rect has no field cols` — the original bug.
-        term = TK.Terminal(; size = (cols = width, rows = height))
+        term  = TK.Terminal(; size = (cols = width, rows = height))
+        state = InputState()
         TK.enter_tui!(term)                 # alt-screen + raw mode + start_input!
+        print(term.io, "\e[?1003h"); flush(term.io)   # any-motion mouse: enter_tui! enables 1000h+1002h+1006h, not 1003h bare-motion
         try
             _run_loop!(g, cb, term; max_frames = max_frames,
-                       poll = frame -> _poll_input(term),
+                       poll = frame -> _poll_input!(state, term, frame),
                        pace = frame -> sleep(1 / 30))   # ~30fps
         finally
+            print(term.io, "\e[?1003l"); flush(term.io)   # restore bare-motion mouse
             TK.leave_tui!(term)             # restore screen + raw mode on quit OR error
         end
     else
@@ -134,51 +144,92 @@ function _run_loop!(g::GameState, cb::CellBuffer, term; max_frames, poll, pace)
                       max_frames = max_frames)
 end
 
-# --- input/present: the real Tachikoma 2.1.0 API --------------------------------
-# `_present` runs in BOTH modes (real TTY and headless IOBuffer). `_poll_input` reads
-# raw-mode keystrokes and is interactive-only (the headless path supplies `Input()`).
+# --- input: stateful twin-stick over the real Tachikoma 2.1.0 API ---------------
+# The PURE logic (sweep_stale!, fold_input) needs no terminal and is headless-tested;
+# _poll_input! needs a live TK.poll_event and is the human tier-2/3 check.
 
 """
-    _poll_input(term) -> Input
+    InputState()
 
-Drain every key event buffered since the last frame and fold them into one `Input`.
-Non-blocking: `poll_event` is called with a tiny timeout and returns as soon as the
-input buffer empties, so an idle frame costs ~0.5ms. (`poll_event(0.0)` can't be
-used — a zero timeout makes its deadline expire before it reads a byte.)
-
-Momentary keys (thrust/turn) apply for the frame they arrive in; holding `space`
-sends key-repeats that keep `fire` true (growing the charge), and the first frame
-with no `space` event releases it — the launch edge `tick!` already detects via
-`prev_fire`. Key *release* events are ignored (we model hold via repeat, not release).
+Per-`run_game` mutable input state threaded across frames: `held` is
+`(key,char) => last-seen frame`, `cursor` the last mouse cell (`nothing` until the
+first event), `lmb_down` the edge-derived left-button state. Holds no spatial bounds —
+the cursor is already terminal-bounded by the mouse events that set it.
 """
-function _poll_input(term)::Input
-    thrust = false; left = false; right = false
-    fire = false; debug = false; quit = false
+mutable struct InputState
+    held::Dict{Tuple{Symbol,Char},Int}
+    cursor::Union{Nothing,Tuple{Int,Int}}
+    lmb_down::Bool
+end
+InputState() = InputState(Dict{Tuple{Symbol,Char},Int}(), nothing, false)
+
+# Decay window in loop frames (~33ms each at sleep(1/30)). Must exceed the worst-case
+# inter-repeat interval on the slowest non-kitty autorepeat; tuned at the terminal.
+const DECAY_WINDOW = 5
+
+"Evict held keys whose last-seen frame is older than `window` before `now`. Mutates & returns."
+function sweep_stale!(held::Dict{Tuple{Symbol,Char},Int}, now::Int, window::Int)
+    for (id, last) in held
+        now - last > window && delete!(held, id)
+    end
+    return held
+end
+
+_char_held(held, chars) = any(id -> id[1] === :char && id[2] in chars, keys(held))
+
+"""
+    fold_input(state, now) -> Input
+
+Pure: fold the held-key map + cursor + fire into one `Input`. WASD/arrows → strafe;
+`aim` is the raw cursor cell (the sim computes φ from the live ship position);
+`fire = lmb_down || Space-held`.
+"""
+function fold_input(state::InputState, now::Int)
+    held = state.held
+    up    = _char_held(held, ('w','W')) || haskey(held, (:up,'\0'))
+    down  = _char_held(held, ('s','S')) || haskey(held, (:down,'\0'))
+    left  = _char_held(held, ('a','A')) || haskey(held, (:left,'\0'))
+    right = _char_held(held, ('d','D')) || haskey(held, (:right,'\0'))
+    # A held `?` lingers up to DECAY_WINDOW frames, so a re-tap inside that window won't
+    # toggle twice — tick!'s edge-latch still sees debug=true; rapid double-taps coalesce.
+    debug = _char_held(held, ('?',))
+    quit  = _char_held(held, ('q','Q')) || haskey(held, (:escape,'\0')) || haskey(held, (:ctrl_c,'\0'))
+    fire  = state.lmb_down || haskey(held, (:char,' '))
+    aim   = state.cursor === nothing ? nothing :
+            (Float64(state.cursor[1]), Float64(state.cursor[2]))
+    return Input(up=up, down=down, left=left, right=right, fire=fire, aim=aim,
+                 debug=debug, quit=quit)
+end
+
+"""
+    _poll_input!(state, term, frame) -> Input
+
+Drain events into `state`, decay stale keys, fold to one `Input`. Stamp `frame` on
+the held map for `key_press`/`key_repeat`, delete on `key_release`; update cursor on
+`mouse_move`/`mouse_drag`; `lmb_down` edge-derived from `mouse_left` press/drag→true,
+release→false. Needs live `TK.poll_event` (tier-2/3).
+"""
+function _poll_input!(state::InputState, term, frame::Int)::Input
     while true
         evt = TK.poll_event(0.0005)
         evt === nothing && break
-        evt isa TK.KeyEvent || continue
-        evt.action == TK.key_release && continue
-        k = evt.key
-        c = evt.char
-        if k === :up || (k === :char && (c == 'w' || c == 'W'))
-            thrust = true
-        elseif k === :left || (k === :char && (c == 'a' || c == 'A'))
-            left = true
-        elseif k === :right || (k === :char && (c == 'd' || c == 'D'))
-            right = true
-        elseif k === :char && c == ' '
-            fire = true
-        elseif k === :char && c == '?'
-            debug = true
-        elseif k === :char && (c == 'q' || c == 'Q')
-            quit = true
-        elseif k === :escape || k === :ctrl_c
-            quit = true
+        if evt isa TK.KeyEvent
+            id = (evt.key, evt.char)
+            if evt.action == TK.key_press || evt.action == TK.key_repeat
+                state.held[id] = frame
+            elseif evt.action == TK.key_release
+                delete!(state.held, id)
+            end
+        elseif evt isa TK.MouseEvent
+            (evt.action == TK.mouse_move || evt.action == TK.mouse_drag) && (state.cursor = (evt.x, evt.y))
+            if evt.button == TK.mouse_left
+                evt.action in (TK.mouse_press, TK.mouse_drag) && (state.lmb_down = true)
+                evt.action == TK.mouse_release && (state.lmb_down = false)
+            end
         end
     end
-    return Input(thrust = thrust, left = left, right = right,
-                 fire = fire, debug = debug, quit = quit)
+    sweep_stale!(state.held, frame, DECAY_WINDOW)
+    return fold_input(state, frame)
 end
 
 """

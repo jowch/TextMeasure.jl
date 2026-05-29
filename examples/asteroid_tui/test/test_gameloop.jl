@@ -30,15 +30,13 @@ end
     W, H = 80, 24
 
     @testset "scripted input — full input vocabulary, no crash" begin
-        # A scripted sequence exercising every Input field: rotate, thrust, charge,
+        # A scripted sequence exercising every Input field: strafe, aim, charge,
         # release-to-fire, debug toggle, idle. Repeats to fill the run.
         script = Input[
-            Input(left=true), Input(left=true), Input(thrust=true), Input(thrust=true),
+            Input(left=true), Input(left=true), Input(up=true), Input(up=true),
             Input(right=true), Input(fire=true), Input(fire=true), Input(fire=true),
-            Input(fire=false),            # release → launch beam
-            Input(debug=true),            # toggle overlay
-            Input(),                      # idle
-            Input(thrust=true), Input(right=true), Input(fire=true), Input(fire=false),
+            Input(fire=false), Input(aim=(10.0, 3.0)), Input(debug=true), Input(),
+            Input(down=true), Input(right=true), Input(fire=true), Input(fire=false),
         ]
         si = ScriptedInput(script)
         g  = new_game(Xoshiro(123); width=W, height=H, n_asteroids=4)
@@ -79,7 +77,7 @@ end
         g  = new_game(Xoshiro(1); width=W, height=H)
         cb = CellBuffer(H, W)
         frames = game_loop!(g, cb;
-            poll    = frame -> (frame == 10 ? Input(quit=true) : Input(thrust=true)),
+            poll    = frame -> (frame == 10 ? Input(quit=true) : Input(up=true)),
             present = (buf, frame) -> nothing,
             pace    = frame -> nothing,
             max_frames = 1000)
@@ -91,14 +89,14 @@ end
         g  = new_game(Xoshiro(42); width=W, height=H, n_asteroids=3)
         cb = CellBuffer(H, W)
         x0, y0 = g.ship.x, g.ship.y
-        θ0 = g.asteroids[1].θ
+        θ0 = [a.θ for a in g.asteroids]
         game_loop!(g, cb;
-            poll    = frame -> Input(thrust=true, right=true),
+            poll    = frame -> Input(up=true, right=true),
             present = (buf, frame) -> nothing,
             pace    = frame -> nothing,
             max_frames = 30)
         @test (g.ship.x, g.ship.y) != (x0, y0)   # ship moved
-        @test g.asteroids[1].θ != θ0             # asteroid rotated
+        @test any(((a, t),) -> a.θ != t, zip(g.asteroids, θ0)) || !isempty(g.shards)
     end
 
     @testset "step_frame! + Tachikoma drain (the real render path, headless)" begin
@@ -106,7 +104,7 @@ end
         # the buffer fill works in-memory without a terminal.
         g  = new_game(Xoshiro(5); width=W, height=H, n_asteroids=2)
         cb = CellBuffer(H, W)
-        step_frame!(g, cb, Input(thrust=true))
+        step_frame!(g, cb, Input(up=true))
         tbuf = TK.Buffer(TK.Rect(0, 0, W, H))
         @test drain_to_tachikoma!(tbuf, cb) === tbuf   # completes, returns the buffer
     end

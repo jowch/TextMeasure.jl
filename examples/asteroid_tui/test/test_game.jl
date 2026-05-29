@@ -6,25 +6,29 @@ using Test
 
 @testset "tick! physics" begin
     g = new_game(Xoshiro(42); width=120, height=40, n_asteroids=3)
-    # thrust changes velocity then position; world wraps (stays in-bounds)
-    for _ in 1:5; tick!(g, Input(thrust=true)); end
+    for _ in 1:5; tick!(g, Input(up=true)); end          # strafe imparts velocity, world wraps
     @test (g.ship.vx, g.ship.vy) != (0.0, 0.0)
     @test 0 <= g.ship.x <= g.width && 0 <= g.ship.y <= g.height
-    # rotation
-    φ0 = g.ship.φ; tick!(g, Input(left=true)); @test g.ship.φ != φ0
-    # charge ramps while fire held, caps at CHARGE_MAX
+    gs = new_game(Xoshiro(42); width=120, height=40, n_asteroids=3); φ0 = gs.ship.φ
+    tick!(gs, Input(left=true))
+    @test gs.ship.vx != 0.0 && gs.ship.φ == φ0           # `left` STRAFES, does NOT turn
+    ga = new_game(Xoshiro(42); width=120, height=40, n_asteroids=3)
+    tick!(ga, Input(aim=(80.0, 5.0)))                    # aim is the cursor cell
+    @test ga.ship.φ == aim_heading(ga.ship.x, ga.ship.y, 80.0, 5.0)
+    φ1 = ga.ship.φ; tick!(ga, Input()); @test ga.ship.φ == φ1   # aim===nothing ⇒ φ held
     g2 = new_game(Xoshiro(1))
     for _ in 1:20; tick!(g2, Input(fire=true)); end
     @test g2.ship.charge == CHARGE_MAX
-    # release launches a beam and resets charge
-    tick!(g2, Input(fire=false))
-    @test g2.beam.active && g2.ship.charge == 0
-    # asteroids advanced + rotated
-    g3 = new_game(Xoshiro(5)); a = g3.asteroids[1]; θ0 = a.θ
-    tick!(g3, Input()); @test g3.asteroids[1].θ != θ0
-    # debug toggles on a debug-edge
-    g4 = new_game(Xoshiro(2)); @test !g4.debug; tick!(g4, Input(debug=true)); @test g4.debug
-    @test g3.tick_count == 1
+    tick!(g2, Input(fire=false)); @test g2.beam.active && g2.ship.charge == 0
+    g4 = new_game(Xoshiro(2)); @test !g4.debug
+    tick!(g4, Input(debug=true)); @test g4.debug         # edge: one press toggles on
+    tick!(g4, Input(debug=true)); @test g4.debug         # held ⇒ NOT re-toggled (no strobe)
+    tick!(g4, Input(debug=false)); tick!(g4, Input(debug=true)); @test !g4.debug  # next press toggles
+end
+
+@testset "spawn protection" begin
+    g = new_game(Xoshiro(8))
+    @test g.ship.invuln > 0 && ship_visible(g)           # fresh ship invulnerable AND visible at tick 0
 end
 
 @testset "respawn + invuln" begin

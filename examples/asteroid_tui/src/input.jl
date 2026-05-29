@@ -1,17 +1,25 @@
 # SPDX-License-Identifier: MIT
 """
-    Input(; thrust=false, left=false, right=false, fire=false, debug=false, quit=false)
+    Input(; up=false, down=false, left=false, right=false, fire=false,
+            aim=nothing, debug=false, quit=false)
 
-One tick's intent, decoupled from any key encoding. `fire` held across ticks grows
-the charge; releasing it (a tick with `fire=false` after `fire=true`) launches.
+One tick's intent, decoupled from key encoding (twin-stick).
+  * `up`/`down`/`left`/`right` are **strafe** flags — direct-velocity movement; `left`/`right`
+    strafe, they do NOT turn.
+  * `fire` held grows the charge; the first `fire=false` after `fire=true` launches.
+  * `aim` is the **cursor cell** `(cx, cy)` or `nothing`. The sim turns it into a heading from the
+    live ship position; `nothing` ⇒ leave φ unchanged (headless paths stay reproducible).
+All fields keyword-only.
 """
 Base.@kwdef struct Input
-    thrust::Bool = false
-    left::Bool   = false
-    right::Bool  = false
-    fire::Bool   = false
-    debug::Bool  = false
-    quit::Bool   = false
+    up::Bool    = false
+    down::Bool  = false
+    left::Bool  = false
+    right::Bool = false
+    fire::Bool  = false
+    aim::Union{Nothing,Tuple{Float64,Float64}} = nothing
+    debug::Bool = false
+    quit::Bool  = false
 end
 
 """

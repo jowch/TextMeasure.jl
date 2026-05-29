@@ -5,7 +5,7 @@ using Test
 
 @testset "draw!" begin
     g = new_game(Xoshiro(21); width=80, height=24, n_asteroids=3)
-    for _ in 1:10; tick!(g, Input(thrust=true)); end
+    for _ in 1:10; tick!(g, Input(up=true)); end
     buf = CellBuffer(g.height, g.width)
     draw!(buf, g)
     txt = to_text(buf)

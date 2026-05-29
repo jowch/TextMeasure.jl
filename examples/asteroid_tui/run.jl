@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Human-play entry point. Run at a real terminal:  julia --project run.jl
-# Controls: arrows / WASD turn & thrust, space charges (release to fire),
+# Controls: WASD strafe (the mouse aims the ship), LMB or space charges (release to fire),
 #           ? toggles the debug overlay, q / Esc / Ctrl-C quit.
 using AsteroidTUI
 
