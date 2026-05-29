@@ -1,0 +1,22 @@
+The Newer Yorker
+A Correctness Exhibit
+by TextMeasure.jl
+
+T
+
+here are no manual offsets on this page. Every baseline, every wrap point, and the drop cap that opens
+this column were computed by the measurement pipeline, not nudged by hand. Move the illustration a
+few pixels and re-render: the body text re-flows around its new footprint, the pull quote keeps its
+clearance, and the drop cap still lands on its line, because nothing here was hardcoded.
+
+The exhibit measures once and lays out many times.
+The same prepared paragraph is packed around an
+inset-exclusion chord function that subtracts the
+illustration, the drop cap, and the pull quote from each
+scanline band. Correctness is asserted on the computed
+layout before a single glyph is drawn.
+
+Measure once. Lay out
+many times. Never
+nudge.
+— the thesis
