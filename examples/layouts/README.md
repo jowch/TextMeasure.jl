@@ -36,6 +36,37 @@ of word `Placement`s in reading order. A full-width rectangle chord_fn reproduce
 
 All coordinates share `chord_fn`'s frame and `prep.metrics` units.
 
+## `knuth_plass` (#K)
+
+```julia
+using TextMeasure, TextMeasureLayouts
+prep = prepare(MonospaceBackend(), "…prose…")
+opt = knuth_plass(prep;   max_width=300)        # optimal, badness-minimizing breaks
+gdy = greedy_justify(prep; max_width=300)        # greedy baseline (== layout()'s breaks)
+@assert opt.total_badness <= gdy.total_badness   # K-P never loses on total badness
+```
+
+`knuth_plass(prep; max_width, stretch_ratio=0.5, shrink_ratio=1/3, lineheight=1.0)`
+breaks a whole paragraph into lines that **minimize total badness** via the classic
+Knuth–Plass dynamic program, and returns a `JustifiedLayout` (`lines::Vector{JustifiedLine}`
++ `total_badness`). It models `:word` segments as boxes, collapsed `:space` runs as
+stretch/shrink glue, and `:newline` as forced breaks.
+
+- **Badness** — TeX's `100·|r|³` on the per-line adjustment ratio `r`; an infeasible line
+  (overshrink, or an atomic over-wide word) costs `INF_BADNESS + overflow` so the program
+  is always solvable. The last line — and any line ending at a forced break — is **ragged**
+  (badness 0 when it fits, never stretched to the measure).
+- **`greedy_justify`** — the comparison baseline: identical badness/geometry, but breaks
+  greedily on **natural** widths exactly like `layout` (its break set equals
+  `layout(prep; max_width)`'s). The only variable between the two is break selection.
+- **Geometry** — each `JustifiedLine` exposes `word_x`, `gap_centers` (justified inter-word
+  gap centers, for river detection), `ratio`, `badness`, and `baseline` (block-top frame,
+  matching `layout`).
+
+Justification is **out of TextMeasure's library scope** (see `CLAUDE.md`); `knuth_plass`
+lives here as a downstream demo utility. The renderable greedy-vs-K-P comparison exhibit is
+in [`examples/justification/`](../justification).
+
 ## Run the tests
 
 ```bash
