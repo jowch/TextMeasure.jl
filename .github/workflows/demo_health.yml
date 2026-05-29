@@ -1,0 +1,156 @@
+# Demo-health CI (#J) — keeps the examples/ demos from rotting silently.
+#
+# What it does:
+#   * License-audit gate: every examples/*.jl file must carry an SPDX MIT header.
+#   * Per-demo matrix: boots each merged demo in a clean env (path-develop TextMeasure
+#     [+ TextMeasureLayouts where used], instantiate, Pkg.test). Each demo's own test
+#     suite carries the milestone PROPERTY tests, which therefore run on every PR:
+#       - doi_infograph: title-autoshrink property (100 random titles fit)
+#       - cover:         20-random-inset property
+#       - layouts:       shape_pack invariants (segment_index ∈ range; per-band chords; overflow)
+#   * Font pinning: installs DejaVu Sans + Liberation Serif (+ poppler-utils for the
+#     pdftotext golden checks) before the CairoMakie demos render.
+#   * Failure-to-issue plumbing: on scheduled/main runs, a demo failure opens/updates a
+#     canonical `[demo-health] <demo> regression` issue (deduped); a green run auto-closes it.
+#
+# Scope note: examples/asteroid_tui (#E) is intentionally EXCLUDED from the matrix — it is
+# WIP and not yet on main. Add it to `matrix.demo` when #E merges.
+#
+# Runner scope: ubuntu-latest only. The font-pinning step uses apt (Linux). The spec's
+# macOS/Windows matrix dimension is descoped here to keep the apt-based font pinning the
+# single source of truth; revisit if cross-OS rendering coverage is wanted later.
+name: demo-health
+
+on:
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC — weekly drift check
+  workflow_dispatch:
+
+# issues:write is needed by the failure-to-issue plumbing. It is only exercised on
+# scheduled/dispatch/push runs (guarded per-step), never on pull_request, so fork PRs
+# (which only ever get a read token) never hit a permissions wall.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  license-audit:
+    name: License audit (SPDX MIT headers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Audit SPDX MIT headers on examples/*.jl
+        run: bash .github/scripts/license_audit.sh
+
+  demos:
+    name: ${{ matrix.demo }} (Julia ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    needs: license-audit
+    strategy:
+      fail-fast: false
+      matrix:
+        # Match CI.yml: compat floor + latest stable.
+        version: ['1.11', '1']
+        # The six demos merged to main. asteroid_tui (#E) is added when it merges.
+        demo: [cover, doi_infograph, justification, layouts, map_feature, silhouettes]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.version }}
+
+      - uses: julia-actions/cache@v3
+
+      - name: Pin fonts (DejaVu Sans + Liberation Serif) and PDF tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fonts-dejavu fonts-dejavu-core fonts-liberation poppler-utils
+          fc-cache -f
+          echo "Pinned font families available to fontconfig:"
+          fc-list | grep -Ei 'dejavu sans|liberation serif' | sort | head -20
+          # Hard-fail early if the pinned families the CairoMakie demos request are absent.
+          fc-list | grep -qi 'DejaVu Sans'      || { echo '::error::DejaVu Sans not installed'; exit 1; }
+          fc-list | grep -qi 'Liberation Serif' || { echo '::error::Liberation Serif not installed'; exit 1; }
+
+      - name: Develop path deps, instantiate, and run the demo test suite
+        id: runtest
+        run: |
+          julia --color=yes --project=examples/${{ matrix.demo }} -e '
+            using Pkg
+            root = pwd()
+            demo = "examples/${{ matrix.demo }}"
+            # Committed demo Manifests (where present) pin TextMeasure to a non-portable
+            # absolute author path; drop it so we resolve cleanly from current source.
+            mpath = joinpath(demo, "Manifest.toml")
+            isfile(mpath) && rm(mpath)
+            proj = Pkg.TOML.parsefile(joinpath(demo, "Project.toml"))
+            deps = get(proj, "deps", Dict{String,Any}())
+            specs = Pkg.PackageSpec[Pkg.PackageSpec(path=root)]   # TextMeasure (always)
+            if haskey(deps, "TextMeasureLayouts") && get(proj, "name", "") != "TextMeasureLayouts"
+                push!(specs, Pkg.PackageSpec(path=joinpath(root, "examples", "layouts")))
+            end
+            Pkg.develop(specs)
+            Pkg.instantiate()
+            Pkg.test()
+          '
+
+      # ---- Failure-to-issue plumbing -------------------------------------------------
+      # Runs ONLY on scheduled/dispatch/push-to-main runs (never on pull_request, so fork
+      # PRs never need a write token), and ONLY on the latest-Julia leg so the two matrix
+      # legs don't race on the same issue.
+      - name: Open / update regression issue on failure
+        if: ${{ failure() && github.event_name != 'pull_request' && matrix.version == '1' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEMO: ${{ matrix.demo }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="[demo-health] ${DEMO} regression"
+          # Exact-title match against OPEN issues (list+jq is robust vs. fuzzy search).
+          NUM=$(gh issue list --state open --limit 100 --json number,title \
+                  --jq "[.[] | select(.title == \"${TITLE}\")][0].number // empty")
+          BODY=$(printf '🔴 Demo-health failed for **%s** on `%s`.\n\nRun: %s\n\n_Filed automatically by the demo-health workflow; it auto-closes on the next green run._' \
+                  "$DEMO" "$GITHUB_REF_NAME" "$RUN_URL")
+          if [ -n "$NUM" ]; then
+            echo "Existing open issue #$NUM — commenting."
+            gh issue comment "$NUM" --body "$BODY"
+          else
+            echo "No open issue — checking for a closed one to reopen."
+            CLOSED=$(gh issue list --state closed --limit 100 --json number,title \
+                      --jq "[.[] | select(.title == \"${TITLE}\")][0].number // empty")
+            if [ -n "$CLOSED" ]; then
+              echo "Reopening closed issue #$CLOSED."
+              gh issue reopen "$CLOSED"
+              gh issue comment "$CLOSED" --body "$BODY"
+            else
+              echo "Opening a new issue."
+              gh issue create --title "$TITLE" --body "$BODY"
+            fi
+          fi
+
+      - name: Auto-close regression issue on success
+        if: ${{ success() && github.event_name != 'pull_request' && matrix.version == '1' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEMO: ${{ matrix.demo }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="[demo-health] ${DEMO} regression"
+          NUM=$(gh issue list --state open --limit 100 --json number,title \
+                  --jq "[.[] | select(.title == \"${TITLE}\")][0].number // empty")
+          if [ -n "$NUM" ]; then
+            echo "Demo green again — closing #$NUM."
+            gh issue comment "$NUM" --body "$(printf '✅ Demo-health passed for **%s** again. Auto-closing.\n\nRun: %s' "$DEMO" "$RUN_URL")"
+            gh issue close "$NUM"
+          else
+            echo "No open regression issue for ${DEMO}; nothing to close."
+          fi
