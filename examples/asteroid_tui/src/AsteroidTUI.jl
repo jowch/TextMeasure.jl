@@ -43,6 +43,6 @@ export asteroid_prose, PROSE_VARIANTS
 export pack_prose_into, PackedProse
 export GameState, new_game, tick!, draw!, kill_ship!, ship_visible
 export Input, ScriptedInput, next_input!
-export run_game
+export run_game, game_loop!, step_frame!, drain_to_tachikoma!
 
 end # module

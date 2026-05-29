@@ -10,7 +10,8 @@ using Test
     end
 
     for f in ("test_cellbuffer.jl", "test_cellbackend.jl", "test_prose.jl", "test_pack.jl",
-              "test_game.jl", "test_fracture.jl", "test_draw.jl", "test_golden.jl")
+              "test_game.jl", "test_fracture.jl", "test_draw.jl", "test_gameloop.jl",
+              "test_golden.jl")
         include(f)
     end
 end
