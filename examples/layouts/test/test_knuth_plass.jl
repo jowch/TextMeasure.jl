@@ -92,7 +92,8 @@ end
 
 @testset "K-P optimality on a hand-derived fixture (m1)" begin
     # 4 boxes (px): 50.4, 7.2, 7.2, 50.4; glue 7.2 each; stretch_ratio 0.5 ⇒ stretch 3.6/gap.
-    # Target 79.2 px. Enumerated feasible full-paragraph breaks:
+    # Target 79.2 px. Representative break sets (the optimum, greedy's choice, and the
+    # all-one-line infeasible case — not an exhaustive enumeration):
     #   [1 2 3 | 4]  line1 nat = 50.4+7.2+7.2+7.2+7.2 = 79.2 (exact ⇒ r=0, b=0); line4 ragged ⇒ 0  ⇒ TOTAL 0  (OPTIMAL)
     #   [1 2 | 3 4]  line1 nat = 64.8, slack 14.4, r = 14.4/3.6 = 4 ⇒ b = 100·4³ = 6400          ⇒ greedy's choice
     #   [1 2 3 4]    nat 136.8 > 79.2, overshrink r < −1 ⇒ infeasible.
