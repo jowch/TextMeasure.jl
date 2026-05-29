@@ -70,42 +70,127 @@ function game_loop!(g::GameState, cb::CellBuffer; poll, present, pace, max_frame
 end
 
 """
-    run_game(; width=120, height=40, seed=0, max_frames=nothing)
+    run_game(; width=120, height=40, seed=0, max_frames=nothing,
+               io=nothing, interactive=(io===nothing && stdout isa Base.TTY))
 
-Interactive entry. Builds a Tachikoma `Terminal` and runs [`game_loop!`](@ref) with
-terminal-backed callbacks: read key → `tick!` → `draw!` → drain → present, ~60fps.
-Linux/macOS only (ANSI / raw-mode). `max_frames` bounds the loop for smoke runs.
+Top-level entry point — the exact code `run.jl` boots. Builds a game + `CellBuffer`,
+constructs a Tachikoma `Terminal`, and drives [`game_loop!`](@ref) with
+terminal-backed callbacks: poll keys → `tick!` → `draw!` → drain → present.
 
-Key map: arrows/`wasd` move & turn, space charges (release to fire), `?` toggles the
-debug overlay, `q` quits. The precise Tachikoma key-event field names are resolved
-against the installed version at call time (interactive bring-up).
+Two modes, selected by `interactive`:
+
+  * **Interactive** (a real TTY): enters the alternate screen + raw mode via
+    `enter_tui!`, polls real keystrokes each frame, presents at ~30fps, and ALWAYS
+    restores the terminal (`leave_tui!`) on quit *or* error. Linux/macOS (ANSI).
+  * **Headless** (no TTY, or an explicit `io`): builds the `Terminal` over an
+    `IOBuffer` (or the supplied `io`) with an explicit `size`, so it never queries a
+    TTY. It takes no keys (`Input()` each frame), runs the *real* present path
+    (`draw!` → drain → flush to `io`), and skips wall-clock pacing. This is the path
+    the headless smoke test drives, so the actual entry point + render path are
+    exercised without a terminal.
+
+`max_frames` bounds the loop (used by the smoke test and any scripted run).
+
+Key map (interactive): arrows / `wasd` turn & thrust, space charges (release to
+fire), `?` toggles the debug overlay, `q` / `Esc` / `Ctrl-C` quit.
 """
-function run_game(; width = 120, height = 40, seed = 0, max_frames = nothing)
-    g    = new_game(Xoshiro(seed); width = width, height = height)
-    cb   = CellBuffer(height, width)
-    term = TK.Terminal(; size = TK.Rect(0, 0, width, height))
-    poll = frame -> _poll_input(term)
-    present = function (cb, frame)
-        tbuf = TK.Buffer(TK.Rect(0, 0, width, height))
-        drain_to_tachikoma!(tbuf, cb)
-        _present(term, tbuf)
+function run_game(; width = 120, height = 40, seed = 0, max_frames = nothing,
+                  io::Union{IO,Nothing} = nothing,
+                  interactive::Bool = (io === nothing && stdout isa Base.TTY))
+    g  = new_game(Xoshiro(seed); width = width, height = height)
+    cb = CellBuffer(height, width)
+
+    if interactive
+        # `size = (cols, rows)` is the correct kwarg shape (a NamedTuple): the
+        # `Terminal(; size)` constructor reads `size.cols`/`size.rows`. Passing a
+        # `Rect` here throws `FieldError: Rect has no field cols` — the original bug.
+        term = TK.Terminal(; size = (cols = width, rows = height))
+        TK.enter_tui!(term)                 # alt-screen + raw mode + start_input!
+        try
+            _run_loop!(g, cb, term; max_frames = max_frames,
+                       poll = frame -> _poll_input(term),
+                       pace = frame -> sleep(1 / 30))   # ~30fps
+        finally
+            TK.leave_tui!(term)             # restore screen + raw mode on quit OR error
+        end
+    else
+        sink = io === nothing ? IOBuffer() : io
+        term = TK.Terminal(; io = sink, size = (cols = width, rows = height))
+        _run_loop!(g, cb, term; max_frames = max_frames,
+                   poll = frame -> Input(),         # no keys without a TTY
+                   pace = frame -> nothing)         # no wall-clock pacing
     end
-    pace = frame -> sleep(1 / 60)
-    game_loop!(g, cb; poll = poll, present = present, pace = pace, max_frames = max_frames)
     return g
 end
 
-# --- input/present shims, resolved against the live Tachikoma API at bring-up ----
-# Isolated so the rest of the renderer is API-stable. ONLY these two need a real TTY;
-# the headless smoke test never calls them (it supplies its own poll/present).
-function _poll_input(term)::Input
-    # Non-blocking raw-mode key read → Input. Resolved interactively against TK's
-    # event API (KeyEvent / handle_key!). TTY-only.
-    return Input()
+# Wire the terminal-backed callbacks and run the shared loop. `poll`/`pace` differ by
+# mode; `present` is the REAL render path in both, so it is covered by the headless
+# smoke test (which drives `run_game` over an IOBuffer terminal).
+function _run_loop!(g::GameState, cb::CellBuffer, term; max_frames, poll, pace)
+    present = (buf, frame) -> _present(term, buf)
+    return game_loop!(g, cb; poll = poll, present = present, pace = pace,
+                      max_frames = max_frames)
 end
 
-function _present(term, tbuf)
-    # Blit the Buffer to the terminal (escape codes). Resolved against TK's present
-    # path (Terminal draw/flush). TTY-only.
+# --- input/present: the real Tachikoma 2.1.0 API --------------------------------
+# `_present` runs in BOTH modes (real TTY and headless IOBuffer). `_poll_input` reads
+# raw-mode keystrokes and is interactive-only (the headless path supplies `Input()`).
+
+"""
+    _poll_input(term) -> Input
+
+Drain every key event buffered since the last frame and fold them into one `Input`.
+Non-blocking: `poll_event` is called with a tiny timeout and returns as soon as the
+input buffer empties, so an idle frame costs ~0.5ms. (`poll_event(0.0)` can't be
+used — a zero timeout makes its deadline expire before it reads a byte.)
+
+Momentary keys (thrust/turn) apply for the frame they arrive in; holding `space`
+sends key-repeats that keep `fire` true (growing the charge), and the first frame
+with no `space` event releases it — the launch edge `tick!` already detects via
+`prev_fire`. Key *release* events are ignored (we model hold via repeat, not release).
+"""
+function _poll_input(term)::Input
+    thrust = false; left = false; right = false
+    fire = false; debug = false; quit = false
+    while true
+        evt = TK.poll_event(0.0005)
+        evt === nothing && break
+        evt isa TK.KeyEvent || continue
+        evt.action == TK.key_release && continue
+        k = evt.key
+        c = evt.char
+        if k === :up || (k === :char && (c == 'w' || c == 'W'))
+            thrust = true
+        elseif k === :left || (k === :char && (c == 'a' || c == 'A'))
+            left = true
+        elseif k === :right || (k === :char && (c == 'd' || c == 'D'))
+            right = true
+        elseif k === :char && c == ' '
+            fire = true
+        elseif k === :char && c == '?'
+            debug = true
+        elseif k === :char && (c == 'q' || c == 'Q')
+            quit = true
+        elseif k === :escape || k === :ctrl_c
+            quit = true
+        end
+    end
+    return Input(thrust = thrust, left = left, right = right,
+                 fire = fire, debug = debug, quit = quit)
+end
+
+"""
+    _present(term, cb)
+
+Blit the renderer-agnostic `CellBuffer` to the terminal for one frame. `draw!` hands
+us the back buffer (holding a stale frame), so we `reset!` it, drain the `CellBuffer`
+in, and let `draw!` diff against the front buffer and emit only the changed cells —
+then flush to `term.io`. Works on a real TTY and on a headless `IOBuffer` alike.
+"""
+function _present(term, cb::CellBuffer)
+    TK.draw!(term) do f
+        TK.reset!(f.buffer)
+        drain_to_tachikoma!(f.buffer, cb)
+    end
     return nothing
 end
