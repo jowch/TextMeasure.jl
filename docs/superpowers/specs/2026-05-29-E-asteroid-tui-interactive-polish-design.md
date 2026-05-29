@@ -178,9 +178,11 @@ has reliable press/release events) gives crisp firing on every terminal as the a
 **Two aim-coupled `draw!` decisions:**
 - **Beam origin moves to the nose.** Today the beam launches from the ship *centre*
   (`Beam(true, s.x, s.y, …)`, `game.jl:88`); with a rotated multi-cell ship its first cells would
-  paint over the hull. Offset the beam origin one cell along `φ` (the nose cell) so the beam reads
-  as leaving the nose.
-- **Cut the auto-targeting leader.** The ship→nearest-asteroid dotted leader (`draw.jl:216-223`) is
+  paint over the hull. The fix is **at `Beam(...)` construction in `_handle_charge_and_beam!`
+  (`game.jl:88`)** — pass the nose `(s.x + sin φ, s.y − cos φ)` as the origin — **not** in
+  `_draw_beam!` (which only *reads* `g.beam.x/y`). `_draw_beam!` then renders unchanged from the
+  new origin.
+- **Cut the auto-targeting leader.** The ship→nearest-asteroid dotted leader (`draw.jl:215-223`) is
   redundant under twin-stick — the mouse *is* the targeting affordance — and fights the new aim
   read. Remove it (one fewer empty-cells-only layer).
 
@@ -310,10 +312,19 @@ fields:
 
 Both the held-keys map and the last-known cursor position must survive across frames, so the
 stateless `_poll_input(term) -> Input` becomes **stateful**: a small mutable `InputState` struct
-(held-key→last-seen-tick map, last cursor `(x, y)` or `nothing`, and a `lmb_down::Bool` fire flag)
 is created once per `run_game` and threaded through the poll callback (`poll = frame ->
 _poll_input!(state, term, frame)`). The headless path keeps `poll = frame -> Input()` and never
 constructs an `InputState`.
+
+**Contract (pin these so the units aren't guessed):**
+- `InputState.held :: Dict{Tuple{Symbol,Char},Int}` — keyed like Tachikoma's own `_KEYS_DOWN`
+  (`(evt.key, evt.char)`), value = last-seen **frame index**.
+- `InputState.cursor :: Union{Nothing,Tuple{Int,Int}}` (last `(x, y)`); `InputState.lmb_down :: Bool`.
+- `now` is the `game_loop!` **`frame` counter** (the value passed to `poll`), so the decay window is
+  measured in **loop frames**, not wall-clock — and since interactive `pace` is `sleep(1/30)`, one
+  frame ≈ 33 ms (this is the bridge between the frame-unit window and the "30 fps" tuning reasoning).
+- Per-frame order inside `_poll_input!`: **drain events → stamp/clear `held` → `sweep_stale!(held,
+  now, window)` → `fold_input(state, now)`**.
 
 - `_poll_input!` each frame: (a) drains events, stamping the current tick on the held-key map for
   every `KeyEvent` with action `key_press` **or** `key_repeat`, and removing the key on
@@ -359,8 +370,14 @@ constructs an `InputState`.
   through `tick!`: the held-key **`sweep_stale!`** decay/refresh logic (the rest of `_poll_input!`
   needs a live `TK.poll_event`, so only this extracted helper is headless-testable), and the
   wrap-aware **delta helper** (an edge-straddling pair returns the short-way signed delta).
+- **Guard the fracture frame-conversion** (the riskiest new arithmetic — a wrong divisor or missing
+  clamp seeds `voronoi_shatter` outside the polygon, Silhouettes then returns fewer cells than
+  requested and `game.jl:170-178` truncates ranges). Extend `test_fracture.jl` with an **off-centre**
+  cell-space impact near the rim (e.g. `Point2(a.radius*0.8, 0.0)`) and assert **both** lossless
+  glyph preservation **and** that the shard count equals what was requested (i.e. the converted
+  impact landed inside the polygon).
 - **Index-identity assertions are fragile under live collisions and must be hardened**, not just
-  renamed: both `test_gameloop.jl:102` (`g.asteroids[1].θ` after 30 ticks) and `test_game.jl:22-23`
+  renamed: both `test_gameloop.jl:101` (`g.asteroids[1].θ` after 30 ticks) and `test_game.jl:22-23`
   (`asteroids[1].θ` after one tick) assume index 1 is the same body — but a shatter (`deleteat!`) or
   replenish reorder breaks that. Assert "*some* asteroid rotated", or pin those scenarios' velocities
   low enough that no shatter/replenish fires. (`test_gameloop.jl:61`'s in-bounds invariant is covered
@@ -410,23 +427,23 @@ not trusted on report.
 | File | Change |
 |---|---|
 | `src/input.jl` | `Input` fields → `up/down/left/right` strafe + optional `aim::Union{Nothing,Float64}`; remove `thrust`; docstring |
-| `src/game.jl` | `GameState` gains `prev_debug` (edge state, beside `prev_fire`); direct-velocity movement; aim→`φ`; wrap-aware **delta** helper; asteroid bounce/shatter; ship↔asteroid death; spawn protection; replenish; honour `impact` (cell→polygon frame conversion) in `fracture_asteroid!`; edge-triggered debug; spawn-velocity rescale |
+| `src/game.jl` | `GameState` gains `prev_debug` (edge state, beside `prev_fire`); direct-velocity movement; aim→`φ`; wrap-aware **delta** helper; asteroid bounce/shatter; ship↔asteroid death; spawn protection; replenish; honour `impact` (cell→polygon frame conversion) in `fracture_asteroid!`; **beam origin → nose at `Beam(...)` construction (`game.jl:88`)**; edge-triggered debug; spawn-velocity rescale |
 | `src/entities.jl` | none expected (`Ship.φ` already exists; `prev_debug` lives in `GameState`) |
-| `src/draw.jl` | 8-way directional ship glyph (nose one cell along `φ`, charge indicator relocated) + plume removed; beam origin offset to the nose; **cut the auto-targeting leader** (`draw.jl:216-223`); update stale plume comments (`draw.jl:8` `COL_BEAM`, `:48-51`, `:165`/`:175`) |
+| `src/draw.jl` | 8-way directional ship glyph (nose one cell along `φ`, charge indicator relocated) + plume removed; **cut the auto-targeting leader** (`draw.jl:215-223`); update stale plume comments (`draw.jl:8` `COL_BEAM`, `:48-51`, `:165`/`:175`) |
 | `src/render_tachikoma.jl` | stateful `InputState` (held-key map + last cursor + `lmb_down`); pure `sweep_stale!` + `fold_input` helpers; `_poll_input!` rewrite (stamp on press/repeat, mouse aim + edge-derived button, drain-loop timeout per existing caveat); `1003h/1003l` enable/restore in `run_game`; rewrite stale prose (`:1-17` header, `:96-97` & `:141-153` docstrings, `:113` poll wiring) |
 | `src/AsteroidTUI.jl` | likely **no change** — new helpers stay unexported, reached by `using AsteroidTUI: …` (touch only if a genuinely public symbol is added) |
 | `run.jl` | rewrite the controls banner (`run.jl:3-5`) for twin-stick |
-| `test/test_gameloop.jl`, `test/test_game.jl`, `test/test_draw.jl` | new `Input` field set; replace `test_game.jl:13` turn-assertion; harden index-identity asserts (`test_gameloop.jl:102`, `test_game.jl:22-23`); keep `test_draw.jl:18-21` determinism; new headless collision/death/replenish + `sweep_stale!`/`fold_input`/wrap-delta unit tests |
+| `test/test_gameloop.jl`, `test/test_game.jl`, `test/test_draw.jl` | new `Input` field set; replace `test_game.jl:13` turn-assertion; harden index-identity asserts (`test_gameloop.jl:101`, `test_game.jl:22-23`); keep `test_draw.jl:18-21` determinism; new headless collision/death/replenish + `sweep_stale!`/`fold_input`/wrap-delta unit tests |
 | `test/test_fracture.jl` | callers pass `impact` as a cell-space offset (new frame contract); keep lossless-glyph-preservation assertions |
-| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified; update the stale "thrust plume" comment in `test_golden.jl:25` |
+| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified; update the stale "thrust plume" comment in `test_golden.jl:27` (block `:21-31`) |
 
 ## Open tuning knobs (resolved at implementation, not design)
 
 - Movement speed and friction coefficient.
-- Decay-window length (ticks). **Constraint, not just taste:** it must exceed the worst-case
-  inter-repeat interval at 30 fps on the slowest non-kitty autorepeat you support — otherwise a
-  genuinely-held key can be evicted between repeats and stutter. Set it from that floor, then for
-  crispness rely on the kitty release path.
+- Decay-window length (in **loop frames**; ≈33 ms each at the `sleep(1/30)` pace). **Constraint,
+  not just taste:** it must exceed the worst-case inter-repeat interval (converted to frames) on the
+  slowest non-kitty autorepeat you support — otherwise a genuinely-held key is evicted between
+  repeats and stutters. Set it from that floor, then rely on the kitty release path for crispness.
 - Visual-space row-scale factor for aim (cell aspect ≈ 2, refined by eye; applied as a multiplier).
 - Asteroid spawn-velocity range and the bounce-vs-shatter **closing-speed** threshold.
 - Replenish target `N` (defaults to the starting `n_asteroids`).
