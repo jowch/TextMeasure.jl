@@ -2,9 +2,9 @@
 #
 # What it does:
 #   * License-audit gate: every examples/*.jl file must carry an SPDX MIT header.
-#   * Per-demo matrix: boots each merged demo in a clean env (path-develop TextMeasure
-#     [+ TextMeasureLayouts where used], instantiate, Pkg.test). Each demo's own test
-#     suite carries the milestone PROPERTY tests, which therefore run on every PR:
+#   * Per-demo matrix: boots each merged demo in a clean env (plain Pkg.instantiate +
+#     Pkg.test; in-repo deps resolved via each demo's [sources] table). Each demo's own
+#     test suite carries the milestone PROPERTY tests, which therefore run on every PR:
 #       - doi_infograph: title-autoshrink property (100 random titles fit)
 #       - cover:         20-random-inset property
 #       - layouts:       shape_pack invariants (segment_index ∈ range; per-band chords; overflow)
