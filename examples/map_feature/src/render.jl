@@ -37,12 +37,11 @@ const SIDEBAR_BOTTOM = 200.0    # masthead + sidebar glyphs all stay above this 
 const REGION_TOP     = 230.0    # body + map region top (a gutter below SIDEBAR_BOTTOM)
 const BYLINE_H       = 36.0
 
-# Packing kwargs — `fill` is supplied per-call (default :widest; see NOTE above).
-const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip)
+# Packing kwargs — see NOTE above (single elegant west wrap; silhouette right-aligned).
+const PACK_KW = (min_chord_width = 36.0, overflow_strategy = :skip, fill = :widest)
 
+_map_left()      = MARGIN + 0.45 * (PAGE_W - 2MARGIN)
 _region_bottom() = PAGE_H - BYLINE_H - MARGIN
-# Map-region horizontal box edge at `frac` of the inner content width [MARGIN, PAGE_W-MARGIN].
-_map_x(frac)     = MARGIN + frac * (PAGE_W - 2MARGIN)
 
 _marker_glyph(kind::Symbol) = kind === :capital ? '★' :
                               kind === :city     ? '●' :
@@ -100,18 +99,14 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
                          pois::Vector{POI};
                          dest::AbstractString="EPSG:5070",
                          body_text::AbstractString=DEFAULT_BODY,
-                         fontsize::Float64=12.0,
-                         fill::Symbol=:widest,
-                         silhouette_halign::Symbol=:right,
-                         map_left_frac::Float64=0.45,
-                         map_right_frac::Float64=1.0)
+                         fontsize::Float64=12.0)
     region_top    = REGION_TOP
     region_bottom = _region_bottom()
-    map_left      = _map_x(map_left_frac)
-    map_right     = _map_x(map_right_frac)
+    map_left      = _map_left()
+    map_right     = PAGE_W - MARGIN
     map_region    = (map_left, region_top, map_right, region_bottom)
 
-    pp = PageProjection(state_polygon, map_region; dest=dest, halign=silhouette_halign)
+    pp = PageProjection(state_polygon, map_region; dest=dest, halign=:right)
     poly_px = project_polygon(pp, state_polygon)
 
     body_backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
@@ -134,7 +129,7 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
     text_bounds = (MARGIN, region_top, PAGE_W - MARGIN, region_bottom)
     cf = _body_chord_fn(poly_px, text_bounds, map_region, label_excl)
     prep = prepare(body_backend, body_text)
-    pk = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, fill=fill, PACK_KW...)
+    pk = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, PACK_KW...)
 
     return (; pp, poly_px, prep, pk, anchors, labelboxes, pois, text_bounds, map_region,
             region_top, region_bottom, map_left, map_right)
@@ -155,14 +150,8 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
                      points_of_interest::Vector{POI};
                      dest::AbstractString="EPSG:5070",
                      body_text::AbstractString=DEFAULT_BODY,
-                     fontsize::Float64=12.0,
-                     fill::Symbol=:widest,
-                     silhouette_halign::Symbol=:right,
-                     map_left_frac::Float64=0.45,
-                     map_right_frac::Float64=1.0)
-    L = _compose_layout(state_polygon, points_of_interest; dest=dest, body_text=body_text,
-                        fontsize=fontsize, fill=fill, silhouette_halign=silhouette_halign,
-                        map_left_frac=map_left_frac, map_right_frac=map_right_frac)
+                     fontsize::Float64=12.0)
+    L = _compose_layout(state_polygon, points_of_interest; dest=dest, body_text=body_text, fontsize=fontsize)
 
     # Pixel-space scene: 1 data unit == 1 screen px (campixel!), so measured widths render 1:1.
     scene = CM.Scene(; size=(PAGE_W, PAGE_H), backgroundcolor=:white)
