@@ -1,0 +1,83 @@
+# Vermont feature page — POIs (hand-curated from the Vermont Wikipedia article) + ACS stats.
+[meta]
+state    = "Vermont"
+postal   = "VT"
+masthead = "VERMONT"
+subtitle = "The Green Mountain State"
+byline   = "A TextMeasure.jl cartographic feature"
+
+[stats]                       # bundled (2020 census / ACS5 2023); offline quickstart source
+population        = 643077
+median_income_usd = 74014
+capital           = "Montpelier"
+
+[[poi]]
+name = "Montpelier"
+lon  = -72.5754
+lat  = 44.2601
+kind = "capital"
+
+[[poi]]
+name = "Burlington"
+lon  = -73.2121
+lat  = 44.4759
+kind = "city"
+
+[[poi]]
+name = "Rutland"
+lon  = -72.9726
+lat  = 43.6106
+kind = "city"
+
+[[poi]]
+name = "Brattleboro"
+lon  = -72.5579
+lat  = 42.8509
+kind = "city"
+
+[[poi]]
+name = "St. Johnsbury"
+lon  = -72.0151
+lat  = 44.4192
+kind = "city"
+
+[[poi]]
+name = "Mount Mansfield"
+lon  = -72.8092
+lat  = 44.5438
+kind = "feature"
+
+[[poi]]
+name = "Camel's Hump"
+lon  = -72.8849
+lat  = 44.3195
+kind = "feature"
+
+[[poi]]
+name = "Lake Champlain"
+lon  = -73.3318
+lat  = 44.5311
+kind = "feature"
+
+# NOTE: Shelburne Museum sits ~10km south of Burlington; in projected page space their label
+# boxes collide, so place_poi_labels (simple offset placement, harder repel out of scope) may
+# DROP whichever loses the greedy contest — Shelburne in the current layout. This is by design:
+# the marker still draws; only the text label is skipped. The PDF golden floor tolerates ≤2 such
+# drops and the capital (Montpelier, isolated) is always placed.
+[[poi]]
+name = "Shelburne Museum"
+lon  = -73.2293
+lat  = 44.3739
+kind = "landmark"
+
+[[poi]]
+name = "Bennington Monument"
+lon  = -73.2057
+lat  = 42.8857
+kind = "landmark"
+
+[[poi]]
+name = "Ben & Jerry's"
+lon  = -72.7637
+lat  = 44.3520
+kind = "landmark"
