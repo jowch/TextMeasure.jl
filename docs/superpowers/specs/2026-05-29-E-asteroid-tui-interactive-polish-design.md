@@ -161,10 +161,28 @@ has reliable press/release events) gives crisp firing on every terminal as the a
 
 ### Ship glyph reflects heading
 
-`_draw_ship!` rotates an 8-way directional glyph (and places a heading indicator) according
-to `φ`, replacing today's static nose-up `▲`, so facing is always visible. The old downward
-thrust plume — meaningless under decoupled strafe movement — is replaced by this heading-aware
-indicator.
+`_draw_ship!` is **rewritten** so facing is always visible (today's static nose-up `▲` never reads
+`φ`). Design:
+
+- **One directional nose glyph per 45° octant**, chosen from a fixed 8-entry table indexed by
+  `round(φ / (π/4)) mod 8` — starter set `('▲','◤','◀','◣','▼','◢','▶','◥')` for
+  N/NW/W/SW/S/SE/E/NE (exact glyphs tunable by eye; **acceptance: at `φ = 0` it renders a sensible
+  nose-up form**, since the golden pins `φ = 0`).
+- The nose is drawn **one cell from the ship centre along `φ`** (`round(sx + sin φ)`,
+  `round(sy − cos φ)`); the hull stays at `(sx, sy)`. The **charge indicator** moves to the cell
+  *beyond* the nose along `φ` (not the fixed `sy−2` it sits at today, which is wrong once rotated).
+- The downward thrust plume is **removed** — meaningless under decoupled strafe movement.
+- `_draw_ship!` must stay a **pure deterministic function of `g`** (no RNG, no frame counter beyond
+  what's already in `g`) so `test_draw.jl:18-21`'s determinism assertion holds.
+
+**Two aim-coupled `draw!` decisions:**
+- **Beam origin moves to the nose.** Today the beam launches from the ship *centre*
+  (`Beam(true, s.x, s.y, …)`, `game.jl:88`); with a rotated multi-cell ship its first cells would
+  paint over the hull. Offset the beam origin one cell along `φ` (the nose cell) so the beam reads
+  as leaving the nose.
+- **Cut the auto-targeting leader.** The ship→nearest-asteroid dotted leader (`draw.jl:216-223`) is
+  redundant under twin-stick — the mouse *is* the targeting affordance — and fights the new aim
+  read. Remove it (one fewer empty-cells-only layer).
 
 ## Collision model
 
@@ -174,7 +192,9 @@ on its axis — with `distance = hypot(dx, dy)`. Returning the *vector* (not jus
 is required: the bounce needs the contact **normal** (the unit wrapped delta), the **closing speed**
 (relative velocity projected onto that normal), and the **push-apart** direction — all derived from
 the same wrapped delta, so an edge-straddling pair separates the short way around the torus, not
-across the whole field. Reused by beam→asteroid, asteroid↔asteroid, and ship↔asteroid.
+across the whole field. A deterministic tie-break for the `|d| == size/2` boundary (e.g. prefer the
+non-negative candidate) keeps the normal well-defined. Reused by beam→asteroid, asteroid↔asteroid,
+and ship↔asteroid.
 
 ### Asteroid ↔ asteroid — "bounce, but big hits shatter"
 
@@ -188,7 +208,7 @@ On overlap (wrapped `distance` < sum of radii):
 - **At/above** the threshold: **fracture both** asteroids via the existing `fracture_asteroid!`,
   seeded at the **actual contact point**. This fixes the ignored-impact-point bug — but honouring
   the `impact` argument is **not** a no-transform passthrough: `voronoi_shatter` places its seeds
-  within `min(w,h)/4` of `impact` **in the polygon's own (unit-ish) frame** (`Silhouettes.jl:157-158`),
+  within `min(w,h)/4` of `impact` **in the polygon's own (unit-ish) frame** (`Silhouettes.jl:158-159`),
   whereas the contact point is in **cell space** (magnitude up to `a.radius` ≈ 6–12). So
   `fracture_asteroid!` must **convert the impact into the polygon frame** — divide the cell-space
   contact offset by `a.radius` and clamp it into the polygon bbox — before passing it to
@@ -223,7 +243,11 @@ and `ship_visible` blinks the ship at ~3 Hz while invulnerable. Two corollaries 
 broken:
 - **Spawn protection:** the ship gets initial invulnerability at `new_game` (not just on respawn),
   and asteroids are kept clear of / pushed off the centre spawn cell so the player can't die on
-  frame 1.
+  frame 1. Two consequences: (a) `ship_visible` blinks while `invuln > 0`, so a fresh game now opens
+  with the ship blinking (cosmetic, intended); (b) the initial `invuln` must keep
+  `ship_visible(g) == true` at tick 0 (with `INVULN_TICKS = 120`, `(120÷10)%2 == 0` → visible, so
+  the golden's ship still renders) — or `_run_golden` zeroes `ship.invuln` after `new_game`. Verify
+  whichever against the regenerated golden.
 - Death never mutates the colliding asteroid (it continues); only the ship reacts.
 
 ### Field replenish
@@ -254,9 +278,11 @@ end
 
 - The old `thrust` field is removed; `up`/`down` are added; `left`/`right` are retained as
   identifiers but their **meaning changes from turn to strafe**.
-- When `aim === nothing`, `tick!` leaves `φ` unchanged — so the Bool-only scripted golden inputs
-  never depend on a mouse and stay fully reproducible. (All call sites use kwargs, so field order
-  is not load-bearing.)
+- When `aim === nothing`, `tick!` leaves `φ` unchanged — so the headless smoke path (`Input()` each
+  frame, plus the scripted-`Input` tests) never depends on a mouse and its `tick!` arithmetic stays
+  reproducible. (The *golden* needs no such guarantee — it runs no `tick!` and consumes no `Input`;
+  its determinism comes from the static `draw!`, see "Determinism & the golden frame". All call
+  sites use kwargs, so field order is not load-bearing.)
 - `prev_debug` edge state for the debug toggle lives in **`GameState`** (`game.jl`, alongside the
   existing `prev_fire`), **not** in `entities.jl`. `debug` becomes **edge-triggered** in `tick!`
   (toggles once per press), fixing the strobe.
@@ -275,8 +301,10 @@ fields:
   toggles to `true`), but any *held*-debug test must account for `prev_debug`. Other tests' *intent*
   (loop runs, buffer valid every frame, entities evolve, in-bounds invariants, charge/respawn) is
   preserved.
-- If any new symbol must be visible to tests (e.g. an `InputState` helper), add it to the
-  `AsteroidTUI.jl` export list (tests import via `using AsteroidTUI: …`).
+- New helpers (`InputState`, `sweep_stale!`, etc.) stay **unexported**; tests reach them by name via
+  `using AsteroidTUI: sweep_stale!` — exactly as the existing tests already import the unexported
+  `fracture_asteroid!` / `_word_boundary_splits` (`test_fracture.jl:3`). Reserve the export list for
+  genuinely public API.
 
 ## Renderer wiring (`render_tachikoma.jl`)
 
@@ -297,11 +325,15 @@ constructs an `InputState`.
   last-cursor-derived aim `φ` + `fire = lmb_down || space-held` into one `Input`. Aim is emitted
   from the remembered cursor every frame (held steady between moves); it stays `nothing` until the
   first mouse event.
-- **The decay sweep is a pure, separately-tested helper** — e.g. `sweep_stale!(map, now, window)`
-  — not buried inside `_poll_input!`. `_poll_input!` itself needs a live `TK.poll_event` and so is
-  exercised only by the human tier-2/3 check, but the eviction/refresh *logic* is pure and gets a
-  direct headless unit test (call `sweep_stale!` with a scripted map + tick). This is also the
-  cleaner structure regardless of testing.
+- **The pure logic is factored out of `_poll_input!`** into helpers that don't need a live terminal:
+  `sweep_stale!(map, now, window)` (eviction/refresh) and `fold_input(state, now)` (held-map + aim +
+  fire → `Input`). `_poll_input!` itself needs a live `TK.poll_event` (it depends on `INPUT_ACTIVE[]`
+  and raw-mode IO, `events.jl:128`) and so is exercised only by the human tier-2/3 check; the two
+  pure helpers get direct headless unit tests. This is the cleaner structure regardless of testing.
+- **Tachikoma internal-API dependency:** `poll_event` / `enter_tui!` / `leave_tui!` / `toggle_mouse!`
+  are **not exported** by Tachikoma — the demo reaches them `TK.`-qualified (as it already does).
+  This couples the demo to Tachikoma 2.1.0's internal surface; the `[compat] Tachikoma = "2.1.0"`
+  pin already in `Project.toml` is what guards it.
 - `run_game`'s interactive branch prints `\e[?1003h` after `enter_tui!` and `\e[?1003l` in the
   `finally` before `leave_tui!`, so any-motion mouse tracking is enabled and always restored.
 - The stale prose must all be rewritten for the twin-stick + held-key-decay model: the
@@ -327,12 +359,14 @@ constructs an `InputState`.
   through `tick!`: the held-key **`sweep_stale!`** decay/refresh logic (the rest of `_poll_input!`
   needs a live `TK.poll_event`, so only this extracted helper is headless-testable), and the
   wrap-aware **delta helper** (an edge-straddling pair returns the short-way signed delta).
-- **Two existing assertions are fragile under live collisions and must be hardened**, not just
-  renamed: `test_gameloop.jl:96-101` asserts `g.asteroids[1].θ` rotated after 30 ticks — if
-  asteroid 1 shatters (`deleteat!`) or replenish reorders the vector, index 1 is a different body;
-  assert "*some* asteroid rotated" or pin that scenario's velocities low enough that no
-  shatter/replenish fires. (`test_gameloop.jl:61`'s in-bounds invariant is covered by the
-  push-apart re-wrap above.)
+- **Index-identity assertions are fragile under live collisions and must be hardened**, not just
+  renamed: both `test_gameloop.jl:102` (`g.asteroids[1].θ` after 30 ticks) and `test_game.jl:22-23`
+  (`asteroids[1].θ` after one tick) assume index 1 is the same body — but a shatter (`deleteat!`) or
+  replenish reorder breaks that. Assert "*some* asteroid rotated", or pin those scenarios' velocities
+  low enough that no shatter/replenish fires. (`test_gameloop.jl:61`'s in-bounds invariant is covered
+  by the push-apart re-wrap above.)
+- `test_draw.jl:18-21` asserts `draw!` is deterministic w.r.t. `g`; the rewritten `_draw_ship!` must
+  stay a pure function of `g` (no RNG / wall-clock) for it to hold.
 
 **Determinism & the golden frame.** `frame60` is **not** a 60-tick evolution: `_run_golden`
 (`test_golden.jl:32-41`) builds `new_game(Xoshiro(38))`, then **overrides** every asteroid's
@@ -360,6 +394,17 @@ not trusted on report.
   occasionally shatter on hard hits; ship dies on contact, respawns with the blink; field keeps
   ~N asteroids. Tested on at least one kitty-class and one non-kitty terminal.
 
+## Conventions (this change set)
+
+- Every new `.jl` file carries the `# SPDX-License-Identifier: MIT` header (as all existing
+  `src/`/`test/` files do).
+- The demo has its **own** suite under `examples/asteroid_tui/`, run with its own project — not the
+  root TextMeasure suite:
+  `julia --project=examples/asteroid_tui -e 'using Pkg; Pkg.test()'`, logging to
+  `test-logs/$CLAUDE_CODE_SESSION_ID.log` per the root CLAUDE.md.
+- `examples/asteroid_tui/Manifest.toml` stays **gitignored** ([[demos-manifest-not-committed]]);
+  commit `Project.toml` only and instantiate on a fresh clone.
+
 ## Files touched
 
 | File | Change |
@@ -367,18 +412,21 @@ not trusted on report.
 | `src/input.jl` | `Input` fields → `up/down/left/right` strafe + optional `aim::Union{Nothing,Float64}`; remove `thrust`; docstring |
 | `src/game.jl` | `GameState` gains `prev_debug` (edge state, beside `prev_fire`); direct-velocity movement; aim→`φ`; wrap-aware **delta** helper; asteroid bounce/shatter; ship↔asteroid death; spawn protection; replenish; honour `impact` (cell→polygon frame conversion) in `fracture_asteroid!`; edge-triggered debug; spawn-velocity rescale |
 | `src/entities.jl` | none expected (`Ship.φ` already exists; `prev_debug` lives in `GameState`) |
-| `src/draw.jl` | 8-way rotating ship glyph + heading indicator; plume removed; update stale comments (`draw.jl:8` `COL_BEAM` "thrust plume", `draw.jl:48-51, 166`) |
-| `src/render_tachikoma.jl` | stateful `InputState` (held-key map + last cursor + `lmb_down`) threaded through `poll`; pure `sweep_stale!` decay helper; `_poll_input!` rewrite (stamp on press/repeat, mouse aim + edge-derived button); `1003h/1003l` enable/restore in `run_game`; rewrite stale prose (`:1-17` header, `:96-97` & `:141-153` docstrings, `:113` poll wiring) |
-| `src/AsteroidTUI.jl` | export any new test-visible symbol (e.g. `InputState` / `sweep_stale!`) if tests need it |
-| `run.jl` | rewrite the controls banner (`run.jl:4-5`) for twin-stick |
-| `test/test_gameloop.jl`, `test/test_game.jl`, `test/test_draw.jl` | new `Input` field set; replace `test_game.jl:13` turn-assertion; harden `test_gameloop.jl:96-101` rotation-identity; new headless collision/death/replenish tests |
+| `src/draw.jl` | 8-way directional ship glyph (nose one cell along `φ`, charge indicator relocated) + plume removed; beam origin offset to the nose; **cut the auto-targeting leader** (`draw.jl:216-223`); update stale plume comments (`draw.jl:8` `COL_BEAM`, `:48-51`, `:165`/`:175`) |
+| `src/render_tachikoma.jl` | stateful `InputState` (held-key map + last cursor + `lmb_down`); pure `sweep_stale!` + `fold_input` helpers; `_poll_input!` rewrite (stamp on press/repeat, mouse aim + edge-derived button, drain-loop timeout per existing caveat); `1003h/1003l` enable/restore in `run_game`; rewrite stale prose (`:1-17` header, `:96-97` & `:141-153` docstrings, `:113` poll wiring) |
+| `src/AsteroidTUI.jl` | likely **no change** — new helpers stay unexported, reached by `using AsteroidTUI: …` (touch only if a genuinely public symbol is added) |
+| `run.jl` | rewrite the controls banner (`run.jl:3-5`) for twin-stick |
+| `test/test_gameloop.jl`, `test/test_game.jl`, `test/test_draw.jl` | new `Input` field set; replace `test_game.jl:13` turn-assertion; harden index-identity asserts (`test_gameloop.jl:102`, `test_game.jl:22-23`); keep `test_draw.jl:18-21` determinism; new headless collision/death/replenish + `sweep_stale!`/`fold_input`/wrap-delta unit tests |
 | `test/test_fracture.jl` | callers pass `impact` as a cell-space offset (new frame contract); keep lossless-glyph-preservation assertions |
-| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified |
+| `test/golden/frame60.{sha256,txt}` | regenerated (driven by the `_draw_ship!` change only) + visually verified; update the stale "thrust plume" comment in `test_golden.jl:25` |
 
 ## Open tuning knobs (resolved at implementation, not design)
 
 - Movement speed and friction coefficient.
-- Decay-window length (ticks).
+- Decay-window length (ticks). **Constraint, not just taste:** it must exceed the worst-case
+  inter-repeat interval at 30 fps on the slowest non-kitty autorepeat you support — otherwise a
+  genuinely-held key can be evicted between repeats and stutter. Set it from that floor, then for
+  crispness rely on the kitty release path.
 - Visual-space row-scale factor for aim (cell aspect ≈ 2, refined by eye; applied as a multiplier).
 - Asteroid spawn-velocity range and the bounce-vs-shatter **closing-speed** threshold.
 - Replenish target `N` (defaults to the starting `n_asteroids`).
