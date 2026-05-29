@@ -1,0 +1,6 @@
+# Per-demo Manifest stays gitignored (also covered by the recursive root rule);
+# named here for parity with the other demo packages.
+Manifest.toml
+
+# Generated render artifact (regenerate with `julia --project=. demo.jl`).
+comparison.pdf
