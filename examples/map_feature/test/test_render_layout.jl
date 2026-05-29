@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
-# Render-level non-overlap invariants on the REAL Vermont TWO-COLUMN layout, via the factored-out
-# MapFeature._compose_layout (no drawing). Each column is an independent shape_pack run; both must
-# read top-to-bottom on their own side and never overlap the silhouette, the labels, or the chrome.
+# Render-level invariants on the REAL Vermont TWO-COLUMN layout, via MapFeature._compose_layout
+# (no drawing). Each column is an independent shape_pack run reading top-to-bottom on its own side;
+# POIs use numbered on-map markers keyed to a bottom-left legend (no labels in prose, no leaders).
 using Test, MapFeature
 using GeometryBasics: Point2
 
-# Polygon horizontal envelope over y ∈ [y0,y1], computed DIRECTLY from the polygon (independent of
-# complement_chord_fn), EXACTLY: extremes are at the y0/y1 boundary crossings or interior vertices.
+# Exact polygon horizontal envelope over y ∈ [y0,y1] (independent of complement_chord_fn):
+# extremes occur only at the y0/y1 boundary crossings or at interior vertices.
 function envelope_over(poly, y0, y1)
     lo = Inf; hi = -Inf; n = length(poly)
     for ys in (y0, y1), i in 1:n
@@ -33,8 +33,6 @@ boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
     L = MapFeature._compose_layout(load_vermont(), load_pois())
     poly = L.poly_px
     @test length(L.columns) == 2
-    labels = [b for b in L.labelboxes if b !== nothing]
-    @test !isempty(labels)
 
     n_west = 0; n_east = 0
     for (prep, pk, side) in L.columns
@@ -48,58 +46,49 @@ boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
             x0, x1 = p.x, p.x + w
             wtop, wbot = p.y - asc, p.y + desc
 
-            # within inner margins, and below the masthead/stat band
             @test x0 >= MapFeature.MARGIN - 1e-6
             @test x1 <= MapFeature.PAGE_W - MapFeature.MARGIN + 1e-6
-            @test wtop >= MapFeature.SIDEBAR_BOTTOM - 1e-6
+            @test wtop >= MapFeature.SIDEBAR_BOTTOM - 1e-6   # below the masthead/stat band
 
-            # each column stays strictly on its own side of map-center (two real columns)
             if side === :west
                 @test x1 <= L.map_center + 1e-6; n_west += 1
             else
                 @test x0 >= L.map_center - 1e-6; n_east += 1
             end
 
-            # body-vs-silhouette over the word's full glyph height (faithful, independent envelope)
-            env = envelope_over(poly, wtop, wbot)
+            env = envelope_over(poly, wtop, wbot)            # body never overlaps the silhouette
             if env !== nothing
                 el, er = env
                 @test x1 <= el + 1e-6 || x0 >= er - 1e-6
-            end
-
-            # body-vs-POI-label
-            for b in labels
-                @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)
             end
         end
     end
     @test n_west > 0 && n_east > 0                           # both columns genuinely populated
 end
 
-@testset "POI labels are OUTBOARD: clear of the silhouette and on the correct side margin" begin
+@testset "numbered legend + on-map numbers: clear of prose; one key entry per POI" begin
     L = MapFeature._compose_layout(load_vermont(), load_pois())
-    poly, mc = L.poly_px, L.map_center
-    left_x = MapFeature.MARGIN
-    right_x = MapFeature.PAGE_W - MapFeature.MARGIN
-    placed = 0
-    for (i, p) in enumerate(load_pois())
-        b = L.labelboxes[i]; b === nothing && continue
-        placed += 1
-        a = L.anchors[i]
-        # (1) label sits at its side's page margin (outboard), not floating mid-column/on the map
-        if a[1] < mc
-            @test isapprox(b.x, left_x; atol=1e-6)              # west: left-anchored at the margin
-        else
-            @test isapprox(b.x + b.w, right_x; atol=1e-6)       # east: right edge on the margin
+    pois = load_pois()
+
+    # every POI is keyed in the legend, numbered 1..n
+    @test length(L.legend.rows) == length(pois)
+    @test [r.num for r in L.legend.rows] == collect(1:length(pois))
+
+    # legend box lives in the bottom-left dead space: clear of the silhouette column, in the page box
+    bx0, by0, bx1, by1 = L.legend.box
+    @test bx0 >= MapFeature.MARGIN - 1e-6
+    @test bx1 <= L.map_left + 1e-6
+    @test by1 <= L.region_bottom + 1e-6
+
+    # neither prose column overlaps the legend box, nor any on-map number box
+    for (prep, pk, _) in L.columns
+        asc, desc = prep.metrics.ascent, prep.metrics.descent
+        for p in pk.placements
+            w = prep.segments[p.segment_index].width
+            @test !boxes_overlap(p.x, p.y - asc, w, asc + desc, bx0, by0, bx1 - bx0, by1 - by0)
+            for (nx0, ny0, nx1, ny1) in L.number_excl
+                @test !boxes_overlap(p.x, p.y - asc, w, asc + desc, nx0, ny0, nx1 - nx0, ny1 - ny0)
+            end
         end
-        # (2) label box is horizontally clear of the silhouette envelope over its whole height
-        env = envelope_over(poly, b.y, b.y + b.h)
-        if env !== nothing
-            el, er = env
-            @test b.x + b.w <= el + 1e-6 || b.x >= er - 1e-6
-        end
-        # (3) within the page content box
-        @test b.y >= L.region_top - 1e-6 && b.y + b.h <= L.region_bottom + 1e-6
     end
-    @test placed >= length(load_pois()) - 2                     # at most a couple dropped
 end

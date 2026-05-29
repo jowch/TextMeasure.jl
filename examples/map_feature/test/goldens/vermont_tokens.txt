@@ -150,6 +150,7 @@ ice
 idea
 income
 independent
+interest
 its
 itself
 jerry
@@ -229,6 +230,7 @@ peak
 people
 place
 places
+points
 politics
 pop
 population

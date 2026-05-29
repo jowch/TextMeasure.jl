@@ -7,11 +7,15 @@
 # against its OWN side's negative space, so each reads top-to-bottom on its own (NOT per-band
 # snaking across the map). House style: docs/superpowers/demos-house-style.md.
 #
+# POIs use NUMBERED markers on the map keyed to a compact numbered legend in the bottom-left dead
+# space — so POI names never sit on the silhouette or in the prose, and there are NO leader lines
+# crossing the columns (the failure mode a centered map + full flanks otherwise forces).
+#
 # Non-overlap by construction, all TESTED (test/test_render_layout.jl): per column, body never
 # overlaps the silhouette envelope (carved by complement_chord_fn with a `pad` clearance gutter)
-# nor any POI label box (subtracted per band); masthead/sidebar live above the body region; the
-# two columns occupy opposite sides of map-center. Rendering is pixel-faithful (campixel! Scene,
-# 1 data unit == 1 px) so measured widths render 1:1 and never overrun what they were packed against.
+# nor any on-map number box; the legend box sits clear of both columns; masthead/sidebar live above
+# the body region; the two columns occupy opposite sides of map-center. Rendering is pixel-faithful
+# (campixel! Scene, 1 data unit == 1 px) so measured widths render 1:1 and never overrun.
 
 import CairoMakie
 const CM = CairoMakie   # re-exports Makie's Scene / campixel! / text! / poly! / RGBAf
@@ -106,39 +110,52 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}},
     pp = PageProjection(state_polygon, map_region; dest=dest, halign=:center)
     poly_px = project_polygon(pp, state_polygon)
 
-    body_backend  = MakieBackend(; font=SERIF, fontsize=SZ_BODY, px_per_unit=1.0)
-    label_backend = MakieBackend(; font=SANS,  fontsize=SZ_BODY, px_per_unit=1.0)
-
-    # POI markers + labels placed FIRST (so the body can avoid them); capital label is subhead-sized.
-    anchors = [project_point(pp, Point2{Float64}(p.coord[1], p.coord[2])) for p in pois]
-    sizes = map(pois) do p
-        wscale = p.kind === :capital ? SZ_SUBHEAD / SZ_BODY : 1.0
-        (TextMeasure.measure(label_backend, p.name) * wscale + 4.0,
-         (p.kind === :capital ? SZ_SUBHEAD + 3.0 : SZ_BODY + 2.0))
-    end
-    # OUTBOARD labels: pushed to the page side-margins (clear of silhouette AND prose), leader-linked.
-    labelboxes = place_margin_labels(anchors, sizes, map_center, MARGIN, PAGE_W - MARGIN,
-                                     region_top, region_bottom)
-
-    # Grow placed label boxes into body-exclusion rects (+2px x; ±ascent/descent y for adjacent bands).
+    body_backend = MakieBackend(; font=SERIF, fontsize=SZ_BODY, px_per_unit=1.0)
     bm = TextMeasure.font_metrics(body_backend)
     asc, desc = bm.ascent, bm.descent
-    label_excl = NTuple{4,Float64}[
-        (b.x - 2.0, b.y - asc, b.x + b.w + 2.0, b.y + b.h + desc)
-        for b in labelboxes if b !== nothing]
+
+    # On-map NUMBERED markers (1..n): each dot gets a small glyph+number. A tiny exclusion box keeps
+    # prose from running under the number where a dot lands near a column edge (e.g. lakeshore POIs).
+    anchors = [project_point(pp, Point2{Float64}(p.coord[1], p.coord[2])) for p in pois]
+    number_excl = NTuple{4,Float64}[(a[1] - 7.0, a[2] - asc, a[1] + 16.0, a[2] + desc) for a in anchors]
 
     west_bounds = (MARGIN, region_top, map_center - COL_GUTTER, region_bottom)
     east_bounds = (map_center + COL_GUTTER, region_top, PAGE_W - MARGIN, region_bottom)
-
     columns = map(((BODY_WEST, west_bounds, :west), (BODY_EAST, east_bounds, :east))) do (txt, bounds, side)
-        cf   = _column_chord_fn(poly_px, bounds, label_excl; pad=SILHOUETTE_PAD)
+        cf   = _column_chord_fn(poly_px, bounds, number_excl; pad=SILHOUETTE_PAD)
         prep = prepare(body_backend, txt)
         pk   = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, PACK_KW...)
         (prep, pk, side)
     end
 
-    return (; pp, poly_px, anchors, labelboxes, pois, columns, map_region, map_center,
+    # Numbered KEY in the bottom-left dead space, below where the west column's prose ends.
+    la = columns[1][1].metrics.line_advance
+    wp = columns[1][2].placements
+    west_last_y = isempty(wp) ? region_top : maximum(p.y for p in wp)
+    legend = _build_legend(pois, MARGIN, west_last_y + 1.6 * la, map_left - MARGIN - 12.0, region_bottom)
+
+    return (; pp, poly_px, anchors, number_excl, pois, columns, legend, map_region, map_center,
             region_top, region_bottom, map_left, map_right)
+end
+
+# Numbered-key geometry in the bottom-left dead space: one sub-column, or two if 11 rows are too tall.
+function _build_legend(pois::Vector{POI}, x0::Float64, y0::Float64, max_w::Float64, y_max::Float64)
+    n = length(pois)
+    row_h = 14.0; head_h = 16.0
+    rows_top = y0 + head_h
+    avail = y_max - rows_top
+    per_col = max(1, floor(Int, avail / row_h))
+    ncols = clamp(cld(n, per_col), 1, 2)
+    per_col = cld(n, ncols)
+    col_w = max_w / ncols
+    rows = NamedTuple[]
+    for k in 1:n
+        c = div(k - 1, per_col); r = mod(k - 1, per_col)
+        push!(rows, (num=k, name=pois[k].name,
+                     x=x0 + c * col_w, ybaseline=rows_top + r * row_h + 10.0))
+    end
+    box = (x0, y0, x0 + ncols * col_w, rows_top + per_col * row_h)
+    return (; box, rows, header_x=x0, header_y=y0 + 10.0)
 end
 
 """
@@ -185,26 +202,22 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
         end
     end
 
-    # leader lines (1px gray) from each outboard label's inner edge to its on-map dot — drawn first
-    leader = CM.RGBAf(0.420, 0.447, 0.502, 0.55)
-    for (i, _) in enumerate(points_of_interest)
-        b = L.labelboxes[i]; b === nothing && continue
-        a = L.anchors[i]
-        inner_x = a[1] < L.map_center ? b.x + b.w : b.x        # edge of the box facing the map
-        CM.lines!(scene, [inner_x, a[1]], [flip(b.y + b.h/2), flip(a[2])];
-                  color=leader, linewidth=1.0)
-    end
-
-    # RED markers on the dots, then the outboard labels
+    # on-map markers: RED type glyph at each dot + a small near-black number (keyed to the legend)
     for (i, p) in enumerate(points_of_interest)
         a = L.anchors[i]
         CM.text!(scene, a[1], flip(a[2]); text=string(_marker_glyph(p)),
                  font=SANS, fontsize=(p.kind === :capital ? 16 : 11),
                  align=(:center, :center), color=C_RED)
-        b = L.labelboxes[i]; b === nothing && continue
-        CM.text!(scene, b.x, flip(b.y + b.h); text=p.name, font=SANS,
-                 fontsize=(p.kind === :capital ? SZ_SUBHEAD : SZ_BODY),
-                 align=(:left, :baseline), color=C_TEXT)
+        CM.text!(scene, a[1] + (p.kind === :capital ? 9.0 : 6.0), flip(a[2] - 3.0);
+                 text=string(i), font=SANS, fontsize=8, align=(:left, :baseline), color=C_TEXT)
+    end
+
+    # numbered KEY in the bottom-left dead space (no leaders crossing the prose)
+    CM.text!(scene, L.legend.header_x, flip(L.legend.header_y); text="POINTS OF INTEREST",
+             font=SANS, fontsize=SZ_CAPTION, align=(:left, :baseline), color=C_GRAY)
+    for row in L.legend.rows
+        CM.text!(scene, row.x, flip(row.ybaseline); text="$(row.num)  $(row.name)",
+                 font=SANS, fontsize=10, align=(:left, :baseline), color=C_TEXT)
     end
 
     # footer (sans caption, gray, baseline on the bottom inner-margin line)
