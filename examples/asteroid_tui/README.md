@@ -49,22 +49,11 @@ The suite drives a deterministic, seeded 60-tick scenario, checksums the resulti
 (`test/test_fracture.jl`). A human-readable snapshot of the full 120×40 golden
 frame lives at `test/golden/frame60.txt`.
 
-### One asteroid from the golden frame
+### The golden frame
 
-A single asteroid, prose shape-packed inside its silhouette under its stat tag
-(excerpt of `test/golden/frame60.txt`, verbatim):
-
-```text
-┌─ d:078m v:0.18µ ─┐
-
-   S-type
-  drifter
-  ZL-139
-  composed of
- shock-veined
- ore, ancient
- and cold,
-  spinning at
-  0.07 rad per
-   second.
-```
+The committed snapshot (`test/golden/frame60.txt`) is a 120×40 showcase scene:
+two intact asteroids with their descriptive prose **shape-packed inside each
+silhouette** under a `┌─ d:… v:… ─┐` stat tag, plus a four-shard explosion from a
+beam hit (each shard carries a `subprep` slice of the original prose, scattered
+outward). The scene is tuned for legibility — no overlapping labels, no off-screen
+clipping. Open `test/golden/frame60.txt` to view the full frame.
