@@ -71,32 +71,99 @@ function _widest(intervals)
     return best
 end
 
+# Pack ONE line into a single interval [L, R] at baseline `y`, starting at segment
+# `si`. Mirrors src/layout.jl's greedy inner loop, scoped to this one interval; both
+# the :widest (one interval/band) and :all (each disjoint interval/band) paths reuse
+# it so overflow_strategy semantics stay identical and scoped to the interval being
+# filled. Mutates `placements`/`overflowed`; returns `(next_si, aborted)`. `aborted`
+# is true only for overflow_strategy=:reject hitting an over-wide first word — the
+# caller must then empty placements, flag si:n words, and return (global abort).
+function _pack_interval!(placements::Vector{Placement}, overflowed::Vector{Int},
+                         segs, si::Int, n::Int, L::Float64, R::Float64, y::Float64,
+                         overflow_strategy::Symbol)
+    W = R - L
+    cursor = 0.0                 # advance from L of words+spaces committed on this line
+    committed = 0                # words placed in this interval's line
+    pending::Union{Nothing,Segment} = nothing
+    while si <= n
+        seg = segs[si]
+        if seg.kind === :newline
+            si += 1
+            return (si, false)                       # newline ends the line
+        elseif seg.kind === :space
+            pending = seg; si += 1
+        else  # :word
+            if committed == 0
+                # first word of the line; leading space already trimmed (pending dropped)
+                if seg.width > W                     # over-wide for this interval
+                    if overflow_strategy === :reject
+                        return (si, true)            # signal global abort to caller
+                    elseif overflow_strategy === :skip
+                        push!(overflowed, si); si += 1; pending = nothing
+                        continue                     # back-fill: next word, same interval
+                    else  # :widest_row — place at L anyway, accept overflow
+                        push!(placements, Placement(si, L, y))
+                        push!(overflowed, si); si += 1
+                        return (si, false)           # over-wide word occupies its own line
+                    end
+                else
+                    push!(placements, Placement(si, L, y))
+                    cursor = seg.width; committed = 1; pending = nothing; si += 1
+                end
+            else
+                extra = (pending === nothing ? 0.0 : pending.width) + seg.width
+                if cursor + extra > W
+                    return (si, false)               # word starts next line/interval
+                else
+                    if pending !== nothing
+                        cursor += pending.width; pending = nothing
+                    end
+                    push!(placements, Placement(si, L + cursor, y))
+                    cursor += seg.width; committed += 1; si += 1
+                end
+            end
+        end
+    end
+    return (si, false)
+end
+
 """
     shape_pack(prep, chord_fn; line_advance, min_chord_width=24,
-               overflow_strategy=:widest_row, max_empty_bands=1024,
-               max_bands=100_000) -> PackedLayout
+               overflow_strategy=:widest_row, fill=:widest,
+               max_empty_bands=1024, max_bands=100_000) -> PackedLayout
 
 Pack the `:word` segments of `prep` into the region described by `chord_fn`, walking
-horizontal bands of height `line_advance` from the top (y=0) downward. In each band the
-**widest** available interval is used; bands whose widest interval is `< min_chord_width`
-(or empty) are skipped. `:space`/`:newline` segments steer line breaks exactly as
-`layout` does (leading/trailing whitespace trimmed per line) but are never emitted as
-`Placement`s. Returns word placements in reading order.
+horizontal bands of height `line_advance` from the top (y=0) downward. `:space`/`:newline`
+segments steer line breaks exactly as `layout` does (leading/trailing whitespace trimmed
+per line/interval) but are never emitted as `Placement`s. Returns word placements in
+reading order.
+
+`fill` selects how a band's available intervals are used:
+- `:widest` (default) — only the **widest** interval is filled; bands whose widest
+  interval is `< min_chord_width` (or empty) are skipped. Back-compatible behavior.
+- `:all` — every disjoint interval in the band is filled, in left-to-right order:
+  the leftmost interval is greedily filled (same rule as the single-interval path),
+  flow then continues into the next interval in the SAME band (same baseline), then
+  advances to the next band. Reading order within a band is left-run words, then the
+  next-run words, and so on. An individual interval `< min_chord_width` is skipped
+  (the rest of the band is still filled); a band with no interval `>= min_chord_width`
+  is skipped entirely. This lets text wrap around BOTH sides of a centered obstacle.
 
 `chord_fn` may be a plain closure `(y_top, y_bottom) -> Vector{Tuple{Float64,Float64}}`
 or an [`AbstractChordFn`](@ref); both are called identically. Returned intervals must be
 sorted ascending and pairwise disjoint; an empty vector skips the band.
 
 A word that is over-wide only mid-line (it fits no remaining room but is not the first
-word of the line) is not itself flagged — it simply breaks to the next band, where it is
-re-evaluated as that band's first word and handled by `overflow_strategy` below.
+word of the line) is not itself flagged — it simply breaks to the next interval/band,
+where it is re-evaluated as that interval's first word and handled by `overflow_strategy`.
 
-`overflow_strategy` controls a word wider than its band's widest interval `W` (applied
-when the word is the first word of a line):
+`overflow_strategy` controls a word wider than the interval width `W` it is being placed
+into (applied when the word is the first word of that interval's line). Under `fill=:all`
+the strategy is scoped to the individual interval, not the whole band:
 - `:widest_row` (default) — place it at the interval's left edge, record it in
   `overflowed`, and end its line (the over-wide word gets its own line).
 - `:skip` — drop the word and record it in `overflowed`, then **continue filling the
-  same band** with the following (narrower) words (back-fill).
+  same interval** with the following (narrower) words (back-fill).
 - `:reject` — abort: return a `PackedLayout` with empty `placements` and the offending
   word plus every later `:word` index in `overflowed`.
 
@@ -113,11 +180,14 @@ function shape_pack(prep::Prepared, chord_fn;
                     line_advance::Real,
                     min_chord_width::Real=24,
                     overflow_strategy::Symbol=:widest_row,
+                    fill::Symbol=:widest,
                     max_empty_bands::Int=1024,
                     max_bands::Int=100_000)::PackedLayout
     line_advance > 0 || throw(ArgumentError("line_advance must be > 0; got $line_advance"))
     overflow_strategy in (:widest_row, :skip, :reject) ||
         throw(ArgumentError("overflow_strategy must be :widest_row, :skip or :reject; got $(repr(overflow_strategy))"))
+    fill in (:widest, :all) ||
+        throw(ArgumentError("fill must be :widest or :all; got $(repr(fill))"))
     la  = Float64(line_advance)
     mcw = Float64(min_chord_width)
     m   = prep.metrics
@@ -133,13 +203,22 @@ function shape_pack(prep::Prepared, chord_fn;
     empty_run = 0
 
     while si <= n
-        # ---- find next usable band ----
-        L = R = 0.0
+        # ---- find next usable band: collect the interval(s) to fill ----
+        # `:widest` ⇒ at most the single widest interval (if >= mcw); `:all` ⇒ every
+        # interval >= mcw, left-to-right. A band is usable iff that list is non-empty.
+        intervals = Tuple{Float64,Float64}[]
         usable = false
         while band <= max_bands
-            iv = _widest(chord_fn((band - 1) * la, band * la))
-            if iv !== nothing && (iv[2] - iv[1]) >= mcw
-                L, R = Float64(iv[1]), Float64(iv[2])
+            ivs = chord_fn((band - 1) * la, band * la)
+            if fill === :widest
+                iv = _widest(ivs)
+                if iv !== nothing && (iv[2] - iv[1]) >= mcw
+                    intervals = [(Float64(iv[1]), Float64(iv[2]))]
+                end
+            else  # :all — keep each interval wide enough, in left-to-right order
+                intervals = [(Float64(l), Float64(r)) for (l, r) in ivs if (Float64(r) - Float64(l)) >= mcw]
+            end
+            if !isempty(intervals)
                 usable = true
                 entered = true
                 empty_run = 0
@@ -154,53 +233,17 @@ function shape_pack(prep::Prepared, chord_fn;
         usable || break          # shape vertically exhausted (or never entered)
 
         baseline = (band - 1) * la + m.ascent
-        W = R - L
-        cursor = 0.0             # advance from L of words+spaces committed on this line
-        committed = 0            # words placed on this line
-        pending::Union{Nothing,Segment} = nothing
 
-        # ---- pack one line, mirroring src/layout.jl's greedy inner loop ----
-        while si <= n
-            seg = segs[si]
-            if seg.kind === :newline
-                si += 1; break                       # newline ends the line
-            elseif seg.kind === :space
-                pending = seg; si += 1
-            else  # :word
-                if committed == 0
-                    # first word on the line; leading space already trimmed (pending dropped)
-                    if seg.width > W                  # over-wide for this band
-                        if overflow_strategy === :reject
-                            empty!(placements)
-                            for j in si:n
-                                segs[j].kind === :word && push!(overflowed, j)
-                            end
-                            return PackedLayout(placements, overflowed, m)
-                        elseif overflow_strategy === :skip
-                            push!(overflowed, si); si += 1; pending = nothing
-                            continue                  # back-fill: try next word in this same band
-                        else  # :widest_row — place at L anyway, accept overflow
-                            push!(placements, Placement(si, L, baseline))
-                            push!(overflowed, si)
-                            cursor = seg.width; committed = 1; pending = nothing; si += 1
-                            break                     # over-wide word occupies its own line
-                        end
-                    else
-                        push!(placements, Placement(si, L, baseline))
-                        cursor = seg.width; committed = 1; pending = nothing; si += 1
-                    end
-                else
-                    extra = (pending === nothing ? 0.0 : pending.width) + seg.width
-                    if cursor + extra > W
-                        break                         # word starts next line; trailing space trimmed
-                    else
-                        if pending !== nothing
-                            cursor += pending.width; pending = nothing
-                        end
-                        push!(placements, Placement(si, L + cursor, baseline))
-                        cursor += seg.width; committed += 1; si += 1
-                    end
+        # ---- fill each interval of this band on the same baseline, left-to-right ----
+        for (L, R) in intervals
+            si > n && break
+            si, aborted = _pack_interval!(placements, overflowed, segs, si, n, L, R, baseline, overflow_strategy)
+            if aborted                                # overflow_strategy=:reject global abort
+                empty!(placements)
+                for j in si:n
+                    segs[j].kind === :word && push!(overflowed, j)
                 end
+                return PackedLayout(placements, overflowed, m)
             end
         end
         band += 1                # next line uses the next band
