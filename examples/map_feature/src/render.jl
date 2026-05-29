@@ -60,9 +60,14 @@ function _subtract_interval(ivs::Vector{Tuple{Float64,Float64}}, (a, b)::Tuple{F
     return out
 end
 
-# Body chord_fn: complement around the silhouette, with the map column reserved in non-crossing
-# (letterbox) bands within the map's y-range so prose never crosses the empty map panel.
-function _body_chord_fn(poly_px, text_bounds, map_region)
+# Body chord_fn: complement around the silhouette, plus two render-level reservations so prose
+# never collides with non-text furniture:
+#  - the map column is reserved in non-crossing (letterbox) bands so prose can't cross the empty
+#    map panel;
+#  - each POI **label** box (`label_excl`, already grown for clearance) is subtracted from every
+#    band it spans, so body text flows around the labels exactly as it flows around the silhouette.
+function _body_chord_fn(poly_px, text_bounds, map_region,
+                        label_excl::Vector{NTuple{4,Float64}})
     base = complement_chord_fn(poly_px, text_bounds)
     left, _, right, _ = text_bounds
     mx0, mtop, mx1, mbot = map_region
@@ -72,18 +77,25 @@ function _body_chord_fn(poly_px, text_bounds, map_region)
         if mtop <= yc <= mbot && length(ivs) == 1 && ivs[1] == (left, right)
             ivs = _subtract_interval(ivs, (mx0, mx1))   # reserve the map column in letterbox bands
         end
+        @inbounds for (lx0, ly0, lx1, ly1) in label_excl
+            (ly0 < yb && yt < ly1) || continue          # band overlaps the label vertically
+            ivs = _subtract_interval(ivs, (lx0, lx1))
+        end
         return ivs
     end
 end
 
 """
-    _compose_layout(state_polygon; dest, body_text, fontsize) -> NamedTuple
+    _compose_layout(state_polygon, pois; dest, body_text, fontsize) -> NamedTuple
 
 The pure geometry/layout half of `map_feature`, factored out so the render-level non-overlap
-invariants are testable without drawing. Returns `(; pp, poly_px, prep, pk, text_bounds,
-map_region, region_top, region_bottom, map_left, map_right)`.
+invariants are testable without drawing. Projects geography + POIs, places POI labels FIRST, then
+flows the body text through the negative space around BOTH the silhouette and the label boxes.
+Returns `(; pp, poly_px, prep, pk, anchors, labelboxes, pois, text_bounds, map_region,
+region_top, region_bottom, map_left, map_right)`.
 """
-function _compose_layout(state_polygon::Vector{Point2{Float64}};
+function _compose_layout(state_polygon::Vector{Point2{Float64}},
+                         pois::Vector{POI};
                          dest::AbstractString="EPSG:5070",
                          body_text::AbstractString=DEFAULT_BODY,
                          fontsize::Float64=12.0)
@@ -96,13 +108,29 @@ function _compose_layout(state_polygon::Vector{Point2{Float64}};
     pp = PageProjection(state_polygon, map_region; dest=dest)
     poly_px = project_polygon(pp, state_polygon)
 
+    body_backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
+    label_backend = MakieBackend(; font=DISPLAY_FONT, fontsize=fontsize, px_per_unit=1.0)
+
+    # POI markers + labels placed FIRST (label fonts ⇒ accurate boxes), so the body can avoid them.
+    anchors = [project_point(pp, Point2{Float64}(p.coord[1], p.coord[2])) for p in pois]
+    sizes = [(TextMeasure.measure(label_backend, p.name) + 4.0,
+              (p.kind === :capital ? fontsize + 4.0 : fontsize + 2.0)) for p in pois]
+    labelboxes = place_poi_labels(anchors, sizes; offset=6.0, margin=2.0)
+
+    # Grow each placed label box into a body-exclusion rect: +2px x clearance, and vertically by a
+    # word's ascent/descent so a body word in an adjacent band can't clip the label either.
+    bm = TextMeasure.font_metrics(body_backend)
+    asc, desc = bm.ascent, bm.descent
+    label_excl = NTuple{4,Float64}[
+        (b.x - 2.0, b.y - asc, b.x + b.w + 2.0, b.y + b.h + desc)
+        for b in labelboxes if b !== nothing]
+
     text_bounds = (MARGIN, region_top, PAGE_W - MARGIN, region_bottom)
-    cf = _body_chord_fn(poly_px, text_bounds, map_region)
-    backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
-    prep = prepare(backend, body_text)
+    cf = _body_chord_fn(poly_px, text_bounds, map_region, label_excl)
+    prep = prepare(body_backend, body_text)
     pk = shape_pack(prep, cf; line_advance=prep.metrics.line_advance, PACK_KW...)
 
-    return (; pp, poly_px, prep, pk, text_bounds, map_region,
+    return (; pp, poly_px, prep, pk, anchors, labelboxes, pois, text_bounds, map_region,
             region_top, region_bottom, map_left, map_right)
 end
 
@@ -122,8 +150,7 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
                      dest::AbstractString="EPSG:5070",
                      body_text::AbstractString=DEFAULT_BODY,
                      fontsize::Float64=12.0)
-    L = _compose_layout(state_polygon; dest=dest, body_text=body_text, fontsize=fontsize)
-    backend = MakieBackend(; font=BODY_FONT, fontsize=fontsize, px_per_unit=1.0)
+    L = _compose_layout(state_polygon, points_of_interest; dest=dest, body_text=body_text, fontsize=fontsize)
 
     # Pixel-space scene: 1 data unit == 1 screen px (campixel!), so measured widths render 1:1.
     scene = CM.Scene(; size=(PAGE_W, PAGE_H), backgroundcolor=:white)
@@ -155,16 +182,13 @@ function map_feature(state_polygon::Vector{Point2{Float64}},
                  align=(:left, :baseline), color=:black)
     end
 
-    # POIs: markers + non-overlapping labels
-    anchors = [project_point(L.pp, Point2{Float64}(p.coord[1], p.coord[2])) for p in points_of_interest]
-    sizes = [(TextMeasure.measure(backend, p.name) + 4.0, fontsize + 2.0) for p in points_of_interest]
-    boxes = place_poi_labels(anchors, sizes; offset=6.0, margin=2.0)
+    # POIs: markers + the labels placed in _compose_layout (the SAME boxes the body flowed around)
     for (i, p) in enumerate(points_of_interest)
-        a = anchors[i]
+        a = L.anchors[i]
         CM.text!(scene, a[1], flip(a[2]); text=string(_marker_glyph(p.kind)),
                  font=DISPLAY_FONT, fontsize=(p.kind === :capital ? 18 : 12),
                  align=(:center, :center), color=:firebrick)
-        b = boxes[i]
+        b = L.labelboxes[i]
         b === nothing && continue
         CM.text!(scene, b.x, flip(b.y + b.h); text=p.name, font=DISPLAY_FONT,
                  fontsize=(p.kind === :capital ? fontsize + 2 : fontsize),

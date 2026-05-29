@@ -30,8 +30,11 @@ function envelope_over(poly, y0, y1)
     return isfinite(lo) ? (lo, hi) : nothing
 end
 
-@testset "render layout (Vermont): the four non-overlaps hold by construction" begin
-    L = MapFeature._compose_layout(load_vermont())
+boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh) =
+    ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
+
+@testset "render layout (Vermont): the non-overlaps hold by construction" begin
+    L = MapFeature._compose_layout(load_vermont(), load_pois())
     pk, prep, poly = L.pk, L.prep, L.poly_px
     la = prep.metrics.line_advance
     asc = prep.metrics.ascent
@@ -77,4 +80,17 @@ end
     # strip EAST of the silhouette — not merely allowed by the OR above. Pins the claim against
     # silent regression to a left-only column.
     @test n_right > 0
+
+    # (d) body-vs-POI-label: no placed body word's box overlaps any POI label box. The body
+    # chord_fn excludes the (grown) label boxes, so this holds by construction — pins the visual
+    # east-strip-vs-label collision the gate caught.
+    labels = [b for b in L.labelboxes if b !== nothing]
+    @test !isempty(labels)
+    for p in pk.placements
+        w = prep.segments[p.segment_index].width
+        x0, wtop = p.x, p.y - asc
+        for b in labels
+            @test !boxes_overlap(x0, wtop, w, asc + desc, b.x, b.y, b.w, b.h)
+        end
+    end
 end
