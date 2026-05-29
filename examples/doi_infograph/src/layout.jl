@@ -172,16 +172,16 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    dropcap_offset(first_para; body_fontsize, gutter=4.0) -> Float64
+    dropcap_offset(first_para; dropcap_fontsize, gutter=4.0) -> Float64
 
 Horizontal wrap offset for a drop cap = advance width of the first non-space character at
-`≈3×body_fontsize` (display size) + `gutter` px.
+the drop cap's display size `dropcap_fontsize` + `gutter` px. The caller sizes the cap to
+span the desired number of body lines and passes that size here so the notch matches.
 """
-function dropcap_offset(first_para::AbstractString; body_fontsize::Real, gutter::Real=4.0)
+function dropcap_offset(first_para::AbstractString; dropcap_fontsize::Real, gutter::Real=4.0)
     s = strip(first_para)
     isempty(s) && return Float64(gutter)
-    db = _backend(SERIF, 3 * body_fontsize)
-    return measure(db, string(first(s))) + Float64(gutter)
+    return measure(_backend(SERIF, dropcap_fontsize), string(first(s))) + Float64(gutter)
 end
 
 # ---------------------------------------------------------------------------
@@ -289,7 +289,8 @@ Compose a single-paper editorial infograph. The only valid `template` is `:edito
 `examples/layouts/knuth_plass.jl` is absent). All measurement uses px_per_unit=1.
 """
 function infograph(meta::PaperMetadata; page=(420, 594), template::Symbol=:editorial,
-                   justification::Symbol=:greedy, fetch_figure::Bool=false)
+                   justification::Symbol=:greedy, fetch_figure::Bool=false,
+                   title_fontsize::Union{Nothing,Real}=nothing)
     template === :editorial ||
         throw(ArgumentError("template must be :editorial; got $(repr(template))"))
     _check_justification(justification)
@@ -298,10 +299,22 @@ function infograph(meta::PaperMetadata; page=(420, 594), template::Symbol=:edito
     fig = CM.Figure(size=(pw, total_h), figure_padding=0)
     sc  = fig.scene
     CM.poly!(sc, CM.Rect2f(0, 0, pw, total_h); color=:white, space=:pixel)
-    _draw_infograph!(sc, meta, (0.0, _FOOTER_BAND, pw, ph))   # panel sits above the footer band
+    _draw_infograph!(sc, meta, (0.0, _FOOTER_BAND, pw, ph); title_fontsize)   # panel above the footer band
     _draw_footer!(sc)
     return fig
 end
+
+"""
+    shared_title_fontsize(metas; box_width, fs_min=14.0, fs_max=22.0) -> Float64
+
+The single title size that fits EVERY title in `metas` within 2 lines of `box_width` — the
+size the longest title needs (the min over each title's autoshrink size). Used by the grid
+so all panels share one headline scale.
+"""
+shared_title_fontsize(metas; box_width::Real, fs_min::Real=14.0, fs_max::Real=22.0) =
+    isempty(metas) ? Float64(fs_max) :
+    minimum(title_autoshrink(m.title; box_width=box_width, fs_min=fs_min, fs_max=fs_max,
+                             font=SERIF).fontsize for m in metas)
 
 # House-style §3 footer: "TextMeasure.jl · DOI Infographic", DejaVu Sans 9pt, GRAY,
 # bottom-left at the 36px outer margin. Drawn once per print piece (page), not per panel.
@@ -326,7 +339,11 @@ function _check_justification(j::Symbol)
 end
 
 # Draw one infograph into scene `sc` within pixel frame `f = (x0, ybot, w, h)`.
-function _draw_infograph!(sc, meta::PaperMetadata, f)
+# `title_fontsize` (set by the 6-up grid) forces every panel's title to one shared size — the
+# size the longest title needs to fit 2 lines — so the gallery shares one headline scale even
+# if short titles leave trailing space. `nothing` (single infograph) autoshrinks 14→22 to
+# showcase that primitive.
+function _draw_infograph!(sc, meta::PaperMetadata, f; title_fontsize::Union{Nothing,Real}=nothing)
     W, H = f[3], f[4]
     M    = 0.06W                       # margin
     cw   = W - 2M                       # content width
@@ -341,8 +358,12 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
     isempty(jline) || _text!(sc, f, M + 78, y + 10, jline; fontsize=9, font=SANS, color=_GRAY)
     y += 24
 
-    # --- title: serif (house-style §1), title tier 22pt max, autoshrink ≤2 lines ---
-    t = title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=22.0, font=SERIF)
+    # --- title: serif (house-style §1). Grid passes a shared `title_fontsize` (uniform scale,
+    #     no clipping); single autoshrinks 14→22 to showcase the primitive. ---
+    t = title_fontsize === nothing ?
+        title_autoshrink(meta.title; box_width=cw, fs_min=14.0, fs_max=22.0, font=SERIF) :
+        title_autoshrink(meta.title; box_width=cw, fs_min=Float64(title_fontsize),
+                         fs_max=Float64(title_fontsize), font=SERIF)
     tla = t.line_advance                          # baseline-to-baseline (from the autoshrink layout)
     for ln in t.lines
         _text!(sc, f, M, y + t.fontsize, ln; fontsize=t.fontsize, font=SERIF, color=_INK)
@@ -386,11 +407,16 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
 
     if has_body
         body_fs = 11.0                            # house-style body tier (serif, ragged-right)
+        s = strip(body)
+        first_char = string(first(s))
+        rest = String(SubString(s, nextind(s, firstindex(s))))   # body minus its initial letter
         bb   = _backend(SERIF, body_fs)
-        prep = prepare(bb, body)
+        prep = prepare(bb, rest)
         la   = prep.metrics.line_advance
-        dco  = dropcap_offset(body; body_fontsize=body_fs)
-        notch_h = 3 * la
+        dc_lines = 3                              # drop cap spans the first 3 body lines
+        dcfs = dc_lines * la / 0.70               # display size so the cap visually fills 3 lines
+        dco  = dropcap_offset(s; dropcap_fontsize=dcfs)   # notch width clears the cap + gutter
+        notch_h = dc_lines * la
         # chord_fn: left text column with a drop-cap notch in the first 3 lines; empty beyond body_h
         chord = (yt, yb) -> begin
             yt >= body_h && return Tuple{Float64,Float64}[]
@@ -402,9 +428,9 @@ function _draw_infograph!(sc, meta::PaperMetadata, f)
             seg = prep.segments[p.segment_index]
             _text!(sc, f, M + p.x, body_top + p.y, seg.str; fontsize=body_fs, font=SERIF, color=_INK)
         end
-        # drop cap glyph (baseline ≈ first body line's baseline)
-        dcfs = 3 * body_fs
-        _text!(sc, f, M, body_top + la + prep.metrics.ascent, string(first(strip(body)));
+        # drop cap: the initial letter, sized to span 3 lines; baseline on the 3rd line so its
+        # cap-top aligns with line 1. Replaces the body's first letter (stripped above) — no dup.
+        _text!(sc, f, M, body_top + (dc_lines - 1) * la + prep.metrics.ascent, first_char;
                fontsize=dcfs, font=SERIF, color=_BLUE, align=(:left, :baseline))
         _draw_pills!(sc, f, pb, band_rows, pb_fs, pb_step, M, body_top + body_h + 8)
     else

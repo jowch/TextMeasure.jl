@@ -119,9 +119,10 @@ const _D = DOIInfograph
     end
 
     @testset "drop cap offset" begin
-        off = _D.dropcap_offset("Quantum supremacy"; body_fontsize=11.0, gutter=4.0)
-        bigQ = measure(_D._backend(_D.SERIF, 33.0), "Q")
-        @test off > bigQ                          # offset includes the gutter on top of the cap
+        off = _D.dropcap_offset("Quantum supremacy"; dropcap_fontsize=48.0, gutter=4.0)
+        capQ = measure(_D._backend(_D.SERIF, 48.0), "Q")
+        @test off ≈ capQ + 4.0                    # advance of the initial at cap size + gutter
+        @test off > capQ
     end
 
     @testset "concept pill wrap" begin

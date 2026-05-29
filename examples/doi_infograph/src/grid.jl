@@ -20,13 +20,17 @@ function grid_infograph(dois::AbstractVector{<:AbstractString};
     fig = CM.Figure(size=(W, H), figure_padding=0)
     sc  = fig.scene
     CM.poly!(sc, CM.Rect2f(0, 0, W, H); color=:white, space=:pixel)
-    for (i, doi) in enumerate(dois)
+    # Fetch all metadata first, then pick ONE shared title size (the size the longest title
+    # needs to fit 2 lines) so every panel's headline is the same scale across the grid.
+    metas = PaperMetadata[fetch_doi_metadata(doi; mailto) for doi in dois]
+    cw_panel = pw - 2 * 0.06pw
+    tfs = shared_title_fontsize(metas; box_width=cw_panel)
+    for (i, meta) in enumerate(metas)
         r = (i - 1) ÷ cols            # 0-based row, 0 = top
         c = (i - 1) % cols            # 0-based col
         x0   = c * pw
         ybot = H - (r + 1) * ph       # scene bottom of this panel (panels sit above the band)
-        meta = fetch_doi_metadata(doi; mailto)
-        _draw_infograph!(sc, meta, (x0, ybot, pw, ph))
+        _draw_infograph!(sc, meta, (x0, ybot, pw, ph); title_fontsize=tfs)   # one title scale across the grid
         # panel separator (hairline)
         CM.poly!(sc, CM.Rect2f(x0, ybot, pw, ph); color=:transparent,
                  strokecolor=_HAIR, strokewidth=1.0, space=:pixel)
