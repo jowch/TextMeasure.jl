@@ -93,8 +93,9 @@ piece *delivers* its move, not merely that it's inoffensive.
   hugged flush.
 - **#H The Newer Yorker** — *print fidelity.* The move is a masthead-led editorial spread
   ("A Correctness Exhibit", RED data-subtitle) with a skyline inset, holding a real
-  magazine's baseline discipline. Display-44 masthead (ink wordmark over a brass structural
-  rule) is the single focal point.
+  magazine's baseline discipline. Display-44 masthead is the single focal point: an **ink
+  wordmark** (never brass — an amber wordmark would soften the authority), with brass doing
+  the **structural rule, the dateline, and a small registration tick** beneath it.
 - **#K Knuth–Plass** — *the honest justify.* The move is optimal-fit justified columns with
   even colour and controlled rivers (RED river overlay as the diagnostic), the only piece
   that earns full-justify because correct measurement makes it possible.

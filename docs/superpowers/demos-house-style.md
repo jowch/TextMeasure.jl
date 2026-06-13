@@ -62,7 +62,7 @@ identity decoration.
 |------|-----|------|------|
 | PAPER (background) | `#FBFAF7` | `RGBA(0.984, 0.980, 0.969, 1)` | every surface — off-white stock, faint chroma toward brass. **Never `#FFFFFF`.** |
 | INK (text) | `#1E1C1A` | `RGBA(0.118, 0.110, 0.102, 1)` | body / titles — warm near-black |
-| BRASS (signature) | `#B5793C` | `RGBA(0.710, 0.475, 0.235, 1)` | mastheads, structural rules, footer middot, registration/measurement marks. The one color threading all five pieces. |
+| BRASS (signature) | `#B5793C` | `RGBA(0.710, 0.475, 0.235, 1)` | masthead **rules & datelines** (never the wordmark itself — brass carries structure/accents, not large identity text), structural rules, footer middot, registration/measurement marks. The one color threading all five pieces. |
 
 ### Data layer (encoding-only — NOT identity)
 
