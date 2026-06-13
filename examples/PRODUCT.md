@@ -3,7 +3,7 @@
 
 *Scope: the five-piece demo gallery (#E #F #G #H #K) under `examples/`. Paired with
 [`DESIGN.md`](DESIGN.md) (the craft rubric) and
-[`docs/superpowers/demos-house-style.md`](docs/superpowers/demos-house-style.md) (the
+[`docs/superpowers/demos-house-style.md`](../docs/superpowers/demos-house-style.md) (the
 locked typographic/colour constants).*
 
 ## What the gallery is for

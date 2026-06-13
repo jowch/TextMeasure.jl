@@ -5,7 +5,7 @@
 design-reviewer subagent applies. It sits on top of two documents and never contradicts
 them silently:*
 
-- [`docs/superpowers/demos-house-style.md`](docs/superpowers/demos-house-style.md) — the
+- [`docs/superpowers/demos-house-style.md`](../docs/superpowers/demos-house-style.md) — the
   **locked constants** (type ramp, palette, footer, hairlines). These are hard values.
 - [`PRODUCT.md`](PRODUCT.md) — the **one claim** each piece must make tangible.
 

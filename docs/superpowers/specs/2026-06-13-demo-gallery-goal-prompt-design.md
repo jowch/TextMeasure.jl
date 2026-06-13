@@ -34,7 +34,7 @@ the test. The answer is three independent, transcript-visible confirmations per 
 
 A 4,000-char condition can't carry the rigor alone, so it stays thin and *points at* files:
 
-1. **`DESIGN.md` + `PRODUCT.md`** (repo root) — authored as the goal's step 0 if absent;
+1. **`DESIGN.md` + `PRODUCT.md`** (in `examples/`) — authored as the goal's step 0 if absent;
    treated as authoritative if present. These are the anchor the reviewer scores against.
    - **`PRODUCT.md`** — what the gallery proves about TextMeasure.jl, who reads it, and the
      one claim each demo must make tangible.
@@ -69,7 +69,7 @@ trustworthy.
 ```
 GOAL — Demo gallery (#E #F #G #H #K), impeccable finish.
 
-SETUP: Read docs/superpowers/demos-house-style.md and, if present, DESIGN.md + PRODUCT.md at repo root. If either is missing, author it BEFORE any demo work. PRODUCT.md = what the gallery proves about TextMeasure.jl, who reads it, and the one claim each demo must make tangible. DESIGN.md = the craft rubric with axes TYPE, PALETTE, COMPOSITION, RESTRAINT/HIERARCHY, FINISH, extending demos-house-style.md and the frontend-design skill; house-style values stay authoritative unless DESIGN.md deliberately supersedes a specific value and says why. Invoke the frontend-design skill when authoring DESIGN.md and every mockup. FONTS: if Fraunces or IBM Plex Mono are not yet pinned as static TTFs in examples/fonts/, source them (OFL) before any port; expect to regenerate every golden against the new faces and visually verify each before commit.
+SETUP: Read docs/superpowers/demos-house-style.md and, if present, examples/DESIGN.md + examples/PRODUCT.md. If either is missing, author it BEFORE any demo work. PRODUCT.md = what the gallery proves about TextMeasure.jl, who reads it, and the one claim each demo must make tangible. DESIGN.md = the craft rubric with axes TYPE, PALETTE, COMPOSITION, RESTRAINT/HIERARCHY, FINISH, extending demos-house-style.md and the frontend-design skill; house-style values stay authoritative unless DESIGN.md deliberately supersedes a specific value and says why. Invoke the frontend-design skill when authoring DESIGN.md and every mockup. FONTS: if Fraunces or IBM Plex Mono are not yet pinned as static TTFs in examples/fonts/, source them (OFL) before any port; expect to regenerate every golden against the new faces and visually verify each before commit.
 
 PER DEMO, run this pipeline and surface the evidence in THIS transcript:
 1. GRADE the current demo vs DESIGN.md -> verdict keep | refine | replace. You MAY replace any demo that can't reach the bar; the asteroid TUI (#E) is a known test-gamed candidate.

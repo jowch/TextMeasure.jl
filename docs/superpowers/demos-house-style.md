@@ -3,7 +3,7 @@
 Single source of truth for the demo gallery (#E #F #G #H #K). All five demos MUST use
 these exact values — no ranges, no per-demo drift. Redesigned 2026-06-13 under
 [Impeccable](https://github.com/pbakaus/impeccable) + frontend-design guidance, anchored
-by [`DESIGN.md`](../../DESIGN.md) (the craft rubric) and [`PRODUCT.md`](../../PRODUCT.md)
+by [`DESIGN.md`](../../examples/DESIGN.md) (the craft rubric) and [`PRODUCT.md`](../../examples/PRODUCT.md)
 (what each piece must prove). Supersedes the 2026-05-28 spine (Liberation Serif / DejaVu
 Sans / pure-white / three co-equal accents), which read disciplined-but-generic.
 
