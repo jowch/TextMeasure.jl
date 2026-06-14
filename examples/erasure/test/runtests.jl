@@ -4,4 +4,5 @@ using Erasure, Test
     @testset "loads" begin
         @test isdefined(Erasure, :LICENSE_TEXT)
     end
+    include("test_wordgeom.jl")
 end
