@@ -1,36 +1,35 @@
 using HouseStyle: digest_rows
-using TextMeasure: prepare, MonospaceBackend
+using TextMeasure: MonospaceBackend
 
-"The deterministic monospace backend the golden + toy use (redaction face at RAMP.subhead).
-Coupled with the hero's MakieBackend fontsize so the page-filling geometry stays in sync."
-golden_backend() = MonospaceBackend(fontsize = 16.0)
+# Deterministic, machine-stable role sentinels for the golden table. The golden hashes the
+# COMPUTED placement table built with MonospaceBackend (per-word, at each word's size) — never
+# MakieBackend widths and never pixels — so the digest is reproducible across machines/fonts.
+const _GHOST = :ghost
+const _RED   = :red
+const _BLACK = :black
 
-"Hero wrap width in px under the golden backend. Tuned so the whole LICENSE forms a
-pleasing wide landscape block (~14 lines at subhead-16 mono). Kept in lockstep with the
-literal in test_wordgeom.jl's full-LICENSE agreement case."
-const HERO_MAX_WIDTH = 700.0
+"Per-word deterministic backend: MonospaceBackend at the word's size. Font path is ignored
+(monospace advance is per-grapheme), so the table depends only on sizes + text."
+golden_backend(_font, size) = MonospaceBackend(fontsize = Float64(size))
 
 """
-    geometry_rows(; max_width=HERO_MAX_WIDTH) -> Vector{String}
+    geometry_rows() -> Vector{String}
 
-Build the canonical per-word geometry table for the curated hero: `kept|line|x0|x1|base`,
-floats rounded to 0.01px. Deterministic (MonospaceBackend). Fed to `digest_rows`.
+Build the canonical per-word placement table with the deterministic MonospaceBackend and
+format one row per word: `role|font|size|round(x,2)|round(baseline,2)|display`. Rows are
+returned sorted so the digest is emission-order-independent (`digest_rows` also sorts).
 """
-function geometry_rows(; max_width = HERO_MAX_WIDTH)
-    b = golden_backend()
-    prep  = prepare(b, LICENSE_TEXT)
-    boxes = word_boxes(prep; max_width = max_width)
-    kept  = Set(kept_seg_indices(prep))
+function geometry_rows()
+    placements, _, _ = placement_table(golden_backend;
+        ghost_color = _GHOST, red_color = _RED, black_color = _BLACK)
     rows = String[]
-    for wb in boxes
-        k = wb.seg_index in kept ? 1 : 0
-        push!(rows, string(k, "|", wb.line, "|",
-                           round(wb.x0; digits = 2), "|",
-                           round(wb.x1; digits = 2), "|",
-                           round(wb.baseline; digits = 2)))
+    for p in placements
+        push!(rows, string(p.role, "|", basename(p.font), "|", p.size, "|",
+                           round(p.x; digits = 2), "|",
+                           round(p.baseline; digits = 2), "|", p.str))
     end
-    return rows
+    return sort(rows)
 end
 
-"SHA-256 hex of the canonical hero geometry table."
-hero_digest(; max_width = HERO_MAX_WIDTH) = digest_rows(geometry_rows(; max_width = max_width))
+"SHA-256 hex of the canonical (Monospace, deterministic) placement table."
+hero_digest() = digest_rows(geometry_rows())
