@@ -25,4 +25,7 @@ export WordBox, word_boxes
 include("poem.jl")
 export KEPT_WORDS, kept_seg_indices
 
+include("redact.jl")
+export RedactRect, redaction_rects
+
 end # module
