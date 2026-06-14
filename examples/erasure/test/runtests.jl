@@ -5,4 +5,5 @@ using Erasure, Test
         @test isdefined(Erasure, :LICENSE_TEXT)
     end
     include("test_wordgeom.jl")
+    include("test_poem.jl")
 end

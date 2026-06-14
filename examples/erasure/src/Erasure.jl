@@ -22,4 +22,7 @@ const LICENSE_TEXT =
 include("wordgeom.jl")
 export WordBox, word_boxes
 
+include("poem.jl")
+export KEPT_WORDS, kept_seg_indices
+
 end # module
