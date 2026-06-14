@@ -7,4 +7,5 @@ using Erasure, Test
     include("test_wordgeom.jl")
     include("test_poem.jl")
     include("test_redact.jl")
+    include("test_golden.jl")
 end

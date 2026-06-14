@@ -28,4 +28,7 @@ export KEPT_WORDS, kept_seg_indices
 include("redact.jl")
 export RedactRect, redaction_rects
 
+include("golden.jl")
+export geometry_rows, hero_digest, HERO_MAX_WIDTH
+
 end # module
