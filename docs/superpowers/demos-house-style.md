@@ -15,13 +15,13 @@ Coherence ≠ uniformity: a painting-in-type, a kinetic press, a redacted docume
 
 ## 0. The canonical register line (quote verbatim in every SPEC)
 
-> **Measure once, then — shape · press · erase · place — many.**
+> **Measure once, then — shape · press · weave · place — many.**
 
 | Piece | Verb | Register word |
 |---|---|---|
 | The Glyph Wave | shape | *image* |
 | The Press | press | *force* |
-| Erasure | erase | *subtraction* |
+| Woven | weave | *two readings* |
 | The Atlas | place | *place* |
 
 ## 1. Type

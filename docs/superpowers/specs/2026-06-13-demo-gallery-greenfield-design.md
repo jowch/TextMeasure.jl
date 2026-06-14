@@ -34,13 +34,13 @@ document, and a map should *feel* different.
 |---|---|---|---|---|
 | **The Glyph Wave** | *shape* | Hokusai's *Great Wave* rendered entirely in tone-mapped type | text conforms to a shape; per-run size/weight/colour from an image (`shape_pack`) | `examples/glyph_wave/SPEC.md` |
 | **The Press** | *force / time* | Whitman kneaded by a wall pressing from rotating axes (looping MP4) | one `prepare`, `shape_pack` re-laid every frame into a moving region | `examples/breathing_column/SPEC.md` |
-| **Erasure** | *subtraction* | the project's own MIT License redacted to a found poem (+ interactive toy) | exact per-word position from `prep.segments`; survivors stay anchored | `examples/erasure/SPEC.md` |
+| **Woven** | *two readings* | two found poems woven into the project's own MIT License at once | every word measured at its real size/weight, then Knuth–Plass justified so nothing overlaps | `examples/woven/README.md` |
 | **The Atlas** | *place* | a zoom-dive over the California coast, labels placed live as you fall in | measure once, re-place every frame — driven by the viewport (MakieTextRepel) | `examples/atlas/SPEC.md` |
 
-> **Measure once, then — shape · press · erase · place — many.**
+> **Measure once, then — shape · press · weave · place — many.**
 
 The verb register is locked: The Glyph Wave = *shape* (image) · The Press = *press* (force) ·
-Erasure = *erase* (subtraction) · The Atlas = *place* (place). Use this one wording everywhere.
+Woven = *weave* (two readings) · The Atlas = *place* (place). Use this one wording everywhere.
 
 Two of four are looping motion pieces (Press, Atlas — both 12 s / 360-frame seamless loops), two are
 stills (Glyph Wave; Erasure hero), with Erasure also shipping an interactive monospace toy.
