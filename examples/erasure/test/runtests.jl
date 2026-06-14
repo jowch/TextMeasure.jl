@@ -9,4 +9,5 @@ using Erasure, Test
     include("test_redact.jl")
     include("test_golden.jl")
     include("test_render.jl")
+    include("test_hero.jl")
 end

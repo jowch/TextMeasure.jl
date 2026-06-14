@@ -34,4 +34,7 @@ export geometry_rows, hero_digest, HERO_MAX_WIDTH
 include("render.jl")
 export save_png
 
+include("hero.jl")
+export hero
+
 end # module
