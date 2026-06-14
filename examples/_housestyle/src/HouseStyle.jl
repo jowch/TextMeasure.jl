@@ -14,4 +14,16 @@ const GRAY  = colorant"#6B7280"
 # √2 type ramp (pt) — pick the tier by role, never an in-between value
 const RAMP = (caption=9, body=11, subhead=16, title=22, deck=31, display=44)
 
+# examples/fonts lives two dirs up from this src file: _housestyle/src -> _housestyle -> examples
+const FONTS_DIR = normpath(joinpath(@__DIR__, "..", "..", "fonts"))
+
+"Absolute path to a pinned Fraunces static, e.g. `fraunces(\"9pt-Regular\")`."
+fraunces(name::AbstractString) = joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name).ttf")
+
+"Absolute path to a pinned IBM Plex Mono static, e.g. `plexmono(\"Medium\")` (default Regular)."
+plexmono(name::AbstractString="Regular") = joinpath(FONTS_DIR, "IBMPlexMono", "IBMPlexMono-$(name).ttf")
+
+"The shared footer string: `TextMeasure.jl · <piece>` (middot U+00B7)."
+footer(piece::AbstractString) = "TextMeasure.jl · $(piece)"
+
 end # module

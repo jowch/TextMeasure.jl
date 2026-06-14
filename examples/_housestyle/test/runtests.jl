@@ -15,3 +15,13 @@ end
     @test HouseStyle.GRAY      == colorant"#6B7280"
     @test HouseStyle.RAMP == (caption=9, body=11, subhead=16, title=22, deck=31, display=44)
 end
+
+@testset "font paths + footer" begin
+    @test isdir(HouseStyle.FONTS_DIR)
+    @test isfile(HouseStyle.fraunces("9pt-Regular"))
+    @test isfile(HouseStyle.fraunces("144pt-Black"))
+    @test isfile(HouseStyle.plexmono())            # default Regular
+    @test isfile(HouseStyle.plexmono("Medium"))
+    @test endswith(HouseStyle.fraunces("9pt-Regular"), "Fraunces9pt-Regular.ttf")
+    @test HouseStyle.footer("Erasure") == "TextMeasure.jl · Erasure"
+end
