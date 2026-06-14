@@ -50,35 +50,36 @@ function hero(path)
     page_h     = body_top + block_h + 30.0 + mb
 
     scale = 2.4
-    fig = Figure(; size = (round(Int, page_w), round(Int, page_h)), backgroundcolor = BG)
-    ax = Axis(fig[1, 1]; backgroundcolor = BG, aspect = DataAspect())
-    hidedecorations!(ax); hidespines!(ax); ax.yreversed = true
-    Makie.xlims!(ax, 0, page_w); Makie.ylims!(ax, page_h, 0)
+    fig_size = (round(Int, page_w), round(Int, page_h))
 
-    # masthead — the title IS the two poems' pivots, colour-keyed (red poem / black poem)
-    title_sz   = RAMP.title
-    title_font = hanken("Bold")          # chrome is Hanken sans
-    ty = mt + 34
-    text!(ax, Point2f(ml, ty); text = "Free,", color = RED,
-          font = title_font, fontsize = title_sz, align = (:left, :baseline))
-    fx = _chrome_w(title_font, title_sz, "Free,") + 1.8 * _chrome_w(title_font, title_sz, " ")
-    text!(ax, Point2f(ml + fx, ty); text = "As Is", color = INK,
-          font = title_font, fontsize = title_sz, align = (:left, :baseline))
-    text!(ax, Point2f(page_w - mr, ty); text = "EXHIBIT A", color = RED,
-          font = hanken("SemiBold"), fontsize = RAMP.caption, align = (:right, :baseline))
-    ry = mt + masthead_h - 14
-    lines!(ax, [Point2f(ml, ry), Point2f(ml + col_w, ry)]; color = RED, linewidth = 1.0)
+    # Render through the shared save_png plumbing (PAPER-style Axis, y reversed, decorations
+    # hidden, DataAspect) with the LOCAL background BG (#F6F6F4).
+    save_png(path; size = fig_size, px_per_unit = scale, bg = BG) do ax
+        Makie.xlims!(ax, 0, page_w); Makie.ylims!(ax, page_h, 0)
 
-    # body — every word at its justified position (constant baseline grid)
-    for p in placements
-        text!(ax, Point2f(ml + p.x, body_top + p.baseline); text = p.str,
-              color = p.color, font = p.font, fontsize = p.size, align = (:left, :baseline))
+        # masthead — the title IS the two poems' pivots, colour-keyed (red poem / black poem)
+        title_sz   = RAMP.title
+        title_font = hanken("Bold")          # chrome is Hanken sans
+        ty = mt + 34
+        text!(ax, Point2f(ml, ty); text = "Free,", color = RED,
+              font = title_font, fontsize = title_sz, align = (:left, :baseline))
+        fx = _chrome_w(title_font, title_sz, "Free,") + 1.8 * _chrome_w(title_font, title_sz, " ")
+        text!(ax, Point2f(ml + fx, ty); text = "As Is", color = INK,
+              font = title_font, fontsize = title_sz, align = (:left, :baseline))
+        text!(ax, Point2f(page_w - mr, ty); text = "EXHIBIT A", color = RED,
+              font = hanken("SemiBold"), fontsize = RAMP.caption, align = (:right, :baseline))
+        ry = mt + masthead_h - 14
+        lines!(ax, [Point2f(ml, ry), Point2f(ml + col_w, ry)]; color = RED, linewidth = 1.0)
+
+        # body — every word at its justified position (constant baseline grid)
+        for p in placements
+            text!(ax, Point2f(ml + p.x, body_top + p.baseline); text = p.str,
+                  color = p.color, font = p.font, fontsize = p.size, align = (:left, :baseline))
+        end
+
+        # footer
+        text!(ax, Point2f(ml, page_h - mb + 24); text = "TextMeasure.jl", color = RED,
+              font = hanken("Regular"), fontsize = RAMP.caption, align = (:left, :baseline))
     end
-
-    # footer
-    text!(ax, Point2f(ml, page_h - mb + 24); text = "TextMeasure.jl", color = RED,
-          font = hanken("Regular"), fontsize = RAMP.caption, align = (:left, :baseline))
-
-    save(path, fig; px_per_unit = scale)
     return (; placements = placements, png = path)
 end

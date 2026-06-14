@@ -58,7 +58,7 @@ fweight(weight) = HouseStyle.fraunces("9pt-$(weight)")
 Per-word style: which face/size/colour a license word renders at. `lit` marks a poem word
 (`false` ⇒ the faded Plex Mono ghost source); `caps` marks a pivot rendered uppercase.
 """
-mutable struct WStyle
+struct WStyle
     font  :: String
     size  :: Int
     color :: Any
@@ -142,10 +142,11 @@ end
 
 Sentence-cased display form of word `i`: lowercase the token, capitalise the first letter
 when it starts a sentence (document start, paragraph start, or follows a word ending in
-`.`). The two pivots (`caps`) render uppercase.
+`.`). The two pivots (`caps`) render uppercase, with any trailing sentence punctuation
+stripped (quotes kept) so e.g. the `"AS` + `IS",` tokens read as `"AS IS"`.
 """
 function display_str(words, styles, para_start, i)
-    styles[i].caps && return uppercase(words[i])
+    styles[i].caps && return rstrip(c -> c in (',', ';', '.'), uppercase(words[i]))
     base = lowercase(words[i])
     is_start = i == 1 || i in para_start || (i > 1 && endswith(words[i - 1], "."))
     return is_start ? uppercasefirst(base) : base

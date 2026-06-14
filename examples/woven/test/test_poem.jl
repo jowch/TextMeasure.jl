@@ -42,13 +42,15 @@ end
         @test (["as", "is"] in CAPS_PHRASES)
         # the two pivots are caps-flagged in the styled stream (letters-only match, since the
         # raw license tokens carry punctuation, e.g. `"AS` / `IS",`).
-        _, styles, _ = styled_words(; ghost_color = :g, red_color = :r, black_color = :b)
+        _, styles, para_start = styled_words(; ghost_color = :g, red_color = :r, black_color = :b)
         caps_letters = [strip_word(words[i]) for i in eachindex(words) if styles[i].caps]
         @test "free" in caps_letters
         @test "as" in caps_letters && "is" in caps_letters
-        # ... and they DISPLAY uppercase.
+        # ... and they DISPLAY uppercase, with trailing sentence punctuation stripped (quotes kept).
         for i in eachindex(words)
-            styles[i].caps && @test display_str(words, styles, license_words()[2], i) == uppercase(words[i])
+            styles[i].caps || continue
+            @test display_str(words, styles, para_start, i) ==
+                  rstrip(c -> c in (',', ';', '.'), uppercase(words[i]))
         end
     end
 end

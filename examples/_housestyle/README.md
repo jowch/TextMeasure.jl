@@ -12,7 +12,7 @@ In a piece's `Project.toml`:
     HouseStyle = { path = "../_housestyle" }
 
 Then `using HouseStyle` and reference `HouseStyle.PAPER`, `HouseStyle.RAMP.body`,
-`HouseStyle.fraunces("9pt-Regular")`, `HouseStyle.plexmono()`, `HouseStyle.footer("Erasure")`,
+`HouseStyle.fraunces("9pt-Regular")`, `HouseStyle.plexmono()`, `HouseStyle.footer("Woven")`,
 `HouseStyle.digest_rows(rows)`. If a value here and `demos-house-style.md` disagree, that is a bug.
 
 Nothing is exported by design — always use the qualified `HouseStyle.X` form. `using HouseStyle: PAPER`

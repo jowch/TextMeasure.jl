@@ -26,7 +26,7 @@ end
     @test isfile(HouseStyle.hanken("SemiBold"))
     @test isfile(HouseStyle.hanken("Black"))       # mapped to Bold static
     @test endswith(HouseStyle.fraunces("9pt-Regular"), "Fraunces9pt-Regular.ttf")
-    @test HouseStyle.footer("Erasure") == "TextMeasure.jl · Erasure"
+    @test HouseStyle.footer("Woven") == "TextMeasure.jl · Woven"
 end
 
 @testset "digest_rows" begin

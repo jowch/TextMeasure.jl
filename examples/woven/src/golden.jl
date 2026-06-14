@@ -17,7 +17,7 @@ golden_backend(_font, size) = MonospaceBackend(fontsize = Float64(size))
 
 Build the canonical per-word placement table with the deterministic MonospaceBackend and
 format one row per word: `role|font|size|round(x,2)|round(baseline,2)|display`. Rows are
-returned sorted so the digest is emission-order-independent (`digest_rows` also sorts).
+returned in reading order; `digest_rows` sorts them, so the digest is emission-order-independent.
 """
 function geometry_rows()
     placements, _, _ = placement_table(golden_backend;
@@ -28,7 +28,7 @@ function geometry_rows()
                            round(p.x; digits = 2), "|",
                            round(p.baseline; digits = 2), "|", p.str))
     end
-    return sort(rows)
+    return rows
 end
 
 "SHA-256 hex of the canonical (Monospace, deterministic) placement table."
