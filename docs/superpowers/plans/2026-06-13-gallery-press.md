@@ -20,14 +20,19 @@
 
 - [ ] **Step 1: Rename the directory (git-tracked move)**
 
-Run (from the worktree root):
+Run (from the worktree root). `examples/press/` may already exist (empty); `ls` the source dir first so the move covers everything tracked, then `git mv` the whole directory rather than swallowing `rmdir` failures:
 ```bash
-mkdir -p examples/press
-git mv examples/breathing_column/SPEC.md examples/press/SPEC.md
-rmdir examples/breathing_column 2>/dev/null || true
-ls examples/press/
+ls -A examples/breathing_column/                 # confirm what's tracked (expect SPEC.md)
+if [ -d examples/press ]; then
+    git mv examples/breathing_column/SPEC.md examples/press/SPEC.md   # press/ pre-exists empty
+    git rm -r --cached examples/breathing_column 2>/dev/null || true
+    rmdir examples/breathing_column 2>/dev/null || true
+else
+    git mv examples/breathing_column examples/press                   # move the whole dir
+fi
+ls -A examples/press/
 ```
-Expected: `SPEC.md` listed under `examples/press/`.
+Expected: `SPEC.md` listed under `examples/press/` (plus any other previously-tracked files surfaced by the first `ls`).
 
 - [ ] **Step 2: Write the failing smoke test**
 
@@ -180,7 +185,10 @@ const FRAUNCES_BODY = HS.fraunces("9pt-Regular")
 
 The ONE font-touching call (SPEC §8.1). Measures the Whitman block with the body face at
 11 pt, px_per_unit = 1 (CLAUDE.md — match Makie's markerspace geometry). Widths cached;
-never re-measured for any frame.
+never re-measured for any frame. Uses the KEYWORD `MakieBackend(; font=…, fontsize=…,
+px_per_unit=1)` constructor — `font` takes the font PATH (`HS.fraunces(...)`), which the
+keyword ctor resolves into a face internally; do NOT use the positional ctor, which expects
+an already-resolved face object.
 """
 function build_prep()
     backend = MakieBackend(font = FRAUNCES_BODY, fontsize = BODY_PT, px_per_unit = 1)
@@ -208,16 +216,17 @@ end
 """
     floor_w(prep) -> Float64
 
-Minimum region width = width of 32 characters at body size (SPEC §3). Approximated as
-`32 × advance("0")`, recovered from the cached metrics' em scale via a measured digit.
-Whitman is digit-free, so derive the digit advance from the body em: a Fraunces "0" is
-~0.5 em wide; we use the measured-once approach by re-measuring a single "0" run is NOT
-allowed post-prepare, so we approximate from ascent. Conservative floor: 32 × (0.5 × BODY_PT).
+Readability floor: the minimum region WIDTH (px) below which a band is too thin to read,
+sized at ~32 characters of body text. A FIXED heuristic — `32 × (0.5 × BODY_PT)` — NOT
+derived from `prep`: re-measuring a glyph advance after `prepare` would touch the font
+engine a second time, which the loop body forbids (SPEC §8). `0.5` em-per-char is the
+standard Fraunces average-advance approximation and the lone tunable; `prep` is accepted
+only for signature symmetry with the other `*_for(…, prep)` helpers, not read.
 """
-floor_w(prep::Prepared) = 32.0 * 0.5 * BODY_PT
+floor_w(::Prepared) = 32.0 * 0.5 * BODY_PT
 ```
 
-(NOTE on `floor_w`: re-measuring after `prepare` would touch the font engine a 2nd time, which the SPEC forbids for the loop body. `0.5 × fontsize` per char is the standard Fraunces digit-advance approximation and keeps the floor honest at ~176 px ≈ 32 CPL. If the visual gate in Task 4 shows the floor reads tighter/looser than 32 CPL, tune the `0.5` constant there — it is the one tunable.)
+(NOTE on `floor_w`: the body is a fixed `32 × 0.5 × BODY_PT ≈ 176 px ≈ 32 CPL`; it deliberately ignores `prep` because re-measuring a glyph post-`prepare` would touch the font engine a 2nd time, which the SPEC forbids for the loop body. `0.5 × fontsize` per char is the standard Fraunces average-advance approximation. `0.5` is the one tunable — if the Task 4 visual gate shows the floor reads tighter/looser than 32 CPL, tune it there. NOTE the distinction enforced below: `floor_w` is the REGION-width readability floor used to clamp wall depth via `dmax_for`; it is NOT passed as `shape_pack`'s `min_chord_width` — see Task 4's `pack_at`.)
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -418,22 +427,32 @@ const FIELD_H    = SCENE_H - 2 * MARGIN         # 504
 # field-top in Makie's y-UP scene frame (scene origin bottom-left):
 const FIELD_TOP_Y = SCENE_H - FIELD_Y0          # = 552
 
+const MIN_CHORD_W = 1.0   # tiny per-word floor: just enough for shape_pack to RECORD an
+                          # over-wide word as overflow rather than silently skip the band.
+                          # The 32-CPL readability floor is enforced elsewhere — by clamping
+                          # wall depth in `dmax_for`, NOT by this `min_chord_width`.
+
 """
     pack_at(prep, mask) -> PackedLayout
 
 Re-pack the cached widths into the region described by `mask` (cell = 1 px). The fixed
 baseline grid (SPEC §3): one `line_advance` shared across EVERY frame so lines stay
-parallel no matter how the wall intrudes. `min_chord_width = floor_w` ⇒ the packer itself
-refuses a band too thin to hold a word. `overflow_strategy = :widest_row` ⇒ an over-wide
-band poke is honest, never dropped. `fill = :widest` ⇒ correct because the wall is flush
-(≤ 1 interval/band, SPEC §11). PURE ARITHMETIC — no font engine.
+parallel no matter how the wall intrudes. `min_chord_width = MIN_CHORD_W` (a SMALL per-word
+floor) ⇒ a band only needs room for a single word; over-wide words are RECORDED as overflow,
+never silently dropped. CRITICAL: do NOT pass `floor_w` here — `floor_w` is the 32-CPL
+*region* readability floor, and using it as `min_chord_width` would make any band narrower
+than ~176 px be SKIPPED at peak compression (words would vanish, breaking the "never
+dropped" claim). The 32-CPL floor is instead enforced upstream by `dmax_for`, which clamps
+wall depth so the surviving region never drops below `floor_w`. `overflow_strategy =
+:widest_row` ⇒ an over-wide word pokes honestly. `fill = :widest` ⇒ correct because the wall
+is flush (≤ 1 interval/band, SPEC §11). PURE ARITHMETIC — no font engine.
 """
 function pack_at(prep::Prepared, mask::BitMatrix)
     la = LINEHEIGHT * prep.metrics.line_advance
     cf = raster_chord_fn(mask, 1.0)
     return shape_pack(prep, cf;
         line_advance     = la,
-        min_chord_width  = floor_w(prep),
+        min_chord_width  = MIN_CHORD_W,
         overflow_strategy = :widest_row,
         fill             = :widest)
 end
@@ -446,16 +465,17 @@ end
 _to_scene(pl::Placement) = Point2f(FIELD_X0 + pl.x, FIELD_TOP_Y - pl.y)
 
 """
-    render_frame(prep, png; edge, depth, north_depth=0, save_png=true) -> PackedLayout
+    render_frame(prep, png; edge, depth, north_depth=0, do_save=true) -> PackedLayout
 
-Build the frame's mask, `pack_at` it, and draw to `png`. Body glyphs INK, "rocking"
-glyphs BRASS (partitioned by stable segment index — SPEC §4). One `Axis` in pixel space,
-decorations hidden, PAPER background. Returns the `PackedLayout` so tests/golden can hash
-the placement table. The wall tide-rule is added in Task 6; this task is the pure
-glyph-landing gate.
+Build the frame's mask, `pack_at` it, and draw to `png`. Takes the memoized `prep` (no
+`prepare()` here). Body glyphs INK, "rocking" glyphs BRASS (partitioned by stable segment
+index — SPEC §4). One `Axis` in pixel space, decorations hidden, PAPER background. Returns
+the `PackedLayout` so tests/golden can hash the placement table. The wall tide-rule is added
+in Task 6; this task is the pure glyph-landing gate. (`do_save` — distinct from Erasure's
+`save_png` HELPER name — gates the file write so callers can pack-only.)
 """
 function render_frame(prep::Prepared, png::AbstractString; edge::Symbol, depth::Real,
-                      north_depth::Real = 0, save_png::Bool = true)
+                      north_depth::Real = 0, do_save::Bool = true)
     mask = north_depth > 0 ?
         pinch_mask(FIELD_H, FIELD_W; west_depth = depth, north_depth = north_depth) :
         press_mask(FIELD_H, FIELD_W; edge = edge, depth = depth)
@@ -483,7 +503,7 @@ function render_frame(prep::Prepared, png::AbstractString; edge::Symbol, depth::
     isempty(brs_str) || text!(ax, brs_pts; text = brs_str, color = HS.BRASS,
         font = FRAUNCES_BODY, fontsize = BODY_PT, align = (:left, :baseline), space = :pixel)
 
-    save_png && save(png, fig; px_per_unit = 1)
+    do_save && save(png, fig; px_per_unit = 1)
     return packed
 end
 ```
@@ -540,28 +560,28 @@ Append a testset to `examples/press/test/runtests.jl`:
 
         N = Press.NFRAMES
         @test N == 360
+        prep = Press.build_prep()                   # ONE prepare; threaded into every schedule()
         # Frame 0 = rest: zero depth.
-        s0 = Press.schedule(0)
+        s0 = Press.schedule(0, prep)
         @test s0.depth == 0.0 && s0.north_depth == 0.0
         # Loop closure: frame N ≡ frame 0 (byte-identical mask spec).
-        sN = Press.schedule(N)
+        sN = Press.schedule(N, prep)
         @test sN.edge == s0.edge && sN.depth == s0.depth && sN.north_depth == s0.north_depth
         # The four presses walk the compass in order.
-        @test Press.schedule(45).edge  === :E      # mid press 1
-        @test Press.schedule(135).edge === :S      # mid press 2
-        @test Press.schedule(225).edge === :W      # mid press 3 (the pinch)
-        @test Press.schedule(315).edge === :N      # mid press 4
+        @test Press.schedule(45, prep).edge  === :E      # mid press 1
+        @test Press.schedule(135, prep).edge === :S      # mid press 2
+        @test Press.schedule(225, prep).edge === :W      # mid press 3 (the pinch)
+        @test Press.schedule(315, prep).edge === :N      # mid press 4
         # The HOLD beat (55–75% of a press) has zero velocity: depth equal across the dwell.
-        h1 = Press.schedule(45 + 8); h2 = Press.schedule(45 + 12)   # both inside press-1 hold
+        h1 = Press.schedule(45 + 8, prep); h2 = Press.schedule(45 + 12, prep)  # inside press-1 hold
         @test isapprox(h1.depth, h2.depth; atol = 0.5)
         # The pinch: press 3 holds a shallow north residual (~25% of d_max).
-        sp = Press.schedule(225)
+        sp = Press.schedule(225, prep)
         @test sp.edge === :W
         @test sp.north_depth > 0
         # Depth never exceeds the floor-derived d_max (region stays ≥ floor_w / ≥ 6 lines).
-        prep = Press.build_prep()
         for f in 0:N
-            s = Press.schedule(f)
+            s = Press.schedule(f, prep)
             @test s.depth <= Press.dmax_for(s.edge, prep) + 1e-6
         end
     end
@@ -591,12 +611,17 @@ smoothstep(t::Real) = (u = clamp(Float64(t), 0.0, 1.0); u * u * (3.0 - 2.0 * u))
     dmax_for(edge, prep) -> Float64
 
 Max wall depth for `edge`: presses until the surviving region hits its readability floor
-(SPEC §3) — never past it. Horizontal walls (E/W) floor the region WIDTH at `floor_w`;
-vertical walls (S/N) floor the region HEIGHT at ≥ 6 baselines of the fixed grid.
+(SPEC §3) — never past it. This is where the 32-CPL floor is enforced (NOT in
+`min_chord_width`). Horizontal walls (E/W) clamp depth so the surviving region WIDTH stays
+`≥ floor_w + 1` — the `+ 1` px guard guarantees `region_width > floor_w` strictly, so a band
+is never a float a hair below `floor_w` (which, under any width-based floor, would skip every
+band and yield an EMPTY pack on the W-pinch frames). Vertical walls (S/N) floor the region
+HEIGHT at ≥ 6 baselines of the fixed grid.
 """
 function dmax_for(edge::Symbol, prep::Prepared)
     if edge === :E || edge === :W
-        return max(0.0, FIELD_W - floor_w(prep))
+        # keep region width ≥ floor_w + 1 (strictly above the floor — never empties the pack)
+        return max(0.0, FIELD_W - floor_w(prep) - 1.0)
     else  # :S or :N — keep ≥ 6 lines of the fixed grid
         la = LINEHEIGHT * prep.metrics.line_advance
         min_h = 6 * la
@@ -620,15 +645,17 @@ function _press_profile(p::Float64)        # p ∈ [0,1) phase within the press
 end
 
 """
-    schedule(f) -> (; edge, depth, north_depth)
+    schedule(f, prep) -> (; edge, depth, north_depth)
 
-Per-frame active wall + depth(s) for frame `f ∈ 0:NFRAMES`. Clamped to `dmax_for` so the
-region never crosses the readability floor (SPEC §3). On press #3 (W, the pinch) holds a
-shallow residual N wall (~25% of N's d_max) during W's HOLD so the dough is caught in a
-corner once per loop (SPEC §2). `schedule(NFRAMES) ≡ schedule(0)` (byte-identical → seamless).
+Per-frame active wall + depth(s) for frame `f ∈ 0:NFRAMES`. Takes the MEMOIZED `prep` as a
+parameter — it never calls `build_prep()` itself, so a 360-frame loop runs exactly ONE
+`prepare()` (the §8 invariant). `prep` is read only for `prep.metrics` via `dmax_for`'s
+floors. Depth clamped to `dmax_for` so the region never crosses the readability floor (SPEC
+§3). On press #3 (W, the pinch) holds a shallow residual N wall (~25% of N's d_max) during
+W's HOLD so the dough is caught in a corner once per loop (SPEC §2).
+`schedule(NFRAMES, prep) ≡ schedule(0, prep)` (byte-identical → seamless).
 """
-function schedule(f::Integer)
-    prep = build_prep()
+function schedule(f::Integer, prep::Prepared)
     ff = mod(f, NFRAMES)
     which = ff ÷ PRESS_LEN                      # 0..3 → E,S,W,N
     edge  = COMPASS[which + 1]
@@ -642,7 +669,7 @@ function schedule(f::Integer)
 end
 ```
 
-(NOTE: `schedule` rebuilds `prep` only to read `prep.metrics` for the floors; the loop driver in Task 6 passes a memoized `prep` into `dmax_for` directly so the loop body never re-prepares. The test rebuilds freely — it is not the hot path.)
+(NOTE: `schedule` reads `prep.metrics` for the floors but NEVER calls `build_prep()` — `prep` is passed in, memoized once by the caller. This is the §8 "ONE prepare()" invariant: `render_loop`/`render_thumbnail`/the golden builder all `prepare()` once and thread that single `prep` through every `schedule`/`pack_at` call, so a 360-frame loop never re-touches the font engine.)
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -738,14 +765,14 @@ function _draw_wall!(ax, edge::Symbol, depth::Real; lw::Float64)
 end
 ```
 
-Then modify `render_frame` to draw the wall(s) after the text. Replace the line `    save_png && save(png, fig; px_per_unit = 1)` with:
+Then modify `render_frame` to draw the wall(s) after the text. Replace the line `    do_save && save(png, fig; px_per_unit = 1)` with:
 ```julia
     # Tide-rule: the active (advancing) edge, heavier than 0.5 px (SPEC §5). On the pinch
     # frame both active edges are ruled (W heavy + N residual heavy).
     _draw_wall!(ax, edge, depth; lw = WALL_ACTIVE_LW)
     north_depth > 0 && _draw_wall!(ax, :N, north_depth; lw = WALL_ACTIVE_LW)
 
-    save_png && save(png, fig; px_per_unit = 1)
+    do_save && save(png, fig; px_per_unit = 1)
 ```
 
 - [ ] **Step 4: Run the test + re-render a pressed frame and eyeball the force**
@@ -761,7 +788,7 @@ Then render the pinch frame and OPEN it (SPEC §5 — "verify the wall reads as 
 julia --project=examples/press -e '
 using Press, TextMeasure
 prep = Press.build_prep()
-s = Press.schedule(225)   # the pinch
+s = Press.schedule(225, prep)   # the pinch
 Press.render_frame(prep, "examples/press/test/out/pinch_frame.png";
     edge = s.edge, depth = s.depth, north_depth = s.north_depth)
 println("wrote pinch_frame.png; edge=", s.edge, " depth=", round(s.depth), " north=", round(s.north_depth))
@@ -795,7 +822,7 @@ Append a testset to `examples/press/test/runtests.jl`:
         prep = Press.build_prep()
         npacks = 0
         for f in 0:(Press.NFRAMES - 1)
-            s = Press.schedule(f)
+            s = Press.schedule(f, prep)
             mask = s.north_depth > 0 ?
                 Press.pinch_mask(Press.FIELD_H, Press.FIELD_W;
                     west_depth = s.depth, north_depth = s.north_depth) :
@@ -843,7 +870,7 @@ function render_loop(mp4_path::AbstractString; prep::Prepared = build_prep())
 
     record(fig, mp4_path, 0:(NFRAMES - 1); framerate = FPS) do f
         empty!(ax)
-        s = schedule(f)
+        s = schedule(f, prep)
         mask = s.north_depth > 0 ?
             pinch_mask(FIELD_H, FIELD_W; west_depth = s.depth, north_depth = s.north_depth) :
             press_mask(FIELD_H, FIELD_W; edge = s.edge, depth = s.depth)
@@ -953,9 +980,10 @@ function _draw_words!(ax, prep::Prepared, packed::PackedLayout, ridx::Set{Int};
 end
 
 """
-    render_thumbnail(png; prep=build_prep()) -> (ghost_frames, n_solid_placements)
+    render_thumbnail(prep, png) -> (ghost_frames, n_solid_placements)
 
-The gallery STILL (SPEC §6): the pinch frame (225) drawn SOLID in ink, with 3–4 earlier
+Takes the memoized `prep` (one `prepare()`; every ghost + the solid frame reuse it via
+`schedule(_, prep)`). The gallery STILL (SPEC §6): the pinch frame (225) drawn SOLID in ink, with 3–4 earlier
 press-states ghosted behind it (real `shape_pack`s at intermediate depths fanning toward
 rest) in GRAY @ alpha 0.10–0.18 increasing toward the front. "rocking" appears twice —
 ghosted near rest + solid in its squeezed band. Built from the same `shape_pack` calls as
@@ -971,7 +999,7 @@ function render_thumbnail(prep::Prepared, png::AbstractString)
     ghost_frames = [180, 195, 210, 220]
     alphas       = [0.10, 0.13, 0.16, 0.18]
     for (gf, a) in zip(ghost_frames, alphas)
-        s = schedule(gf)
+        s = schedule(gf, prep)
         mask = s.north_depth > 0 ?
             pinch_mask(FIELD_H, FIELD_W; west_depth = s.depth, north_depth = s.north_depth) :
             press_mask(FIELD_H, FIELD_W; edge = s.edge, depth = s.depth)
@@ -981,7 +1009,7 @@ function render_thumbnail(prep::Prepared, png::AbstractString)
     end
 
     # Solid pinch frame on top.
-    s = schedule(PINCH_FRAME)
+    s = schedule(PINCH_FRAME, prep)
     mask = pinch_mask(FIELD_H, FIELD_W; west_depth = s.depth, north_depth = s.north_depth)
     solid = pack_at(prep, mask)
     _draw_words!(ax, prep, solid, ridx; color = HS.INK, brass = HS.BRASS, alpha = 1.0)
@@ -1030,7 +1058,7 @@ Append a testset to `examples/press/test/runtests.jl`:
 
         # Format one frame's placement table as canonical rows (rounded to 0.01 px).
         function frame_rows(f)
-            s = Press.schedule(f)
+            s = Press.schedule(f, prep)
             mask = s.north_depth > 0 ?
                 Press.pinch_mask(Press.FIELD_H, Press.FIELD_W;
                     west_depth = s.depth, north_depth = s.north_depth) :
@@ -1045,7 +1073,10 @@ Append a testset to `examples/press/test/runtests.jl`:
         sample = (0, N ÷ 8, 3N ÷ 8, 5N ÷ 8, 7N ÷ 8)   # rest + the two vertical peaks + two more
         digests = String[]
         for f in sample
-            rows, _ = frame_rows(f)
+            rows, pk = frame_rows(f)
+            # EVERY sampled frame must pack a non-empty table — guards the dmax/floor clamp
+            # from ever emptying a W-pinch frame (region width must stay strictly > floor_w).
+            @test length(pk.placements) > 0
             push!(digests, HouseStyle.digest_rows(rows))
         end
 
@@ -1165,7 +1196,7 @@ function _draw_caption!(ax)
 end
 ```
 
-Add `_draw_caption!(ax)` immediately before the `save(...)` / end-of-`record`-callback in each of `render_frame`, `render_loop`, and `render_thumbnail`. In `render_frame`, insert it just before `save_png && save(...)`. In `render_loop`, insert it as the last statement inside the `record` `do f … end` block. In `render_thumbnail`, insert it just before `save(png, fig; px_per_unit = 1)`.
+Add `_draw_caption!(ax)` immediately before the `save(...)` / end-of-`record`-callback in each of `render_frame`, `render_loop`, and `render_thumbnail`. In `render_frame`, insert it just before `do_save && save(...)`. In `render_loop`, insert it as the last statement inside the `record` `do f … end` block. In `render_thumbnail`, insert it just before `save(png, fig; px_per_unit = 1)`.
 
 - [ ] **Step 4: Run the test + re-render the thumbnail to confirm the caption draws**
 
@@ -1196,9 +1227,10 @@ riding the press like a needle. Depends on the shared `HouseStyle` spine.
     julia --project=examples/press -e 'using Pkg; Pkg.test()'
 
 Engine surface used: `prepare` (once) + `shape_pack(prep, raster_chord_fn(mask, 1.0);
-line_advance, min_chord_width = floor_w, overflow_strategy = :widest_row, fill = :widest)`.
-No new library surface — region-mask construction, the press schedule, brass tracking, and
-ghost compositing are all demo-side orchestration over the engine (SPEC §8).
+line_advance, min_chord_width = MIN_CHORD_W, overflow_strategy = :widest_row, fill = :widest)`.
+The 32-CPL readability floor is enforced by clamping wall depth (`dmax_for`), not by
+`min_chord_width`. No new library surface — region-mask construction, the press schedule,
+brass tracking, and ghost compositing are all demo-side orchestration over the engine (SPEC §8).
 ```
 
 - [ ] **Step 6: Commit**
@@ -1215,7 +1247,7 @@ git commit -m "feat(press): mono caption + credit, README; piece complete"
 **Spec coverage (every SPEC § mapped to a task):**
 - §1 medium = looping MP4 + honesty claim (N packs, 1 prepare) → Task 7 (+ honesty testset).
 - §2 choreography (12 s/360 frames, E→S→W→N, smoothstep, HOLD, single pinch, loop closure) → Task 5.
-- §3 readability floors (`floor_w` = 32 ch, ≥ 6 baselines, fixed `line_advance`, `min_chord_width = floor_w`, `:widest_row` overflow) → Tasks 2, 4 (`pack_at`), 5 (`dmax_for`).
+- §3 readability floors (`floor_w` = 32 ch enforced by clamping wall depth in `dmax_for`, NOT via `min_chord_width`; ≥ 6 baselines; fixed `line_advance`; small per-word `min_chord_width = MIN_CHORD_W` so over-wide words are recorded not dropped; `:widest_row` overflow) → Tasks 2, 4 (`pack_at`), 5 (`dmax_for`).
 - §4 brass "rocking" via stable `segment_index`, most visible at the HOLD, pushed to its own band on the W pinch → Tasks 2, 4, 7.
 - §5 field (PAPER, 48 px margin), REQUIRED brass tide-rule (active heavier than 0.5 px, surveyor's ticks, both edges on pinch), body Fraunces 11 pt INK, brass lit word, mono caption + credit, no masthead → Tasks 4, 6, 10.
 - §6 long-exposure thumbnail (pinch solid + 3–4 ghosts, GRAY α 0.10–0.18, brass twice) → Task 8.
@@ -1223,8 +1255,8 @@ git commit -m "feat(press): mono caption + credit, README; piece complete"
 - §9 verbatim PD source text with `\n` verse-breaks → Task 1.
 - §11 build notes: NO `Silhouettes` (Task 1 deps + Task 3 hand-built mask), `fill=:widest` correct because flush walls (Task 3 test asserts ≤ 1 interval/band incl. pinch), stable brass tracking (Task 2), reuse `raster_chord_fn`/`shape_pack` verbatim (Task 4 `pack_at`), golden = layout-table hashes at 5 frames (Task 9), CONDITIONAL `!isempty(overflowed)` gated by a floor-width pre-check (Task 9), alignment eyeballed not just green-tested (Task 4 Step 5, Task 6 Step 4).
 
-**Placeholder scan:** no "similar to Task N", no `...`, no TODO stubs. Every code block is complete and runnable; each command states its expected output. The Whitman `TEXT`, the `[sources]` deps, the `MakieBackend(font=…, fontsize=11, px_per_unit=1)` call, the `shape_pack(…; line_advance, min_chord_width, overflow_strategy=:widest_row, fill=:widest)` signature, the `Placement` fields (`segment_index`, `x`, `y`), and `HouseStyle.digest_rows` are all the REAL signatures verified against `src/`, `examples/layouts/src/shape_pack.jl`, `ext/TextMeasureMakieExt.jl`, and the Foundation plan.
+**Placeholder scan:** no "similar to Task N", no `...`, no TODO stubs. Every code block is complete and runnable; each command states its expected output. The Whitman `TEXT`, the `[sources]` deps, the `MakieBackend(font=…, fontsize=11, px_per_unit=1)` call, the `shape_pack(…; line_advance, min_chord_width=MIN_CHORD_W, overflow_strategy=:widest_row, fill=:widest)` signature (the 32-CPL floor lives in `dmax_for`, never in `min_chord_width`), the `Placement` fields (`segment_index`, `x`, `y`), and `HouseStyle.digest_rows` are all the REAL signatures verified against `src/`, `examples/layouts/src/shape_pack.jl`, `ext/TextMeasureMakieExt.jl`, and the Foundation plan.
 
-**Type consistency:** `Prepared`/`Segment`/`FontMetrics` from `TextMeasure`; `Placement`/`PackedLayout`/`RasterChordFn`/`raster_chord_fn`/`shape_pack` from `TextMeasureLayouts`; `BitMatrix` masks consumed by `raster_chord_fn(mask, 1.0)`; `Placement.x`/`.y :: Float64` in the y-down block-top frame, flipped to y-up scene px in `_to_scene` (the load-bearing reasoning, Task 4). `HouseStyle.RAMP.body == 11`, `.caption == 9`; colours `HS.PAPER/INK/BRASS/GRAY`; `HS.fraunces("9pt-Regular")`/`HS.plexmono("Regular")`/`HS.digest_rows`. `schedule(f) → (; edge::Symbol, depth::Float64, north_depth::Float64)`. The `MakieBackend` keyword constructor (`font`/`fontsize`/`px_per_unit`) matches `ext/TextMeasureMakieExt.jl` exactly.
+**Type consistency:** `Prepared`/`Segment`/`FontMetrics` from `TextMeasure`; `Placement`/`PackedLayout`/`RasterChordFn`/`raster_chord_fn`/`shape_pack` from `TextMeasureLayouts`; `BitMatrix` masks consumed by `raster_chord_fn(mask, 1.0)`; `Placement.x`/`.y :: Float64` in the y-down block-top frame, flipped to y-up scene px in `_to_scene` (the load-bearing reasoning, Task 4). `HouseStyle.RAMP.body == 11`, `.caption == 9`; colours `HS.PAPER/INK/BRASS/GRAY`; `HS.fraunces("9pt-Regular")`/`HS.plexmono("Regular")`/`HS.digest_rows`. `schedule(f, prep) → (; edge::Symbol, depth::Float64, north_depth::Float64)` (takes the memoized `prep`; never re-prepares). The `MakieBackend` keyword constructor (`font`/`fontsize`/`px_per_unit`) matches `ext/TextMeasureMakieExt.jl` exactly.
 
-**Two flagged risks carried from the spec:** (1) `floor_w` approximates the 32-char width as `32 × 0.5 × fontsize` because re-measuring a "0" post-`prepare` would touch the font engine a second time — the `0.5` is the one tunable, validated at the Task 4 visual gate. (2) The `!isempty(overflowed)` assert is CONDITIONAL on a floor-width pre-check (`longest_word_w > floor_w`); Whitman is monster-word-free, so the assert legitimately skips with an `@info` rather than failing by correct design (SPEC §11).
+**Flagged risks carried from the spec / review:** (1) `floor_w` is a FIXED `32 × 0.5 × BODY_PT` heuristic (ignores `prep`) because re-measuring a glyph post-`prepare` would touch the font engine a second time — the `0.5` is the one tunable, validated at the Task 4 visual gate. The 32-CPL floor is enforced by clamping wall depth in `dmax_for` (region width kept `> floor_w` by the `-1` px guard so a band is never a float just below the floor → empty pack), NOT by `shape_pack`'s `min_chord_width` (which is a small per-word `MIN_CHORD_W = 1.0` so over-wide words are RECORDED as overflow, never silently dropped). Every sampled golden frame asserts `length(placements) > 0`. (2) `prepare()` runs exactly ONCE: `schedule(f, prep)` takes the memoized `prep` as a parameter (it never calls `build_prep()`), and `render_loop`/`render_thumbnail`/the golden builder thread that single `prep` through all 360 frames — the §8 "ONE prepare()" invariant. (3) The `!isempty(overflowed)` assert is CONDITIONAL on a floor-width pre-check (`longest_word_w > floor_w`); Whitman is monster-word-free, so the assert legitimately skips with an `@info` rather than failing by correct design (SPEC §11).

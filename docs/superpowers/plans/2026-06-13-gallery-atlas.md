@@ -4,7 +4,7 @@
 
 **Goal:** Build "The Atlas" gallery piece (register: **place**) — a recorded, seamless-loop zoom dive from the whole Central California coast into the Cambria–Morro Bay–SLO–Pismo town necklace, where every place-label is *measured* render-free by TextMeasure.jl and *re-placed live every frame* by MakieTextRepel.jl's deterministic `ProjectionSolver`, warm-started by the prior frame's offsets so settled labels hold collision-free. The hero is the gap-perfect fixed-pitch lattice of Plex-Mono necklace labels kissing edge-to-edge.
 
-**Architecture:** A self-contained demo under `examples/atlas/`. Three honest layers (say it in the caption): (1) **TextMeasure.jl** measures each label box (`MakieBackend(px_per_unit=1)` → `prepare` → `layout`, pixel-exact, no kerning); (2) **MakieTextRepel.jl internals** — `solve_cluster(ProjectionSolver(params), anchors, sizes, bounds; init_state, pin_mask, pinned_offsets)` — do zero-overlap placement (Imhof seed → `side_select` → legalize); (3) **new demo code** drafts the per-frame *warm-start* solve (prior offsets fed as `init_state`, keyed by stable `town_id`), computes overlaps/dropped itself (the recipe surfaces only `computed_offsets`/`computed_dropped`; `solve_stats`/overlaps are `TextRepelAlgorithm`-only, off the path), gates labels by level-of-detail with hysteresis, fades newcomers in, drives the geometric-zoom camera, and renders the basemap + labels in the Swiss/Vignelli house style via `CairoMakie.record`. The warm-start input is to be **upstreamed into MakieTextRepel later** (its `TextRepelAlgorithm` already threads `reset=false` → prior offsets as `init_state`; the recipe is the missing surface), then the demo swaps to the public API. No glyph rotation — all labels horizontal (Imhof convention).
+**Architecture:** A self-contained demo under `examples/atlas/`. Three honest layers (say it in the caption): (1) **TextMeasure.jl** measures each label box (`MakieBackend(; font=<path>, fontsize=…, px_per_unit=1)` — keyword-only ctor → `prepare` → `layout`, pixel-exact, no kerning); (2) **MakieTextRepel.jl internals** — `solve_cluster(ProjectionSolver(params), anchors, sizes, bounds; init_state, pin_mask, pinned_offsets)` — do zero-overlap placement (Imhof seed → `side_select` → legalize); (3) **new demo code** drafts the per-frame *warm-start* solve (prior offsets fed as `init_state`, keyed by stable `town_id`), computes overlaps/dropped itself (the recipe surfaces only `computed_offsets`/`computed_dropped`; `solve_stats`/overlaps are `TextRepelAlgorithm`-only, off the path), gates labels by level-of-detail with hysteresis, fades newcomers in, drives the geometric-zoom camera, and renders the basemap + labels in the Swiss/Vignelli house style via `CairoMakie.record`. The warm-start input is to be **upstreamed into MakieTextRepel later** (its `TextRepelAlgorithm` already threads `reset=false` → prior offsets as `init_state`; the recipe is the missing surface), then the demo swaps to the public API. No glyph rotation — all labels horizontal (Imhof convention).
 
 **Tech Stack:** Julia 1.11+; `CairoMakie`/`Makie` 0.24 (`record`, `Axis`, `text!`/`linesegments!`/`scatter!`/`poly!`, `markerspace=:pixel`); `MakieTextRepel` (the user's own unregistered MIT package — handled as a `[sources]` path dep, see Task 0); `GeoJSON`/`GeoInterface` + `CSV` for basemap data; `HouseStyle` (shared spine, `examples/_housestyle`) for palette/ramp/fonts/footer/`digest_rows`; `TextMeasure` (this repo, by `[sources]` path). Golden = `digest_rows` over a machine-robust per-frame placement table (`town_id, slot, relative-offset, alpha_q, has_leader`) at 6 sampled frames; the MP4 is a gitignored build artifact.
 
@@ -28,15 +28,17 @@
 - Clone (sibling of worktree): `/home/jonathanchen/projects/MakieTextRepel.jl/`
 - Modify: `/home/jonathanchen/projects/MakieTextRepel.jl/Project.toml` (repoint its TextMeasure `[sources]`)
 
-- [ ] **Step 1: Clone MakieTextRepel as a sibling of the worktree**
+- [ ] **Step 1: Clone MakieTextRepel as a sibling of the worktree AND pin a commit SHA**
 
-Run (from anywhere):
+This plan binds non-exported MakieTextRepel internals (`solve_cluster`/`box_at`/`overlap_push`/`point_covered`/`IMHOF_ORDER`), so the clone MUST be pinned to a known SHA — a later upstream refactor of these internals would silently break the Atlas piece. **Pin to `dc7178205ce4b05e8bd86c4ae10419f0932e14e6`** (the HEAD of the `/tmp/MakieTextRepel.jl` checkout this plan was verified against, 2026-06-13). Run (from anywhere):
 ```bash
 cd /home/jonathanchen/projects && \
   test -d MakieTextRepel.jl || git clone https://github.com/jowch/MakieTextRepel.jl MakieTextRepel.jl && \
+  git -C MakieTextRepel.jl checkout dc7178205ce4b05e8bd86c4ae10419f0932e14e6 && \
+  git -C MakieTextRepel.jl rev-parse HEAD && \
   ls /home/jonathanchen/projects/MakieTextRepel.jl/src/solvers/projection.jl
 ```
-Expected: prints `/home/jonathanchen/projects/MakieTextRepel.jl/src/solvers/projection.jl` (clone present; the internal solver file we depend on exists). If the clone already exists, the `test -d` short-circuits and the `ls` still confirms the file.
+Expected: `rev-parse HEAD` prints `dc7178205ce4b05e8bd86c4ae10419f0932e14e6`, then `ls` prints `/home/jonathanchen/projects/MakieTextRepel.jl/src/solvers/projection.jl` (clone present at the pinned SHA; the internal solver file we depend on exists). If the clone already exists, the `test -d` short-circuits — still run the `checkout` to ensure the pinned SHA. RECORD this exact SHA in `examples/atlas/README.md` (Task 9). NOTE: if `github.com/jowch/MakieTextRepel.jl` is unreachable, the `/tmp/MakieTextRepel.jl` checkout at this same SHA is the fallback source.
 
 - [ ] **Step 2: Repoint MakieTextRepel's TextMeasure source at the gallery worktree**
 
@@ -114,9 +116,15 @@ test = ["Test"]
 ```
 NOTE: `MakieTextRepel` path is `../../../MakieTextRepel.jl` — from `examples/atlas/` that is `examples/atlas → examples → TextMeasure.jl-gallery → projects/MakieTextRepel.jl`, the sibling cloned in Task 0.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 2: Write the failing test (and an EMPTY module shell, so the failure is a real `UndefVarError`)**
 
-Create `examples/atlas/test/test_warmstart.jl`:
+First create a deliberately-empty module shell so `include` succeeds but the symbols are undefined — this makes Step 4's failing run a CONCRETE `UndefVarError: solve_frame not defined`, not a contrived "maybe it passes". Create `examples/atlas/src/Atlas.jl`:
+```julia
+module Atlas
+# Intentionally empty for the TDD red step — Step 5 overwrites this with the real implementation.
+end # module Atlas
+```
+Then create `examples/atlas/test/test_warmstart.jl`:
 ```julia
 using Test
 using GeometryBasics: Point2f, Vec2f, Rect2f
@@ -144,7 +152,27 @@ using .Atlas
         @test sum(abs2, r1.offsets[id] .- r0a.offsets[id]) < 9.0   # held within 3px
     end
 
+    # (b2) NEWCOMER frame: a brand-new town :d enters while :a :b :c are warm-started.
+    #      Incumbents must NOT reshuffle — the full-length init_state seeds :d via
+    #      imhof_seed and keeps the prior offsets for :a/:b/:c (warm relax, not a
+    #      fresh re-seed). Assert incumbents move < a few px when the newcomer enters.
+    ids4   = [:a, :b, :c, :d]
+    sizes4 = merge(sizes, Dict(:d => Vec2f(40, 12)))
+    anch4  = merge(anch1, Dict(:d => Point2f(150, 220)))   # off the necklace row
+    r2 = Atlas.solve_frame(ids4, anch4, sizes4, bounds; prev=r1.offsets)  # :d absent ⇒ new
+    for id in (:a, :b, :c)
+        @test sum(abs2, r2.offsets[id] .- r1.offsets[id]) < 16.0   # incumbents held < 4px
+    end
+    @test haskey(r2.offsets, :d)                                   # newcomer placed
+    @test Atlas.count_overlaps(ids4, anch4, sizes4, r2.offsets) == 0
+
     # (c) our own overlap recompute is zero (collision-free), and no drops.
+    #     NOTE: count_overlaps uses MakieTextRepel.box_at on the UNPADDED measured size —
+    #     it is the bare label-glyph box, LOOSER than the solver's objective (which
+    #     separates by box_padding=4 + point_padding=5). So overlaps==0 here is the
+    #     true visual no-touch floor; the solver actually leaves a few px of air beyond
+    #     it. (To assert the stricter padded separation, inflate each size by 2*box_padding
+    #     before box_at, or compare against the solver's own residual — left optional.)
     @test Atlas.count_overlaps(ids, anch1, sizes, r1.offsets) == 0
     @test isempty(r1.dropped_ids)
 
@@ -167,9 +195,18 @@ using Test
 end
 ```
 
-- [ ] **Step 4: Write the minimal Atlas module with the warm-start wrapper**
+- [ ] **Step 4: Run the test against the EMPTY module to observe a REAL failure (TDD red)**
 
-Create `examples/atlas/src/Atlas.jl`. This is the real wrapper, keyed by `town_id`, calling `solve_cluster` with `init_state` built from `prev`; `nothing` per-label when a town is new. Overlap recompute uses `MakieTextRepel.box_at`/`overlap_push`. `frame_digest` uses `HouseStyle.digest_rows` on the machine-robust key. Slot is the nearest Imhof slot to the final relative offset (see `infer_slot`).
+With only the empty `Atlas.jl` shell from Step 2 in place, instantiate then run the test:
+```bash
+julia --project=examples/atlas -e 'using Pkg; Pkg.instantiate()' 2>&1 | tail -5
+julia --project=examples/atlas -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log" | tail -20
+```
+Expected: a CONCRETE failure — `UndefVarError: solve_frame not defined` (the test references `Atlas.solve_frame`, which the empty shell does not define). This is the genuine red step; the failing run is observed, not hypothesized. Only after seeing it, proceed to Step 5.
+
+- [ ] **Step 5: Write the real Atlas module with the warm-start wrapper**
+
+OVERWRITE the empty `examples/atlas/src/Atlas.jl` shell with the real implementation: the wrapper keyed by `town_id`, calling `solve_cluster` with a full-length `init_state` built from `prev` (prior offset for known ids, `imhof_seed` for new ids — never `nothing`). Overlap recompute uses `MakieTextRepel.box_at`/`overlap_push`. `frame_digest` uses `HouseStyle.digest_rows` on the machine-robust key. Slot is the nearest Imhof slot to the final relative offset (see `infer_slot`).
 ```julia
 module Atlas
 
@@ -187,13 +224,36 @@ const PARAMS = RepelParams(; only_move = :both, box_padding = 4.0,
 const SOLVER = ProjectionSolver(PARAMS)
 
 """
+    imhof_seed(size) -> Vec2f
+
+Deterministic single-label Imhof seed offset for a NEW town: the first slot of
+`IMHOF_ORDER` (`:TR`), i.e. the label's box kissing the anchor at top-right.
+This is exactly the fallback `MakieTextRepel.initial_offsets` lands a label on
+when its Voronoi cell can't host any slot — but computed in closed form so we
+need no Voronoi `cells`. `pad = PARAMS.point_padding` matches the solver's slot
+geometry (`slot_offset(:TR, size, p) = (w/2 + p, h/2 + p)`).
+"""
+function imhof_seed(size::Vec2f)
+    p = Float32(PARAMS.point_padding)
+    return Vec2f(size[1] / 2 + p, size[2] / 2 + p)   # :TR — IMHOF_ORDER[1]
+end
+
+"""
     solve_frame(ids, anchors, sizes, bounds; prev) -> (; offsets, dropped_ids)
 
 Warm-start solve for one frame. `ids` is a Vector of stable town_ids (Symbols).
 `anchors`/`sizes` are `Dict{id => Point2f/Vec2f}` (projected px / measured boxes).
-`prev` is `Dict{id => Vec2f}` of the PRIOR frame's offsets — a town absent from
-`prev` is new, seeded fresh (its `init_state` entry stays `nothing`).
-We key by id, never vector index. `offsets` returned as `Dict{id => Vec2f}`.
+`prev` is `Dict{id => Vec2f}` of the PRIOR frame's offsets.
+
+We ALWAYS pass a full-length `init_state` Vector (never `nothing` once any town
+is known), built per-id: a town present in `prev` keeps its prior offset (warm
+start — incumbents barely move), a NEW town (absent from `prev`) is seeded at its
+own `imhof_seed`. This makes the solve a WARM-START RELAX every frame — it
+legalizes the given layout rather than re-running side-select — so incumbents are
+NOT reshuffled when a newcomer enters (the all-or-nothing `have_prev` re-seed is
+gone). Only the genuinely-empty first frame (`isempty(prev)`) seeds every label
+from `imhof_seed` (still a Vector, not `nothing`), keeping the warm-relax path on
+every frame for golden stability. We key by id, never vector index.
 """
 function solve_frame(ids::Vector{Symbol},
                      anchors::Dict{Symbol,Point2f},
@@ -203,9 +263,8 @@ function solve_frame(ids::Vector{Symbol},
     n = length(ids)
     anch = Point2f[anchors[id] for id in ids]
     sz   = Vec2f[sizes[id] for id in ids]
-    # Warm start: prior offset per id, else 0 with a per-label "is new" flag.
-    have_prev = all(haskey(prev, id) for id in ids)
-    init = have_prev ? Vec2f[prev[id] for id in ids] : nothing
+    # ONE full-length init_state: prior offset for known ids, Imhof seed for new.
+    init = Vec2f[haskey(prev, id) ? prev[id] : imhof_seed(sizes[id]) for id in ids]
     r = solve_cluster(SOLVER, anch, sz, bounds; init_state = init)
     offs = Dict{Symbol,Vec2f}(id => r.offsets[k] for (k, id) in enumerate(ids))
     dropped_ids = Symbol[ids[k] for k in 1:n if r.dropped[k]]
@@ -257,22 +316,13 @@ end
 end # module Atlas
 ```
 
-- [ ] **Step 5: Run the test to verify it FAILS (deps not yet instantiated / stub not exercised under record)**
-
-Run:
-```bash
-julia --project=examples/atlas -e 'using Pkg; Pkg.instantiate()' 2>&1 | tail -5
-julia --project=examples/atlas -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log" | tail -20
-```
-Expected on the FIRST authoring pass (before the module is correct): a FAIL/error — e.g. `UndefVarError: solve_frame not defined` or a `DimensionMismatch`/overlap assertion. (If you wrote Step 4 verbatim it may pass immediately; in that case introduce the test FIRST with the module absent to see the `UndefVarError`, then add the module — TDD discipline: the failing run must be observed.)
-
 - [ ] **Step 6: Make it pass**
 
-With the module from Step 4 in place, run:
+With the real module from Step 5 in place (the empty shell overwritten), run:
 ```bash
 julia --project=examples/atlas -e 'using Pkg; Pkg.test()' 2>&1 | tee "test-logs/${CLAUDE_CODE_SESSION_ID:-local}.log" | tail -20
 ```
-Expected: `Test Summary: | Pass 6` (or more) — warm-start holds, deterministic, overlaps==0, digest stable & 64 hex chars.
+Expected: `Test Summary: | Pass 10` (or more) — deterministic, warm-start holds, the newcomer-frame (case b2) holds incumbents while seeding `:d`, overlaps==0, digest stable & 64 hex chars.
 
 - [ ] **Step 7: Verify per-frame reactive-solve timing under `record` on the stub**
 
@@ -380,25 +430,91 @@ Expected: FAIL — `coastline.geojson` etc. do not exist (`isfile` false).
 
 Create `examples/atlas/prep/clip.jl` (hardcoded bbox; fetches NE 10m from the committed-URL or a local NE checkout, clips, writes the small subsets). Document the source URLs inline. Keep it runnable but not part of the demo path:
 ```julia
-# One-time prep: clip NE 1:10m coastline + land to the Central Coast bbox.
+# One-time prep: clip NE 1:10m coastline + land to the Central Coast clip envelope.
 # Source: github.com/nvkelso/natural-earth-vector (PUBLIC DOMAIN, no attribution required).
-#   ne_10m_coastline.geojson, ne_10m_land.geojson
-# Run manually: julia --project=examples/atlas examples/atlas/prep/clip.jl /path/to/ne_10m
-# Writes examples/atlas/data/{coastline,land}.geojson (clipped to BBOX).
+#   geojson/ne_10m_coastline.geojson, geojson/ne_10m_land.geojson
+# Run manually: julia --project=examples/atlas examples/atlas/prep/clip.jl /path/to/ne_10m_dir
+#   where the dir holds ne_10m_coastline.geojson and ne_10m_land.geojson.
+# Writes examples/atlas/data/{coastline,land}.geojson (features intersecting BBOX).
 using GeoJSON, GeoInterface
 
-const BBOX = (lon = (-122.0, -119.5), lat = (34.5, 37.0))   # Central Coast window
+# Clip envelope — slightly looser than the town window so coast/land run past the
+# camera frame edges (no bare margins when the dive pans). Lon/lat in degrees.
+const BBOX = (lon = (-122.5, -119.4), lat = (34.3, 37.1))
 
-# ... read source geojson, keep features intersecting BBOX, re-emit clipped geometry ...
-# (Implementation: load via GeoJSON.read; filter rings/linestrings to the bbox;
-#  GeoJSON.write the survivors. The exact clipping is a one-time data chore — the
-#  demo never runs this. Verify output sizes are 15–30 KB each per SPEC §6.)
+const DATA = normpath(joinpath(@__DIR__, "..", "data"))
+
+"True iff a (lon,lat) coordinate pair is inside BBOX."
+in_bbox(c) = (BBOX.lon[1] <= c[1] <= BBOX.lon[2]) && (BBOX.lat[1] <= c[2] <= BBOX.lat[2])
+
+"True iff ANY vertex of `geom` falls inside BBOX (feature-level intersection test).
+Recurses through Multi*/Polygon/LineString into raw coordinate pairs."
+function intersects_bbox(geom)
+    t = GeoInterface.geomtrait(geom)
+    if t isa GeoInterface.PointTrait
+        return in_bbox(GeoInterface.coordinates(geom))
+    elseif t isa GeoInterface.LineStringTrait
+        return any(in_bbox, GeoInterface.coordinates(geom))
+    elseif t isa GeoInterface.PolygonTrait
+        return any(ring -> any(in_bbox, ring), GeoInterface.coordinates(geom))
+    else  # Multi*/GeometryCollection: recurse over sub-geometries
+        return any(intersects_bbox, GeoInterface.getgeom(geom))
+    end
+end
+
+"Read a source NE geojson, keep features whose geometry intersects BBOX, write the
+clipped FeatureCollection to data/<outname>.geojson."
+function clip(src::AbstractString, outname::AbstractString)
+    fc = GeoJSON.read(read(src, String))
+    kept = [f for f in fc if intersects_bbox(GeoInterface.geometry(f))]
+    isempty(kept) && error("clip($src): no features intersect BBOX $BBOX")
+    out = GeoJSON.FeatureCollection(kept)
+    open(joinpath(DATA, outname), "w") do io
+        GeoJSON.write(io, out)
+    end
+    @info "clipped" src outname features = length(kept) bytes = filesize(joinpath(DATA, outname))
+end
+
+function main(ne_dir)
+    mkpath(DATA)
+    clip(joinpath(ne_dir, "ne_10m_coastline.geojson"), "coastline.geojson")
+    clip(joinpath(ne_dir, "ne_10m_land.geojson"),      "land.geojson")
+end
+
+isinteractive() || main(get(ARGS, 1, error("usage: clip.jl /path/to/ne_10m_dir")))
 ```
-(The implementing agent fills in the clip body; it runs ONCE, by hand, against a local NE checkout. The committed artifacts are what matter.)
+NOTE: this is a coarse feature-level clip — it keeps whole features that touch BBOX
+(no per-vertex polygon cutting), which is sufficient here because NE 1:10m coast/land
+features in this window are small. If a kept feature's bytes blow the §6 budget,
+substitute a vertex-level Sutherland–Hodgman clip; verify each output is 15–30 KB.
+The demo NEVER runs this — only the committed artifacts matter. If `GeoJSON.write`'s
+arity differs in your GeoJSON.jl version, use `write(path, out)` (the string-path form).
 
 - [ ] **Step 4: Produce the committed artifacts**
 
 Run the clip once (or hand-build the small subsets) so the four files exist under `examples/atlas/data/`. Then hand-author `towns.csv` with header `town_id,name,lon,lat,pop,rank,source` containing: the **8 verbatim NE in-bbox rows** (`source=NE`, exact NAME/lon/lat/POP_MAX/SCALERANK) + **~15 hand-placed coastal towns** (`source=curated`, lon/lat hand-entered, `pop`/`rank` ordinally correct for LoD priority), including the hero necklace San Luis Obispo / Morro Bay / Pismo Beach / Cambria / San Simeon / Los Osos / Avila Beach / Cayucos / Atascadero / Paso Robles / Lompoc / Santa Maria / Santa Barbara / Salinas / Monterey. `town_id` = a stable snake_case slug (e.g. `san_luis_obispo`). Write `SOURCE.txt` stating: coastline + land = NE 1:10m (PD); the 8 NE town rows verbatim; the rest hand-placed (`source` column keeps it honest).
+
+**PIN these concrete `rank` values** (the LoD test in Task 4 asserts the thresholds they produce via `w_on`, so they must be deterministic — see the SPEC §3 bands). `rank ∈ 1..9`, lower = bigger/on-sooner-when-wide; `w_on(rank)` runs geometrically 3.0°(r=1) → 0.30°(r=9):
+
+| town_id | rank | w_on (deg) | band |
+|---|---|---|---|
+| `san_luis_obispo` | 1 | 3.00 | majors (≤1.5°) |
+| `santa_maria` | 1 | 3.00 | majors |
+| `santa_barbara` | 1 | 3.00 | majors |
+| `salinas` | 1 | 3.00 | majors |
+| `monterey` | 1 | 3.00 | majors |
+| `morro_bay` | 5 | ≈0.95 | mid (≤0.7°) |
+| `pismo_beach` | 5 | ≈0.95 | mid |
+| `atascadero` | 5 | ≈0.95 | mid |
+| `paso_robles` | 5 | ≈0.95 | mid |
+| `lompoc` | 5 | ≈0.95 | mid |
+| `cambria` | 9 | 0.30 | necklace (≤0.30°) |
+| `san_simeon` | 9 | 0.30 | necklace |
+| `los_osos` | 9 | 0.30 | necklace |
+| `avila_beach` | 9 | 0.30 | necklace |
+| `cayucos` | 9 | 0.30 | necklace |
+
+(Verify `w_on(5) = exp((4/8)·log3 + (4/8)·log0.30) ≈ 0.949` lands the mid band below 1.5° but above 0.30°, so the SPEC §3 table holds. The remaining NE/curated rows take any rank in 1..9 consistent with their pop; only the hero towns above are PINNED and asserted.)
 
 Run a size check:
 ```bash
@@ -539,7 +655,7 @@ git commit -m "feat(atlas): equirectangular + cosφ0 projection and geojson/csv 
 
 ### Task 4: LoD gating with hysteresis + label measurement
 
-**Why now:** decide WHO is active each frame (importance vs view width `w`, on a `log(w)` ladder) with a hysteresis deadband (on at `w_on`, off at `1.08×w_on`) to kill boundary flicker, and MEASURE each active label's box via TextMeasure (`MakieBackend(px_per_unit=1)`).
+**Why now:** decide WHO is active each frame (importance vs view width `w`, on a `log(w)` ladder) with a hysteresis deadband (on at `w_on`, off at `1.08×w_on`) to kill boundary flicker, and MEASURE each active label's box via TextMeasure (`MakieBackend(; font=<path>, fontsize=…, px_per_unit=1)` — keyword-only).
 
 **Files:**
 - Modify: `examples/atlas/src/Atlas.jl` (`measure_town`, `active_ids` with hysteresis state)
@@ -558,9 +674,9 @@ include(joinpath(@__DIR__, "..", "src", "Atlas.jl")); using .Atlas
     @test sz isa Vec2f
     @test sz[1] > 0 && sz[2] > 0
     # Plex Mono is fixed-pitch: width is proportional to char count (the lattice property).
-    w14 = Atlas.measure_town("San Luis Obispo")[1]    # 14 glyphs (incl spaces)
+    w15 = Atlas.measure_town("San Luis Obispo")[1]    # 15 glyphs (incl 2 spaces)
     w7  = Atlas.measure_town("Cambria")[1]            # 7 glyphs
-    @test w14 / w7 ≈ 14/7 atol = 0.05                 # fixed-pitch ⇒ ~linear in length
+    @test w15 / w7 ≈ 15/7 atol = 0.05                 # fixed-pitch ⇒ ~linear in length
 end
 
 @testset "LoD gating + hysteresis" begin
@@ -573,11 +689,17 @@ end
     tight = Atlas.active_ids(towns, 0.30, Set{Symbol}())
     @test :cambria in tight
     @test :morro_bay in tight
+    # Pinned ranks ⇒ pinned thresholds (towns.csv rank values are fixed in Task 2):
+    #   san_luis_obispo rank 1 → w_on 3.0° ; cambria rank 9 → w_on 0.30°.
+    @test towns[:cambria].rank == 9                     # pinned in data task
+    @test towns[:san_luis_obispo].rank == 1             # pinned in data task
+    @test Atlas.w_on(towns[:cambria]) ≈ 0.30 atol = 1e-6
+    @test Atlas.w_on(towns[:san_luis_obispo]) ≈ 3.0 atol = 1e-6
     # Hysteresis: a town ON at w_on stays ON until 1.08×w_on (deadband, no flicker).
-    on_at = Atlas.w_on(towns[:cambria])
-    just_above = on_at * 1.05                           # inside the deadband
+    on_at = Atlas.w_on(towns[:cambria])                 # == 0.30
+    just_above = on_at * 1.05                            # inside the deadband
     @test :cambria in Atlas.active_ids(towns, just_above, Set([:cambria]))   # held ON
-    well_above = on_at * 1.20                           # past the deadband
+    well_above = on_at * 1.20                            # past the deadband
     @test :cambria ∉ Atlas.active_ids(towns, well_above, Set([:cambria]))    # released
 end
 ```
@@ -605,12 +727,13 @@ function measure_town(name::AbstractString)
     return Vec2f(lay.size[1], lay.size[2])
 end
 
-"View width (deg) at which a town switches ON — smaller rank / bigger pop ⇒ ON sooner (wider)."
+"View width (deg) at which a town switches ON — smaller rank (majors) ⇒ ON sooner (wider).
+Monotone log(w) ladder: rank 1 (majors) on at 3.0°, descending geometrically to rank 9
+on at 0.30°. rank ∈ 1..9 → w_on ∈ [3.0, 0.30]. (NE SCALERANK convention: lower = bigger.)"
 function w_on(t)
-    # Monotone log(w) ladder by rank: rank 1 (majors) on at 3.0°, descending to 0.30°.
-    # rank ∈ 1..9 → w_on ∈ [3.0, 0.30] geometrically.
     r = clamp(t.rank, 1, 9)
-    return exp(((9 - r) / 8) * log(0.30) + ((r - 1) / 8) * log(3.0))
+    # rank 1 → weight 1 on log(3.0); rank 9 → weight 1 on log(0.30).
+    return exp(((9 - r) / 8) * log(3.0) + ((r - 1) / 8) * log(0.30))
 end
 
 """
@@ -630,7 +753,7 @@ function active_ids(towns::Dict, w::Real, prev_active::Set{Symbol})
     return out
 end
 ```
-(Tune the `w_on` ladder constants so the SPEC §3 table holds: SLO/Santa Maria/Santa Barbara/Salinas/Monterey by 1.5°; +Morro Bay/Pismo/Atascadero/Paso Robles/Lompoc by 0.7°; +Cambria/San Simeon/Los Osos/Avila/Cayucos by 0.30°. Set each town's `rank` in towns.csv to land it in the right band.)
+(The `w_on` ladder constants + the PINNED ranks from Task 2 together make the SPEC §3 table hold: rank-1 SLO/Santa Maria/Santa Barbara/Salinas/Monterey at 3.0° (visible by 1.5°); rank-5 Morro Bay/Pismo/Atascadero/Paso Robles/Lompoc at ≈0.95° (by 0.7°); rank-9 Cambria/San Simeon/Los Osos/Avila/Cayucos at 0.30°. The ranks are FIXED in towns.csv — do not retune the ladder without updating the pinned `w_on` assertions in Task 4's test.)
 
 - [ ] **Step 4: Run the test to verify it PASSES**
 
@@ -874,6 +997,26 @@ function placement_rows(rec, towns::Dict)
     end
     return rows
 end
+
+"""
+    placement_slot_rows(rec, towns) -> Vector{String}
+
+SLOT-ONLY fallback key (SPEC §8): `town_id | slot | alpha_q | has_leader` — drops the
+2dp relative-offset floats entirely. This is the machine-robust FLOOR for the golden:
+slot membership + fade + leader are integer/quantized and cannot drift on a last-digit
+float tip. The strict `placement_rows` digest is preferred; this is the documented
+fallback if a second machine drifts on the strict key.
+"""
+function placement_slot_rows(rec, towns::Dict)
+    ids = sort!(collect(keys(rec.offsets)))
+    rows = String[]
+    for id in ids
+        aq = round(rec.alpha[id] / 0.05) * 0.05
+        push!(rows, string(id, "|", infer_slot(rec.offsets[id]), "|",
+                           round(aq; digits = 2), "|", rec.has_leader[id] ? 1 : 0))
+    end
+    return rows
+end
 ```
 
 - [ ] **Step 4: Run the test to verify it PASSES**
@@ -1003,8 +1146,12 @@ git commit -m "feat(atlas): render the dive — basemap + necklace labels + cart
 
 **Why now:** lock determinism. Golden = `digest_rows` over `placement_rows` (town_id, slot, relative-offset, alpha_q, has_leader) at frames `f000/f060/f120/f180(apex)/f240/f300`; sha256 + `.txt` sibling per frame (mirror `asteroid_tui/frame60.sha256`). Per-frame invariants: our overlap recompute == 0, dropped ≤ budget, active-set size matches the LoD gate. Also render the gallery still at `p≈0.42` (frame 151).
 
+**Determinism scoping (SPEC §8 — what the golden DOES and DOES NOT guarantee).** Two known float-sensitivity vectors, handled explicitly:
+1. **Solve path:** with Task 1's full-length `init_state` (incumbents warm, newcomers Imhof-seeded), EVERY frame is a warm-start *relax* — the seed-pinned Delaunay/FRESH path is never on the golden path, so the unverified cross-machine Delaunay float behaviour does not gate us. Good.
+2. **Projector + 2dp relative offsets:** the golden replays the headless `px_of` projection (pure arithmetic), NOT the `Makie.project` path the MP4 uses — and `placement_rows` rounds relative offsets to 2dp, which can still tip a row's last digit on a different machine. So `placement_rows` carries TWO keys: the **strict** key (slot + 2dp relative offset + alpha_q + has_leader) AND a **slot-only fallback** key (slot + alpha_q + has_leader, no offset float). The committed golden hashes the STRICT key; the test asserts strict-match on THIS machine and additionally asserts the slot-only digest as a machine-robust floor. If a second machine drifts on strict, fall back to the slot-only digest as the golden (documented in Step 5). The `Makie.project` (record) path is NOT golden-hashed at all — it is covered only by a `count_overlaps==0` smoke check on real-projector frames (Step 7), because projected px at zoom extremes is inherently machine-sensitive.
+
 **Files:**
-- Create: `examples/atlas/test/golden/f{000,060,120,180,240,300}.{sha256,txt}`
+- Create: `examples/atlas/test/golden/f{000,060,120,180,240,300}.{sha256,slot.sha256,txt}`
 - Create: `examples/atlas/test/test_golden.jl`; Modify: `examples/atlas/test/runtests.jl`
 - Create: `examples/atlas/still.jl` (the mid-dive still build script)
 
@@ -1036,16 +1183,41 @@ end
         dig  = Atlas.digest_rows(rows)                    # re-export of HouseStyle.digest_rows
         tag  = "f" * lpad(f, 3, '0')
         shaf = joinpath(GOLDEN, tag * ".sha256")
-        @test isfile(shaf)                                # golden committed
-        @test strip(read(shaf, String)) == dig            # matches
+        @test isfile(shaf)                                # strict golden committed
+        @test strip(read(shaf, String)) == dig            # strict matches (THIS machine)
+        # slot-only fallback FLOOR (SPEC §8): committed alongside, machine-robust.
+        sf = joinpath(GOLDEN, tag * ".slot.sha256")
+        @test isfile(sf)
+        @test strip(read(sf, String)) == Atlas.digest_rows(Atlas.placement_slot_rows(rec, towns))
         # invariants
         @test rec.overlaps == 0                           # our own recompute == 0
         @test length(rec.dropped_ids) <= 2                # dropped ≤ budget
         @test length(rec.active) == length(keys(rec.offsets))
     end
 end
+
+@testset "record-path smoke: real Makie projector stays collision-free" begin
+    # The golden replays the headless `px_of` projection; the MP4 uses `Makie.project`,
+    # which is NOT golden-hashed (projected px is machine-sensitive at zoom extremes).
+    # We guard the record path with a plain overlap==0 smoke on real-projector frames.
+    using CairoMakie, Makie
+    using GeometryBasics: Point2f
+    towns = Atlas.load_towns()
+    bm = Atlas.load_basemap()
+    fig = Figure(size = (1280, 800)); ax = Axis(fig[1,1]; aspect = DataAspect())
+    hidedecorations!(ax); hidespines!(ax)
+    proj = Atlas.makie_projector(ax)
+    st = Atlas.PlacementState()
+    for f in (0, 90, 180)                                  # a few real-projector frames
+        c = Atlas.camera_at(f)
+        limits!(ax, Atlas.camera_limits(c)...)
+        Makie.update_state_before_display!(fig)           # px anchors reflect THIS frame
+        rec = Atlas.step_frame!(st, towns, f; project = proj)
+        @test rec.overlaps == 0                           # collision-free on the REAL path
+    end
+end
 ```
-Append the include to runtests.
+Append the include to runtests. NOTE: the record-path smoke needs Task 7's `makie_projector`, so this `test_golden.jl` runs AFTER Task 7 in `runtests.jl`.
 
 - [ ] **Step 2: Run it to verify it FAILS**
 
@@ -1066,9 +1238,11 @@ for f in [0,60,120,180,240,300]
     st = Atlas.PlacementState(); rec = nothing
     for frame in 0:f; rec = Atlas.step_frame!(st, towns, frame); end
     rows = Atlas.placement_rows(rec, towns)
+    slot = Atlas.placement_slot_rows(rec, towns)
     tag = "f"*lpad(f,3,"0")
     write(joinpath("examples/atlas/test/golden", tag*".txt"), join(rows, "\n"))
     write(joinpath("examples/atlas/test/golden", tag*".sha256"), Atlas.digest_rows(rows))
+    write(joinpath("examples/atlas/test/golden", tag*".slot.sha256"), Atlas.digest_rows(slot))
     println(tag, "  ", length(rows), " labels  ", Atlas.digest_rows(rows)[1:12])
 end'
 ```
@@ -1084,7 +1258,7 @@ Expected: PASS — all 6 frames digest-match, overlaps==0, dropped ≤ 2, active
 
 - [ ] **Step 5: Confirm golden stability across a re-run (machine-robustness check)**
 
-Re-run the generator from Step 3 into a tempdir and diff against the committed `.sha256` — the relative-offset/slot key must be byte-identical on re-run (if it is NOT, the key is still float-sensitive; fall back to slot-only hashing per SPEC §8 before building further on it):
+Re-run the generator from Step 3 and diff against BOTH committed digests — the strict relative-offset/slot key AND the slot-only floor. The slot-only key MUST be STABLE (it carries no offset floats); the strict key SHOULD be STABLE on the same machine. **If the strict key DRIFTS on a second machine** (re-run this block there), the documented fallback is to make the slot-only digest the golden: point the Task 8 test's primary assertion at `placement_slot_rows`/`.slot.sha256` and demote the strict `.sha256` to informational. Record which key the golden trusts in the README:
 ```bash
 julia --project=examples/atlas -e '
 include("examples/atlas/src/Atlas.jl"); using .Atlas
@@ -1092,12 +1266,15 @@ towns = Atlas.load_towns()
 for f in [0,60,120,180,240,300]
     st = Atlas.PlacementState(); rec = nothing
     for frame in 0:f; rec = Atlas.step_frame!(st, towns, frame); end
-    d = Atlas.digest_rows(Atlas.placement_rows(rec, towns))
-    g = strip(read(joinpath("examples/atlas/test/golden","f"*lpad(f,3,"0")*".sha256"), String))
-    println("f", lpad(f,3,"0"), d == g ? "  STABLE" : "  DRIFT")
+    tag = "f"*lpad(f,3,"0")
+    ds = Atlas.digest_rows(Atlas.placement_rows(rec, towns))
+    dl = Atlas.digest_rows(Atlas.placement_slot_rows(rec, towns))
+    gs = strip(read(joinpath("examples/atlas/test/golden",tag*".sha256"), String))
+    gl = strip(read(joinpath("examples/atlas/test/golden",tag*".slot.sha256"), String))
+    println(tag, "  strict:", ds==gs ? "STABLE" : "DRIFT", "  slot:", dl==gl ? "STABLE" : "DRIFT")
 end'
 ```
-Expected: six `STABLE` lines.
+Expected on this machine: six `strict:STABLE  slot:STABLE` lines. The slot column must be STABLE; a strict DRIFT here (same machine) means a real non-determinism bug — fix it, don't paper over it with the fallback.
 
 - [ ] **Step 6: Build the mid-dive still (p≈0.42, frame 151)**
 
@@ -1117,7 +1294,7 @@ Add `render_still` to `Atlas.jl` (single-frame variant of `render_dive` that `sa
 
 ```bash
 git add examples/atlas/test/golden examples/atlas/test/test_golden.jl examples/atlas/test/runtests.jl examples/atlas/still.jl examples/atlas/src/Atlas.jl .gitignore
-git commit -m "feat(atlas): golden harness (6 frames, town_id+slot+rel-offset key) + mid-dive still"
+git commit -m "feat(atlas): golden harness (6 frames, strict + slot-only fallback key) + record-path overlap smoke + mid-dive still"
 ```
 
 ---
@@ -1131,7 +1308,7 @@ git commit -m "feat(atlas): golden harness (6 frames, town_id+slot+rel-offset ke
 
 - [ ] **Step 1: Write the README**
 
-Create `examples/atlas/README.md` covering: (1) what it is (register: place — the live collision-free dive); (2) the three-layer split (TextMeasure measures · MakieTextRepel places · demo warm-starts/gates/draws) — name it as the honesty; (3) data provenance (NE 1:10m coast/land PD; 8 NE town rows verbatim + ~15 hand-placed `source=curated`; see `data/SOURCE.txt`); (4) the API-plan honesty (warm-start solve drafted against MakieTextRepel internals `solve_cluster(…; init_state, pin_mask, pinned_offsets)`, overlaps/dropped computed in-demo, to be upstreamed then swapped to public API); (5) **build prerequisites — the MakieTextRepel sibling**: clone `github.com/jowch/MakieTextRepel.jl` as a sibling of the gallery worktree at `/home/jonathanchen/projects/MakieTextRepel.jl` and repoint its `[sources] TextMeasure` to `../TextMeasure.jl-gallery` (Task 0); (6) build commands (`render.jl` → `atlas_dive.mp4`, `still.jl` → `atlas_still.png`, both gitignored) and `Pkg.test()` for the golden harness; (7) the one bold move (the dive; naive-vs-measured demoted to an optional cartouche inset).
+Create `examples/atlas/README.md` covering: (1) what it is (register: place — the live collision-free dive); (2) the three-layer split (TextMeasure measures · MakieTextRepel places · demo warm-starts/gates/draws) — name it as the honesty; (3) data provenance (NE 1:10m coast/land PD; 8 NE town rows verbatim + ~15 hand-placed `source=curated`; see `data/SOURCE.txt`); (4) the API-plan honesty (warm-start solve drafted against MakieTextRepel internals `solve_cluster(…; init_state, pin_mask, pinned_offsets)`, overlaps/dropped computed in-demo, to be upstreamed then swapped to public API); (5) **build prerequisites — the MakieTextRepel sibling**: clone `github.com/jowch/MakieTextRepel.jl` as a sibling of the gallery worktree at `/home/jonathanchen/projects/MakieTextRepel.jl`, **`git checkout dc7178205ce4b05e8bd86c4ae10419f0932e14e6`** (the PINNED SHA the Atlas internals are bound against — record it here verbatim), and repoint its `[sources] TextMeasure` to `../TextMeasure.jl-gallery` (Task 0); (6) build commands (`render.jl` → `atlas_dive.mp4`, `still.jl` → `atlas_still.png`, both gitignored) and `Pkg.test()` for the golden harness; (7) the one bold move (the dive; naive-vs-measured demoted to an optional cartouche inset).
 
 - [ ] **Step 2: Commit**
 
@@ -1146,6 +1323,6 @@ git commit -m "docs(atlas): three-layer honesty, provenance, build steps, MakieT
 
 - **Spec coverage:** Task 1 = the warm-start solve gate (SPEC §1/§2/§8 — deterministic re-solve, warm-start held by `town_id`, golden-stable on slot+relative-offset, `update_state_before_display!` timing); Task 2 = hermetic basemap data (§6); Task 3 = equirectangular + cosφ0 projection (§6); Task 4 = LoD + hysteresis + TextMeasure boxes (§3, §7); Task 5 = geometric-zoom seamless-loop camera (§5); Task 6 = fade + sticky + per-frame record + own overlap/dropped recompute (§3, §8); Task 7 = the Swiss/Vignelli render + `record` (§7) with the mandated MP4 open-and-confirm; Task 8 = golden harness on the machine-robust key + the p≈0.42 still (§8); Task 9 = the three-layer caption honesty + build reproduction (§0, §6).
 - **API fidelity:** every MakieTextRepel call is verified against `/tmp/MakieTextRepel.jl/src/`: `solve_cluster(ProjectionSolver(RepelParams(…)), anchors::Vector{Point2f}, sizes::Vector{Vec2f}, bounds::Rect2f; init_state, pin_mask, pinned_offsets, obstacles) -> (; offsets, dropped, iter, residual)`; `init_state===nothing` ⇒ fresh Imhof seed (`initial_offsets`) → `side_select` → repair, else warm-start relax; geometry helpers `box_at`/`overlap_push`/`point_covered` qualified (not exported) for our own deterministic overlap recompute; we never read `solve_stats`/`computed_offsets` (recipe-/algorithm-only, off the path). No invented API.
-- **The warm-start nuance (flag):** `solve_cluster`'s warm path *legalizes the given layout only* — it does NOT re-run side-select. So a town that is NEW in a frame where others are warm-started cannot get `init_state=nothing` per-label inside one `solve_cluster` call (init_state is all-or-nothing: a Vector or `nothing`). Task 1's wrapper currently passes `init_state=nothing` whenever ANY active town lacks a prior offset (`have_prev = all(...)`), i.e. it does a FRESH solve on any frame with a newcomer, and a warm relax only on frames where the active set is unchanged. This is correct and deterministic but means "settled labels hold" is exact only on no-newcomer frames; on newcomer frames the whole cluster re-seeds (still collision-free, may shift). If the visual reshuffle on newcomer frames is too strong, the upstream fix (per-label warm/fresh seeding — exactly what `TextRepelAlgorithm`'s `reset=false` + Imhof-fallback-for-new does) is the documented path; the demo wrapper should be upgraded to seed prior offsets for known towns and Imhof-seed new ones in a single `init_state` Vector (feed `initial_offsets`-derived seeds for new ids). **Flagged for the implementer to validate against the rendered MP4 (Task 7 Step 6) and tune.**
+- **The warm-start nuance (resolved):** `solve_cluster`'s warm path *legalizes the given layout only* — it does NOT re-run side-select, and `init_state` is all-or-nothing at the `solve_cluster` boundary (a full Vector or `nothing`). The demo wrapper therefore builds ONE full-length `init_state` Vector every frame (`solve_frame` above): known ids keep their prior offset (warm relax), NEW ids are seeded via `imhof_seed` (the closed-form `:TR` = `IMHOF_ORDER[1]` slot offset, matching what `MakieTextRepel.initial_offsets` falls back to). This means the path is a warm-start relax on EVERY frame — incumbents are legalized from their settled offsets and do NOT reshuffle when a newcomer enters; only the newcomer moves off its Imhof seed. (We seed in closed form rather than calling `initial_offsets`, which would require a Voronoi `cells` argument; the `:TR` fallback is byte-identical to what `initial_offsets` lands a cell-less single label on.) This is exactly the per-label warm/fresh seeding `TextRepelAlgorithm`'s `reset=false` + Imhof-fallback-for-new performs, and is what gets upstreamed. The Task 1 newcomer-frame test (case b2) asserts incumbents move < a few px when a new town enters. **Still validate against the rendered MP4 (Task 7 Step 6): if the newcomer's single Imhof seed lands awkwardly, tune the seed slot — but incumbents are guaranteed held by construction.**
 - **MakieTextRepel availability (the operator's explicit concern):** it is the user's own **unregistered** package and is **not** resolvable without Task 0. Verified its `Project.toml` has `[sources] TextMeasure = {path = "../TextMeasure.jl"}` — it expects TextMeasure as a sibling. Task 0 clones it to `/home/jonathanchen/projects/MakieTextRepel.jl` (sibling of the worktree) and **repoints its TextMeasure source to `../TextMeasure.jl-gallery`** so one TextMeasure serves both; the Atlas `Project.toml` references it via `[sources] MakieTextRepel = { path = "../../../MakieTextRepel.jl" }`. This clone + repoint lives **outside** the worktree and is therefore NOT committed — Task 9's README documents it so a fresh machine reproduces it. If `github.com/jowch/MakieTextRepel.jl` is private/unreachable on the build machine, fall back to the local `/tmp/MakieTextRepel.jl` checkout already present.
 - **Determinism risk:** the golden hashes RELATIVE offset + slot (not absolute projected px) precisely because projected px is float-noisy at zoom extremes; Task 8 Step 5 re-runs to confirm STABLE before trusting it, with the slot-only fallback named. The headless golden path uses `px_of` (a pure projection) rather than `Makie.project`, keeping the golden independent of Cairo/Scene state; the `record` path uses the real projector — the two share `step_frame!` so placement logic is identical, only the projector differs.

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Julia 1.11+, `Colors.jl`, stdlib `SHA`, `Test`. Path-dependency via the Julia 1.11 `[sources]` feature (mirrors `examples/layouts/Project.toml`).
 
+> **BLOCKING GATE:** Foundation must `Pkg.instantiate()` and `Pkg.test()` GREEN on the actual pinned env (the same Julia + `Colors` compat all pieces resolve against) BEFORE any piece branch starts. All four pieces block on this package's HouseStyle uuid (`f1a9b3c2-…`), `RAMP`, the colour constants, the font helpers, and the `Colors` compat bound — if Foundation isn't green here, every piece inherits a broken `[sources]` path. Land Tasks 2–5 green first; do not branch a piece off a red Foundation.
+
 ---
 
 ### Task 1: Pin the gallery fonts
@@ -103,10 +105,15 @@ julia --project=examples/_housestyle -e 'using Pkg; Pkg.instantiate(); Pkg.test(
 ```
 Expected: `Test Summary: | Pass 1` — "HouseStyle loads" passes.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit (do NOT stage a Manifest.toml)**
 
+Per the gitignored-Manifest rule, `Pkg.instantiate()` will have written `examples/_housestyle/Manifest.toml`; it must NOT be committed. First confirm `git add` won't stage it:
 ```bash
 git add examples/_housestyle
+git status --short examples/_housestyle    # must NOT list Manifest.toml as staged (A)
+```
+If `Manifest.toml` shows as staged, it isn't covered by `.gitignore` — `git restore --staged examples/_housestyle/Manifest.toml` and add the ignore rule before continuing. Then:
+```bash
 git commit -m "feat(housestyle): scaffold shared HouseStyle package"
 ```
 
@@ -145,7 +152,7 @@ Expected: FAIL — `INK` (and others) not defined.
 
 - [ ] **Step 3: Add the constants**
 
-Replace the body of `examples/_housestyle/src/HouseStyle.jl` between `using Colors` and `end # module` with:
+KEEP the `module HouseStyle` line, the `using Colors` line, and the closing `end # module` line. Replace ONLY the single `const PAPER = colorant"#F4EFE6"` line (the entire body between `using Colors` and `end # module`) with the block below — so the file becomes `module HouseStyle` / `using Colors` / this block / `end # module`:
 ```julia
 # Identity layer (carries every piece)
 const PAPER     = colorant"#F4EFE6"

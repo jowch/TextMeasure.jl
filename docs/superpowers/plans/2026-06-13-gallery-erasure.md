@@ -120,6 +120,7 @@ This is the load-bearing slice: there is NO per-word x accessor, so we re-derive
 
 Create `examples/erasure/test/test_wordgeom.jl`:
 ```julia
+using Erasure                                   # for Erasure.LICENSE_TEXT (Step 7 real case)
 using Erasure: WordBox, word_boxes
 using TextMeasure: prepare, layout, MonospaceBackend
 using Test
@@ -262,13 +263,32 @@ julia --project=examples/erasure -e 'using Pkg; include("examples/erasure/test/t
 ```
 Expected: PASS — both testsets green; the re-walk's line grouping matches `layout` for every `max_width`.
 
-- [ ] **Step 7: Wire into runtests.jl and commit**
+- [ ] **Step 7: Add the REAL LICENSE agreement case (full text at the hero width)**
+
+The toy-string loop above only exercises short strings. Add the actual production case — the full `LICENSE_TEXT` at the hero's `max_width` — so any drift at the real word count / real wrap is caught. Append inside the same `@testset "re-walk agrees with layout(prep).lines (no whitespace drift)"` block (after the `for mw in (…)` loop):
+```julia
+        # REAL case: the full LICENSE at the hero wrap width must reconstruct line-for-line.
+        let mw = 422.0   # == HERO_MAX_WIDTH (golden.jl); the production hero width
+            prep = prepare(b, Erasure.LICENSE_TEXT)
+            lay  = layout(prep; max_width = mw, align = :left)
+            boxes = word_boxes(prep; max_width = mw)
+            nlines = maximum(wb.line for wb in boxes)
+            @test nlines == length(lay.lines)            # same line count as layout
+            for ln in 1:nlines
+                words = [prep.segments[wb.seg_index].str for wb in boxes if wb.line == ln]
+                @test join(words, " ") == lay.lines[ln].str   # same trimmed Line.str
+            end
+        end
+```
+(`Erasure.LICENSE_TEXT` is already loaded by `using Erasure`-side imports; the `b`/`prepare`/`layout`/`word_boxes` bindings are the ones at the top of test_wordgeom.jl. `422.0` is `HERO_MAX_WIDTH` from Task 5 — keep the two in sync.)
+
+- [ ] **Step 8: Wire into runtests.jl and commit**
 
 In `examples/erasure/test/runtests.jl`, add `include("test_wordgeom.jl")` inside the `@testset "Erasure"` block (after the "loads" testset). Then:
 ```bash
 julia --project=examples/erasure -e 'using Pkg; Pkg.test()'
 ```
-Expected: PASS — aggregated suite green. Commit:
+Expected: PASS — aggregated suite green (incl. the full-LICENSE re-walk agreement at width 422). Commit:
 ```bash
 git add examples/erasure/src/wordgeom.jl examples/erasure/src/Erasure.jl examples/erasure/test/test_wordgeom.jl examples/erasure/test/runtests.jl
 git commit -m "feat(erasure): :left per-word geometry re-walk, proven against layout"
@@ -385,6 +405,8 @@ end
 ```
 
 NOTE for the implementer: the literal ordinals above (1,4,8,9,…) are a *starting hint*; the failing test in Step 1 re-derives the true word sequence from `LICENSE_TEXT` and asserts `prep.segments[segi].str == k`. Run Step 4, read the assertion failures, and correct each ordinal (or switch that entry to `0` for forward-scan) until green. Do NOT guess silently — the test is the oracle. (Many entries are already safe with ordinal `0` forward-scan; prefer `0` unless a specific earlier occurrence is wanted.)
+
+ORDINAL RESOLUTION ORDER — resolve TOP-DOWN (earliest occurrence first). The `0`/forward-scan entries anchor off `last_i` (the prior matched index), so a single wrong EARLY hint cascades: every later `0` scans from the wrong position and mis-resolves. Therefore work the list strictly top-to-bottom, fix the first wrong entry, re-run, and only then move on — never patch a late entry while an earlier one is still red. For the FIRST few survivors (where there is no earlier anchor to lean on) prefer EXPLICIT nonzero ordinals over `0`, so the forward-scan chain starts from a known-good index.
 
 Add to `examples/erasure/src/Erasure.jl` after the `wordgeom.jl` include:
 ```julia
@@ -818,7 +840,9 @@ survivors (subhead 16) on BRASS underlays at their EXACT measured coordinates, a
 reading thread through survivors in reading order. Writes `path` (PNG via `save_png`).
 """
 function hero(path)
-    body = MakieBackend(plexmono("Regular"); fontsize = RAMP.body, px_per_unit = 1)
+    # MakieBackend is KEYWORD-ONLY (verified against ext/TextMeasureMakieExt.jl): pass the
+    # font PATH via `font=`, never positionally (positional ctor wants a resolved FTFont).
+    body = MakieBackend(; font = plexmono("Regular"), fontsize = RAMP.body, px_per_unit = 1)
     prep  = prepare(body, LICENSE_TEXT)
     boxes = word_boxes(prep; max_width = HERO_MAX_WIDTH)
     kept_idx = kept_seg_indices(prep)
@@ -1133,4 +1157,4 @@ git commit -m "docs(erasure): README + run instructions"
 **Flagged for the implementer:**
 1. The SPEC §3 "verbatim" block ≠ the actual `LICENSE`; Task 1 uses the real LICENSE per the brief, and Task 3's test enforces survivor presence — if a survivor turns out NOT to be in the full text, the Step-1 test fails loudly and the curation must adjust (it won't: all Candidate-A words verified present in order).
 2. Task 3 `KEPT_SPEC` ordinals are starting hints; resolve via the failing test (prefer forward-scan `0`).
-3. `MakieBackend` keyword constructor signature (font path positional vs keyword) comes from `ext/TextMeasureMakieExt.jl` — confirm the exact call in Task 7 Step 3 against that extension before running (mirror however `examples/layouts` constructs it).
+3. `MakieBackend` is KEYWORD-ONLY (VERIFIED against `ext/TextMeasureMakieExt.jl`): every construction MUST be `MakieBackend(; font=<path>, fontsize=…, px_per_unit=1)` — positional `MakieBackend(plexmono("Regular"), …)` hits a MethodError (the positional inner ctor wants a resolved FTFont, not a path). Task 7 Step 3's `hero()` uses the keyword form; mirror it at any other call site (and however `examples/layouts` constructs it).
