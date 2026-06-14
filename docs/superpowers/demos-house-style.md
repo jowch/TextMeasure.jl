@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # TextMeasure.jl Demos — House Style
 
-**Single source of truth for the greenfield demo gallery** — *The Glyph Wave · The Press ·
+**Single source of truth for the greenfield demo gallery** — *The Glyph Wave · The Tide ·
 Erasure · The Atlas*. Every piece MUST use these exact values: no ranges, no per-demo drift.
 A Julia constants module (`examples/_housestyle/`) mirrors this file verbatim; pieces import the
 module rather than re-typing hexes. **If a value here and the module ever disagree, that is a bug.**
@@ -15,12 +15,12 @@ Coherence ≠ uniformity: a painting-in-type, a kinetic press, a redacted docume
 
 ## 0. The canonical register line (quote verbatim in every SPEC)
 
-> **Measure once, then — shape · press · weave · place — many.**
+> **Measure once, then — shape · knead · weave · place — many.**
 
 | Piece | Verb | Register word |
 |---|---|---|
 | The Glyph Wave | shape | *image* |
-| The Press | press | *force* |
+| The Tide | knead | *force* |
 | Woven | weave | *two readings* |
 | The Atlas | place | *place* |
 
@@ -71,6 +71,14 @@ the documented floor; do **not** use 8.)
 - **The Glyph Wave** flies the painting's own flag: `prussian #1B3A5B · foam #EDE6D6 · indigo
   #5E7A9B · snow #B9C2C9 · boat #C8A36B` (the 5 Hokusai inks). The masthead/footer keep BRASS.
 - **The Atlas** uses a water layer: fill `#DCE3E5`, hairline `#9FB2BA`. Land = PAPER, coast = INK.
+- **The Tide** flies a *sunset-shore* flag: field `#F2DFC6` (warm dusk peach) · text `#34232C`
+  (deep plum-brown) · sunset coral `#E37C4B` for the wavy tide-line + the lit word "kneads". Body
+  face is **Libre Caslon Text** (not Fraunces). Theme = the tide kneading the shore; warm/dusk so it
+  stays distinct from the two blue water pieces (Glyph Wave, Atlas). See
+  `examples/breathing_column/SPEC.md` LOCKED DESIGN.
+- **Woven** flies a *type-specimen* flag: off-white `#F6F6F4` · near-black `#161616` · vermillion
+  `#C8341F`; chrome in **Hanken Grotesk** (off the ban list). (Already shipped; recorded here so the
+  deviation register is complete.)
 
 ## 3. Hairlines & rules
 
@@ -83,8 +91,10 @@ Stroke vocabulary is exactly **0.25 / 0.5 / 0.75 px**, plus a **1.0 px BRASS** s
 - **Footer text:** `TextMeasure.jl · <piece>` (middot U+00B7) — e.g. `· The Glyph Wave` / `· The
   Press` / `· Erasure` / `· The Atlas`. IBM Plex Mono, **caption 9 pt**, BRASS middot, GRAY text,
   baseline on the inner margin, bottom-left. Motion pieces carry it in a caption line; no separate
-  rule.
-- **Outer margin:** **36 px** on print/still pieces. *Named deviation:* The Press uses a **48 px**
+  rule. *Named caption-face deviation:* the **louder pieces set captions in Hanken Grotesk** — Woven
+  (chrome) and The Tide (caption + credit, bronze middot). This is the emergent sans-caption thread
+  for the bold siblings; the quiet pieces keep Plex Mono.
+- **Outer margin:** **36 px** on print/still pieces. *Named deviation:* The Tide uses a **48 px**
   field margin so the wall has room to press inward without the block touching the paper edge.
 
 ## 5. Determinism & sign-off (shared discipline)

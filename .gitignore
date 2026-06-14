@@ -30,6 +30,9 @@ JuliaLocalPreferences.toml
 # Per-agent test output logs (see CLAUDE.md "Test logs")
 test-logs/
 
+# Scratch directories for intermediate/sample render frames (regenerable via render_samples)
+examples/*/_frames/
+
 # Ad-hoc research transcripts pulled into the working tree during investigation
 reference-conversation.md
 

@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
-# SPEC — #L · THE PRESS
+# SPEC — #L · THE TIDE  *(was The Press / The Breathing Column)*
 
 *A block of Whitman that **reflows as a wall presses in from rotating directions** — type kneaded
 from different axes like dough. The text never moves; the **region** moves, and the prose
@@ -16,6 +16,84 @@ forever.*
 printing — a *press*), and the screenshot. The old breath-only direction is **superseded** by this
 spec; the verified PD source text, house values, migrating-brass-word idea, and long-exposure
 thumbnail thinking are carried forward.
+
+---
+
+## ⚑ LOCKED DESIGN (2026-06-13 → 2026-06-14) — overrides the sections below where they conflict
+
+Designed live with the operator across 2026-06-13/14. The **engine mechanic** in the body of this
+spec stands (one `prepare`; `shape_pack` re-flows a moving region every frame; per-band justify).
+The **theme, text, palette, choreography, and wall treatment pivoted completely** through live
+iteration and are re-locked below (final choreography: a **6-direction counterclockwise sweep**, a
+**smooth continuous swell**, **1200 frames @ 60 fps**). Where the body still says
+*Whitman / "rocking" / bronze letterpress platen*, **this section supersedes it.** Still holds:
+readability floors §3, wall-as-force §5, claim/honesty §1/§8.
+
+- **THEME — the tide kneading the shore (NOT Whitman).** The text block is the *shore/sand*; the
+  advancing wall is the *sea*. A warm sunset scene: the tide leans in and **kneads** the block from
+  rotating sides. **Renamed "The Tide"** (it stopped being "The Press" once the theme became the
+  sea); gallery verb is now **knead**, register word stays *force*.
+- **TEXT — original elevated prose, set as one JUSTIFIED paragraph (no found quote).** After
+  auditioning verified PD candidates (Whitman, Michelet, Ruskin, Hugo, Keats, Dickinson, Donne,
+  Hopkins…), the operator chose **original authored prose** over a sourced quote — a deliberate
+  trade (loses the "found-text" authenticity Woven has, in exchange for total control of rhythm).
+  **Do not present it as a quotation or attribute a source.** Locked text:
+  > At evening the sea comes in slow and warm, taking its time. Tide after tide it leans gently
+  > against the shore and kneads—smoothing the soft sand, folding the gilded edge under, drawing
+  > back in a bright hush before it comes again. Nothing it shapes will stay, and nothing needs to.
+  > What the low sun gilds, the quiet dusk lets go; and the seam between water and land is traced,
+  > and traced again, and left to glow a little while in copper and rose.
+  Prose (no hard `\n`) means it **wraps and justifies on every line** — justify is full-time now (the
+  paragraph's last line stays ragged, as normal). This resolves the verse problem where justify
+  barely fired.
+- **IDENTITY — sunset shore (declared palette deviation; the gallery's warm sibling).** Field
+  **`#F2DFC6`** (warm dusk peach) · text **`#34232C`** (deep plum-brown, the wet shore) · accent
+  **`#E37C4B`** (sunset coral — the tide-line + the one lit word). This warm/dusk temperature is
+  what keeps The Tide distinct from the two *blue* water pieces (Glyph Wave, Atlas) and from
+  Woven's hard vermillion-on-white. Replaces the earlier letterpress-bronze idea entirely.
+- **THE WALL — a wavy coral TIDE-LINE, bare (no fill).** The advancing cut is a low-amplitude sine
+  (`A ≈ 8px`, `λ ≈ 2·line_advance`) knocked into the BitMatrix, so `shape_pack` re-flows + justifies
+  the prose flush to an **undulating** margin. **Cardinals (W/E)** rake a vertical wavy edge;
+  **diagonals (SW/SE/NW/NE)** rake a **single straight diagonal** whose depth ramps to its deepest at
+  the last line (no diagonal-to-vertical bend — the bottom is the *most* kneaded). The coral curve is
+  drawn from the **known wall geometry** (not the placements), **over-long and alpha-faded to
+  transparent at the block's top/bottom edges** so it reads as a much longer wave that's opaque only
+  where it laps the shore — its ends never pop. On **W/E** it fades in *early* (full opacity by
+  `b≈6px`, just before the text first reflows) from a slightly larger margin offset, so the tide
+  visibly arrives before the text feels it; the **corners** fade where the wedge tapers shallow (so
+  the line never clips the type). A *filled* sea-side wash was tried and rejected (read as a boxy
+  rectangle; the bare line is more evocative). In motion the line **undulates** (phase per frame).
+- **LIT WORD — `kneads`, in coral.** The single accent glyph (replaces "rocking"). Rendered with a
+  **tight em-dash** (`kneads—smoothing`): the token is split at the `—` so only `kneads` is coral and
+  `—smoothing` stays ink, placed flush-adjacent. It is the needle riding the knead.
+- **BODY FACE — Libre Caslon Text (Old Standard dropped).** Operator picked Caslon on the page
+  (darker/sturdier). Pinned at `examples/fonts/LibreCaslonText/` with PROVENANCE (instanced wght=400
+  from the google/fonts variable; OFL; off Impeccable's ban list). Body 11px.
+- **CAPTION — Hanken Grotesk (declared §4 deviation).** A **single** line, muted plum-gray text,
+  **coral** middot, bottom-left: `TextMeasure.jl · The Tide`. The `prepare ×1 · shape_pack ×480 /
+  loop` claim line was **dropped** (operator: not helpful in the still). No credit line (text is
+  original, unsourced). Two of four pieces now set sans captions — the emergent thread for the
+  louder siblings; registered in `demos-house-style.md`.
+- **MECHANIC.** **6-direction counterclockwise sweep** `W → SW → SE → E → NE → NW` → back to rest
+  (N/S dropped — text can't rake to a horizontal edge, so those beats read weak). Each press is **one
+  continuous smooth swell** — `depth(u) = smootheststep(2·min(u, 1−u))` (7th-order; a flat-but-moving
+  crest that eases *almost* to a stop at full reach but never literally holds, zero velocity at the
+  troughs) — presses run back-to-back for a relentless ebb-and-flow. **20 s @ 60 fps = 1200 frames**
+  (200/press), one `prepare`, **1200 `shape_pack` calls**; `depth==0` exactly at every trough incl.
+  the loop boundary ⇒ seamless + total recede (no leftover line). Per-band justify rewrites
+  `Placement.x` only — **no new engine surface**; showcased surface stays **`shape_pack`** (distinct
+  from Woven's KP). Grow-to-fit the region height so the deepest bite never silently truncates words.
+- **ASPECT** — page ~**3:2** (423×274 data px), trimmed from an earlier 4:3 so the block + tide fill
+  the frame with little dead vertical space.
+- **STILL (LOCKED)** — the SW-press peak (a true frame of the loop), at
+  `examples/tide/tide-hero.png` (scale 8, sunset, verified by eye). **THUMBNAIL** (built) — the
+  ghosted long-exposure: the solid SW-peak frame + a few earlier `shape_pack` SW tide-states ghosted
+  behind (the coral tide-line trails + the lit "kneads" only, not the full body), at
+  `examples/tide/tide-thumb.png`. **LOOP** — `examples/tide/tide-loop.mp4` (scale 4, 60 fps, CRF 18).
+  Render convention: **stills scale 8, loop scale 4**.
+- **GOLDEN** = hashed layout tables (MonospaceBackend, deterministic) at structurally-distinct
+  frames **including ≥1 diagonal frame** so the kneaded-band justify path is pinned; never
+  pixels/video bytes. Per-band justify + the wavy mask are deterministic arithmetic, hashed too.
 
 ---
 
