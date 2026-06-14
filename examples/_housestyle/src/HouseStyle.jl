@@ -18,7 +18,15 @@ const RAMP = (caption=9, body=11, subhead=16, title=22, deck=31, display=44)
 # examples/fonts lives two dirs up from this src file: _housestyle/src -> _housestyle -> examples
 const FONTS_DIR = normpath(joinpath(@__DIR__, "..", "..", "fonts"))
 
-"Absolute path to a pinned Fraunces static, e.g. `fraunces(\"9pt-Regular\")`."
+"""
+    fraunces(name) -> String
+
+Absolute path to a pinned Fraunces static. `name` MUST include the point-size
+prefix in `<size>pt-<weight>` form, because the Fraunces filenames have no
+separator before the size (`Fraunces9pt-Regular.ttf`). So `fraunces("9pt-Regular")`
+is correct; `fraunces("Regular")` would silently yield the non-existent path
+`FrauncesRegular.ttf`.
+"""
 fraunces(name::AbstractString) = joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name).ttf")
 
 "Absolute path to a pinned IBM Plex Mono static, e.g. `plexmono(\"Medium\")` (default Regular)."
@@ -34,7 +42,8 @@ SHA-256 hex of a canonicalized placement/layout table. `rows` is a vector of
 pre-formatted strings (each piece builds its own row format, rounding floats to a
 fixed precision before formatting). Rows are sorted so the digest is independent of
 emission order. This is the gallery's golden invariant — hash the computed table,
-never the rendered pixels.
+never the rendered pixels. Rows must NOT contain newlines: `"\\n"` is the row
+separator, so an embedded newline would silently change the digest.
 """
 function digest_rows(rows::AbstractVector{<:AbstractString})
     bytes2hex(sha2_256(join(sort(collect(rows)), "\n")))
