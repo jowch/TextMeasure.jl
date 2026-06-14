@@ -22,6 +22,9 @@ end
     @test isfile(HouseStyle.fraunces("144pt-Black"))
     @test isfile(HouseStyle.plexmono())            # default Regular
     @test isfile(HouseStyle.plexmono("Medium"))
+    @test isfile(HouseStyle.hanken("Regular"))
+    @test isfile(HouseStyle.hanken("SemiBold"))
+    @test isfile(HouseStyle.hanken("Black"))       # mapped to Bold static
     @test endswith(HouseStyle.fraunces("9pt-Regular"), "Fraunces9pt-Regular.ttf")
     @test HouseStyle.footer("Erasure") == "TextMeasure.jl · Erasure"
 end

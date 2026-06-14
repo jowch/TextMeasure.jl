@@ -32,6 +32,16 @@ fraunces(name::AbstractString) = joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name
 "Absolute path to a pinned IBM Plex Mono static, e.g. `plexmono(\"Medium\")` (default Regular)."
 plexmono(name::AbstractString="Regular") = joinpath(FONTS_DIR, "IBMPlexMono", "IBMPlexMono-$(name).ttf")
 
+"""
+    hanken(weight) -> String
+
+Absolute path to a pinned Hanken Grotesk static (`Regular` / `SemiBold` / `Bold`).
+`"Black"` is mapped to `"Bold"` (the heaviest pinned static), so a poem weight of
+`"Black"` resolves to a real file. File form: `HankenGrotesk-<weight>.ttf`.
+"""
+hanken(weight::AbstractString) =
+    joinpath(FONTS_DIR, "HankenGrotesk", "HankenGrotesk-$(weight == "Black" ? "Bold" : weight).ttf")
+
 "The shared footer string: `TextMeasure.jl · <piece>` (middot U+00B7)."
 footer(piece::AbstractString) = "TextMeasure.jl · $(piece)"
 
