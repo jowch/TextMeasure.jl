@@ -8,4 +8,5 @@ using Erasure, Test
     include("test_poem.jl")
     include("test_redact.jl")
     include("test_golden.jl")
+    include("test_render.jl")
 end

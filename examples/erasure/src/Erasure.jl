@@ -31,4 +31,7 @@ export RedactRect, redaction_rects
 include("golden.jl")
 export geometry_rows, hero_digest, HERO_MAX_WIDTH
 
+include("render.jl")
+export save_png
+
 end # module
