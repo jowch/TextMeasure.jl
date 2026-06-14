@@ -170,14 +170,14 @@ Shared house spine (paper / ink / brass; Fraunces × IBM Plex Mono).
 
 - **Field / paper:** warm paper `#F4EFE6`; generous margins; one column, `max_width`
   ≈ 60–66 ch of body. Faint deckle/paper grain optional (texture, not content).
-- **Body (the source, → ink bars):** **IBM Plex Mono**, ~13px / `lineheight 1.5`.
+- **Body (the source, → ink bars):** **IBM Plex Mono**, **body 11** / `lineheight 1.5`.
   Monospace is the correct redaction face — it makes the censor bars rhythmic and even,
   the way a real typewritten-then-redacted document looks, and it's the literal face of
   the interactive grid toy.
-- **Kept words:** **Fraunces** (optical display, ~slightly larger, ~15px, weight 500–600),
+- **Kept words:** **Fraunces** (optical display, **subhead 16**, weight 500–600),
   `ink` `#1A1714` on the brass underlay. The serif survivors lifting out of the monospace
   redaction field is the entire visual thesis: *art rising out of machinery*.
-- **Brass `#A8842C`** is reserved for the **kept-word underlay + the reading thread**
+- **Brass `#9A7B4F`** is reserved for the **kept-word underlay + the reading thread**
   only — brass = "this word survived." Never on the bars. This makes brass mean *spared*,
   consistent with the gallery's brass-as-accent rule.
 - **Masthead:** small Plex Mono caps — `ERASURE — found in the MIT License` — plus a
@@ -213,6 +213,14 @@ kerning**:
   lines, reproduced in the demo's `pack.jl`-style helper) to assign each word a
   `(line_index, x0, x1)`. Because there is no kerning and `align=:left`, the accumulated x
   for a word equals exactly the x `layout` would place it at — they share the arithmetic.
+  The re-walk **must reproduce `layout`'s per-line whitespace trim** — the pending-space
+  handling that drops leading/trailing spaces at each line's start and end — or the
+  blacked-bar tiling drifts by a space-width at line edges (a kept word at a line edge
+  would land a space off its hole). To guarantee the two arithmetic paths can't silently
+  diverge, a **golden assertion** checks the re-walk's per-word line assignment *agrees
+  with* `layout(prep).lines`: same line count, and the trimmed `Line.str` reconstructed
+  from the words the re-walk assigns to each line equals `layout`'s `Line.str` for that
+  line, line for line.
 - `x1 = x0 + word.width`; vertical band = `[line_top, line_top + ascent + descent]` from
   `line.baseline` / `lay.metrics`. That rect is the blackout bar; that anchor is the kept
   word.
@@ -229,18 +237,30 @@ heuristic for "surprise me" (clearly labeled non-engine): walk words left→righ
 keep a word with probability `p` (≈0.06), with a soft rule to avoid two kept words
 touching and to bias toward content words (skip a short stop-word list) — this is the
 *subtractive procgen* idea behind mkremins' generator, ported as ~15 lines of demo code.
-It produces *a* poem, rarely *the* poem; the hero stays curated. Also out of engine scope
-and deliberately not used: justify, CJK, hyphenation, glyph rotation.
+It produces *a* poem, rarely *the* poem; the hero stays curated. **The toy must default to
+revealing the curated hero poem first** — "surprise me" is a secondary action the visitor
+opts into, so a garbage random poem can never undercut the hero on first contact. Also out
+of engine scope and deliberately not used: justify, CJK, hyphenation, glyph rotation.
+
+**Before locking the hero render**, verify on a rendered line that adjacent blacked runs
+*plus the inter-word space between them* tile into **one continuous censor bar** — i.e. no
+slivers of paper show between consecutive bars (the 1px ink bleed + filled inter-blacked
+spaces from §2 must actually close every gap).
 
 ---
 
 ## 7. Coherence note
 
-Same spine as the final four: ERASURE *subtracts* from a fixed grid to reveal meaning, **The
-Press** *kneads* one prepared text into a moving region (force over time), the **Glyph Wave**
-*shapes* text by an image's tone, and the **Atlas** *places* labels by measured extent — four
-verbs (subtract / press / image / place) over one shared paper-ink-brass, Fraunces × Plex Mono
-identity, each showing a different thing *measure-once, lay-out-many* buys you.
+Same spine as the final four:
+
+> Measure once, then — shape · press · erase · place — many.
+
+The **Glyph Wave** = *shape* (image): it shapes text by an image's tone. **The Press** =
+*press* (force): it presses one prepared text into a moving region over time. **Erasure** =
+*erase* (subtraction): it erases from a fixed grid to reveal meaning. **The Atlas** = *place*
+(place): it places labels by measured extent. Four verbs over one shared paper-ink-brass,
+Fraunces × Plex Mono identity, each showing a different thing *measure-once, lay-out-many*
+buys you.
 
 ---
 

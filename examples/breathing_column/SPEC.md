@@ -136,20 +136,25 @@ other word is INK. It is the **needle of the instrument**:
 
 House spine, minimal deviation:
 
-- **Field:** PAPER `#FBFAF7`, full bleed. The text region is a soft rectangle floating in a
-  generous paper margin (**outer margin 48 px**) so the wall has room to press *inward* without the
-  block ever touching the paper edge — the compression reads against paper, not against a frame.
-- **The wall: faintly drawn, recommended.** An **invisible** wall (text just avoids empty space)
-  risks reading as "the paragraph randomly resized." Draw the live wall edge as a **0.5 px BRASS
-  hairline** — a *tide-rule* / press-platen edge — with two tiny surveyor's ticks (house §5
-  registration motif). On the pinch frame, both active wall edges are ruled. This is the
-  *instrument doing the pressing*; it makes the negative space legible as a **force**, which is the
-  entire metaphor. Keep it a hairline — the type is the star; the rule is just enough to say "this
-  edge is advancing."
+- **Field:** PAPER `#F4EFE6`, full bleed. The text region is a soft rectangle floating in a
+  generous paper margin (**outer margin 48 px** — *declared named deviation* from the house margin,
+  kept because the wall needs room to press *inward*) so the wall has room to press *inward* without
+  the block ever touching the paper edge — the compression reads against paper, not against a frame.
+- **The wall: REQUIRED, non-negotiable.** An **invisible** wall (text just avoids empty space)
+  reads as "a paragraph randomly resizing" — it kills the piece. The brass **tide-rule** is the
+  *entire device* that converts negative space into **perceived force**, so it ships: draw the live
+  wall edge as a **BRASS `#9A7B4F`** *tide-rule* / press-platen edge with two tiny surveyor's ticks
+  (house §5 registration motif). On the pinch frame, both active wall edges are ruled. **Budget the
+  contrast so a cold viewer reads "something is pressing in" from a single still pinch frame** — even
+  if that means the *active* (advancing) edge is rendered **heavier than 0.5 px**; the *inactive*
+  hairlines stay in the house 0.25 / 0.5 / 0.75 px vocabulary. This is the *instrument doing the
+  pressing*; it makes the negative space legible as a **force**, which is the entire metaphor.
+  **Verify the wall reads as force at the visual-signoff gate.**
 - **Type — body:** **Fraunces text optical size** (`Fraunces9pt-Regular.ttf`), **body 11 pt**, INK
-  `#1E1C1A`, leading 1.45×, ragged (no justify — out of scope; raggedness *is* the visible kneaded
+  `#1A1714`, leading 1.45×, ragged (no justify — out of scope; raggedness *is* the visible kneaded
   surface). Align `:left` within each band (the packer's `fill = :widest`).
-- **The lit word:** same face/size, **BRASS `#B5793C`** — the only non-ink glyphs.
+- **The lit word:** same face/size, **BRASS `#9A7B4F`** (drop to **BRASS-INK `#6E5226`** if
+  `#9A7B4F` lacks contrast on paper) — the only non-ink glyphs.
 - **Caption (Plex Mono, 9 pt, GRAY text, BRASS middot):** yes — it earns its place by stating the
   claim. `prepare ×1 · shape_pack ×360 / loop`, baseline-pinned bottom-left. Credit line in the
   same mono caption: `Walt Whitman · Out of the Cradle Endlessly Rocking · 1859` (PD — no
@@ -264,11 +269,15 @@ KJV is PD but carries no breath/press metaphor.)
 ## 10. Coherence with the gallery
 
 > The Press shares the spine — PAPER/INK/**BRASS**, **Fraunces × IBM Plex Mono**, the √2 ramp
-> (caption-9 / body-11), brass-middot footer, surveyor's-tick registration — and sits beside the
-> **Glyph Wave** (text shaped by an *image*), **Erasure** (text shaped by *subtraction*), and
-> **Atlas** (text shaped by *place*): **The Press is text shaped by *force over time*** — the same
-> cached measurement re-flowed into a moving region, the gallery's one piece that proves "measure
-> once, lay out many" by literally doing the *many*, live, in brass.
+> (caption-9 / body-11), brass-middot footer, surveyor's-tick registration. The gallery's register
+> line:
+>
+> > Measure once, then — shape · press · erase · place — many.
+>
+> reads across the four siblings: The Glyph Wave = shape (image) · The Press = press (force) ·
+> Erasure = erase (subtraction) · The Atlas = place (place). **The Press is text shaped by *force
+> over time*** — the same cached measurement re-flowed into a moving region, the gallery's one piece
+> that proves "measure once, lay out many" by literally doing the *many*, live, in brass.
 
 ---
 
@@ -281,6 +290,15 @@ KJV is PD but carries no breath/press metaphor.)
   `TextMeasure` + `TextMeasureLayouts` + `Makie` — dropping the `CoherentNoise`/`DelaunayTriangulation`/
   `GeometryOps` tail, the known load-time lever. (Use `RasterChordFn`, not `PolygonChordFn`, for the
   rectilinear masks — simpler and exact for rect-minus-rect.)
+- **`fill = :widest` is correct *because* every wall is flush to a field edge.** Each frame's mask is
+  rectangle **minus a wall block flush to one (or, on the pinch, two) edge(s)**, so every horizontal
+  band has **≤ 1 available interval** — a flush wall just shortens the band from one side; it never
+  carves a hole that leaves two separate runs of open space on the same band, *including* the
+  two-sided pinch (two flush walls still leave a single central interval per band). With ≤ 1 interval
+  per band, "widest interval" *is* "the only interval," so `fill = :widest` fills it. **Invariant to
+  hold:** if any future frame ever splits a band into two *comparable* intervals (e.g. a wall that is
+  NOT flush to an edge — a free-floating notch), `:widest` would silently drop the smaller run;
+  switch **that** frame to `fill = :all`.
 - **Brass tracking is robust via stable `segment_index`.** `prep.segments` is fixed (prepared once);
   precompute `rocking_idx = {i : segments[i] is the word "rocking"}`, then each frame partition the
   returned `placements` by `pl.segment_index ∈ rocking_idx` into the brass `text!` group vs the ink
@@ -293,7 +311,13 @@ KJV is PD but carries no breath/press metaphor.)
   x, y)` rows, sha256 — mirrors the asteroid golden's checksum approach): `t=0` (rest rectangle),
   and mid-press peaks for each edge `t≈N/8, 3N/8` (the **vertical** case — the risky one), `5N/8,
   7N/8`. Plus non-vacuous asserts: placements count > threshold at rest, ≥1 brass index present, and
-  `!isempty(overflowed)` at peak compression (pins that graceful over-wide handling is exercised).
+  — **conditionally** — `!isempty(overflowed)` at peak compression (pins that graceful over-wide
+  handling is exercised). **Caveat:** at `floor_w = 32 ch` Whitman has no monster words, so the
+  overflow set may *legitimately* be empty and this assert would fail by correct design. Before
+  committing it, **pre-check by running `layout` at `floor_w` once** to see whether any word actually
+  overflows. If none does, either (a) gate the assert behind that pre-check (skip when empty), or
+  (b) construct one golden frame whose band is *deliberately* narrower than the longest word so the
+  overflow path is genuinely exercised — don't assert `!isempty(overflowed)` unconditionally.
 - **Alignment is the one thing to eyeball, not just green-test:** `Placement.y` is a baseline in a
   y-down block-top frame; confirm `text!(space=:pixel, align=(:left,:baseline))` + the y-flip lands
   glyphs exactly where cached advances predict (brass word and body neither overlap nor gap) by

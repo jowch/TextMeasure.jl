@@ -20,9 +20,13 @@ foot.
 This is what separates it from a word-cloud: **frequency is irrelevant; position-in-painting is
 everything**, and the text stays literature you can read. Acceptance tests (binary):
 1. **Reading test** — concatenating placements in returned order reproduces the source verbatim
-   (only optional faint-sky thinning may drop runs, and only as a flagged subset).
-2. **Squint test** — downsample the render to 64 px wide + blur; the claw + Fuji silhouette is
-   identifiable (mask IoU vs reference ≥ threshold).
+   (only optional faint-sky thinning may drop runs, and only as a flagged subset; also exempt
+   any `overflowed`-flagged runs, since `:widest_row` over-wide handling perturbs reading order
+   — a second source beyond faint-sky thinning — *or* assert `overflowed` is empty for the
+   chosen text/sizes).
+2. **Squint test — HARD merge gate (not advisory).** Downsample the render to 64 px wide + blur;
+   the claw + Fuji silhouette must be identifiable (mask IoU vs a reference silhouette ≥ threshold).
+   This gate must pass to merge.
 3. **No-mud test** — every word is collinear: `sign(weight_rank−mid) == sign(size_bucket−mid)
    == sign(ink_darkness−median)`. No dark-ink/light-weight or pale-ink/heavy-weight words.
 4. **Baseline test** — all baselines lie on the uniform `line_advance` grid (no vertical jitter).
@@ -61,13 +65,24 @@ Running prose flowed by `shape_pack`/`RasterChordFn` into the wave silhouette, e
 preserved by construction (`shape_pack` returns left-to-right, top-to-bottom). `fill=:all`
 (wrap both sides of the trough/Fuji negative space), `overflow=:widest_row`.
 
+**Merged-`Prepared` plumbing — the RISKIEST Glyph Wave unknown; prototype FIRST.** `shape_pack`
+honours ONE `FontMetrics`/`line_advance` for *all* placements, so a merged `Prepared` can carry
+per-**segment** widths (each word measured from its assigned size bucket) but only a **single**
+`FontMetrics`. The round-trip — hand-construct that merged `Prepared` and flow it through
+`shape_pack` cleanly — is the riskiest unknown in the whole piece and must be prototyped ahead of
+everything else, including the `fontsize`-as-vector probe. Explicit build task: hand-construct the
+merged `Prepared` with per-segment widths drawn per bucket and a single `FontMetrics` whose
+`line_advance = lineheight × size_max`. **Vertical-air tradeoff (stated):** one
+`line_advance = size_max` gives small words extra vertical air — an *airy grid* — which we accept
+(uniform baseline pitch is non-negotiable; see §3).
+
 **Measure-at-chosen-size (critical):** a run's advance scales with fontsize, so:
 1. Quantise size into **K=4 buckets**; `prepare(backend, text)` once per bucket (4 prepares —
    the engine's "measure once" honoured).
 2. **Pre-pass** dry-run `shape_pack` at median size → nominal (x,y) per word → sample luminance
    → assign each word its bucket *before* the real pack.
-3. **Real pack** flows a merged `Prepared` whose per-segment width is taken from each word's
-   assigned bucket; baseline pitch `line_advance = lineheight × size_max` so tall buckets never
+3. **Real pack** flows the merged `Prepared` above (per-segment width from each word's assigned
+   bucket; single `FontMetrics`, `line_advance = lineheight × size_max`) so tall buckets never
    collide.
 
 ### 3. Tone ramp
@@ -77,9 +92,11 @@ preserved by construction (`shape_pack` returns left-to-right, top-to-bottom). `
   agree (the anti-mud rule).
 - **Weight steps → Fraunces statics.** Ideal ramp = 6 (Light·Regular·Medium·SemiBold·Bold·
   Black); **only 4 are pinned today** (Light·Regular·SemiBold·Black across 3 opsz in
-  `examples/fonts/`). → **open decision below.** Fallback if interior tone washes out: posterize
-  to **3 steps** (Light/SemiBold/Black, γ→0.7) + 4×4 Bayer dither on the weight-bucket boundary
-  (typographic halftone, no extra size variance).
+  `examples/fonts/`). → **open decision below.** Fallback genuinely held in reserve if interior
+  tone washes out: posterize to **3 steps** (Light/SemiBold/Black, γ→0.7) + 4×4 Bayer dither on
+  the weight-bucket boundary (typographic halftone, no extra size variance). **We will ship a
+  crisp 3-tone over a muddy 6-tone if it comes to it** — clarity of silhouette beats nominal
+  ramp depth.
 - **Size:** `size_min 13 pt → size_max 21 pt` (ratio **1.6**, capped — size whispers, weight
   shouts), 4 buckets. `lineheight = 1.0`, uniform baseline grid (non-negotiable; wobbling
   baselines are the #1 word-cloud tell).
@@ -114,10 +131,11 @@ translation (translator d. 1929; no notice):
 > fish, plants. At ninety I shall be better; at a hundred I shall be sublime; at a hundred and
 > ten I shall give life to every line, to every dot. Let no one mock at these words!"
 
-The credo (~95 words) is the **focal legible passage**; **bulk-fill** the rest of the canvas
-with the body of Strange 1906 (PD, thousands of words) so the wave has enough type, seeded so
-lines aren't identical. (Japanese original is PD; a fresh paraphrase is also legal if a more
-lyrical cadence is wanted.)
+The credo (~95 words) is the **focal legible passage** (verified clean). **Bulk-fill** the rest
+of the canvas drawing **only from E. F. Strange-1906's own public-domain prose** — its body text,
+thousands of words — seeded so lines aren't identical. **Never** lift an in-copyright passage that
+Strange merely *quotes inside* his book; pull from his own prose, not his quotations. (Japanese
+original is PD; a fresh paraphrase is also legal if a more lyrical cadence is wanted.)
 
 ## Aesthetic & coherence
 
@@ -126,6 +144,13 @@ Hokusai's Prussian-blue-and-foam palette (declared, the way #G declares Californ
 belongs: every gallery piece is one body of meaningful text laid out with measured type —
 Whitman's breathing press, the MIT-license erasure, the California atlas — this is that same
 spine pointed at an image instead of a page.
+
+**Register line (canonical):**
+
+> Measure once, then — shape · press · erase · place — many.
+
+with: The Glyph Wave = shape (image) · The Press = press (force) · Erasure = erase (subtraction)
+· The Atlas = place (place).
 
 ## Honest engine-vs-orchestration line
 
@@ -137,9 +162,12 @@ no justify, no CJK. No new core-library surface.
 
 ## Difficulty & risk
 
-**M.** Riskiest unknown = legibility-vs-fidelity tuning; mitigated because the mask silhouette
-carries recognizability even if interior tone is soft, with the posterize+dither fallback in
-reserve. Secondary: Makie draw time/file size at high run count (vectorise + PNG).
+**M.** Riskiest unknown = the **merged-`Prepared` round-trip** (per-segment widths under a single
+`FontMetrics` flowed through `shape_pack`) — prototyped FIRST (§2, build step 0) before anything
+else. Next: legibility-vs-fidelity tuning; mitigated because the mask silhouette carries
+recognizability even if interior tone is soft, with the posterize+dither fallback genuinely in
+reserve (we ship crisp 3-tone over muddy 6-tone if needed). Secondary: Makie draw time/file size
+at high run count (vectorise + PNG).
 
 ## Decisions
 
@@ -152,16 +180,21 @@ reserve. Secondary: Makie draw time/file size at high run count (vectorise + PNG
 ### Still to confirm during build
 - `fontsize`-as-vector in the pinned Makie (1-line empirical test) before locking per-run
   sizing inside a weight group; if it fails, sub-group by (weight × size bucket) → ≤16 `text!`
-  calls.
+  calls. **Sequence this probe AFTER the merged-`Prepared` prototype** (§2) — the round-trip is
+  the riskier unknown and gates whether per-run sizing is even reachable.
 
 ## Build sequence (for the plan)
 
+0. **Merged-`Prepared` prototype FIRST (riskiest unknown):** hand-construct a merged `Prepared`
+   (per-segment widths per bucket; single `FontMetrics`, `line_advance = lineheight × size_max`)
+   and prove it flows through `shape_pack` cleanly — ahead of the `fontsize`-as-vector probe.
 1. `assets/` fetch script + committed master + `SOURCE.txt`.
 2. Image module: load → luminance + summed-area table → palette snap → mask.
 3. Tone-map module: pre-pass sampling → per-word (size bucket, weight, colour), with the
    collinearity + acceptance-property checks.
-4. Pack module: K-bucket prepares → merged `Prepared` → `shape_pack`.
-5. Render module: group-by-weight `text!` → PNG; layout-table hash golden.
+4. Pack module: K-bucket prepares → merged `Prepared` (per step 0) → `shape_pack`.
+5. Render module: group-by-weight `text!` → PNG; layout-table hash golden. (`fontsize`-as-vector
+   probe lands here, only after step 0.)
 6. Tune constants against the committed master (visual sign-off, not just green).
 
 ## Sources
