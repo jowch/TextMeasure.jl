@@ -1,4 +1,4 @@
-using Erasure: geometry_rows, hero_digest, LICENSE_TEXT
+using Erasure: geometry_rows, hero_digest
 using Test
 
 const GOLDEN_DIR = joinpath(@__DIR__, "golden")
@@ -16,6 +16,6 @@ const GOLDEN_DIR = joinpath(@__DIR__, "golden")
         write(path, cs)
         write(joinpath(GOLDEN_DIR, "hero.rows.txt"), join(rows, "\n"))
     end
-    @test isfile(path)
+    @test isfile(path)                               # fails closed without the sha file
     @test cs == strip(read(path, String))            # regression anchor
 end
