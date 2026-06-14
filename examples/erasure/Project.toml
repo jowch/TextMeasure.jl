@@ -8,6 +8,7 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 FreeTypeAbstraction = "663a7486-cb36-511b-a19d-713bb74d65c9"
 HouseStyle = "f1a9b3c2-0d4e-4a6b-9c8d-7e2f1a0b3c4d"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
 
 # Unregistered in-repo packages — resolve by path (Julia 1.11+ [sources]).

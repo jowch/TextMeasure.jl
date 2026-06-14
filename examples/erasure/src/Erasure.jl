@@ -37,4 +37,7 @@ export save_png
 include("hero.jl")
 export hero
 
+include("toy.jl")
+export Toy, new_toy, toggle!, poem_readout, surprise!
+
 end # module
