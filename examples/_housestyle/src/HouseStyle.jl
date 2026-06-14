@@ -1,5 +1,6 @@
 module HouseStyle
 using Colors
+using SHA
 
 # Identity layer (carries every piece)
 const PAPER     = colorant"#F4EFE6"
@@ -25,5 +26,18 @@ plexmono(name::AbstractString="Regular") = joinpath(FONTS_DIR, "IBMPlexMono", "I
 
 "The shared footer string: `TextMeasure.jl · <piece>` (middot U+00B7)."
 footer(piece::AbstractString) = "TextMeasure.jl · $(piece)"
+
+"""
+    digest_rows(rows) -> String
+
+SHA-256 hex of a canonicalized placement/layout table. `rows` is a vector of
+pre-formatted strings (each piece builds its own row format, rounding floats to a
+fixed precision before formatting). Rows are sorted so the digest is independent of
+emission order. This is the gallery's golden invariant — hash the computed table,
+never the rendered pixels.
+"""
+function digest_rows(rows::AbstractVector{<:AbstractString})
+    bytes2hex(sha2_256(join(sort(collect(rows)), "\n")))
+end
 
 end # module

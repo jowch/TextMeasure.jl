@@ -25,3 +25,11 @@ end
     @test endswith(HouseStyle.fraunces("9pt-Regular"), "Fraunces9pt-Regular.ttf")
     @test HouseStyle.footer("Erasure") == "TextMeasure.jl · Erasure"
 end
+
+@testset "digest_rows" begin
+    a = ["w1|0.00|12.50", "w2|40.00|12.50"]
+    @test HouseStyle.digest_rows(a) isa String
+    @test length(HouseStyle.digest_rows(a)) == 64          # sha256 hex
+    @test HouseStyle.digest_rows(a) == HouseStyle.digest_rows(reverse(a))  # order-independent
+    @test HouseStyle.digest_rows(a) != HouseStyle.digest_rows(["w1|0.01|12.50", "w2|40.00|12.50"])
+end
