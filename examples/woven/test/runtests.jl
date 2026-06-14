@@ -1,8 +1,8 @@
-using Erasure, Test
+using Woven, Test
 
-@testset "Erasure" begin
+@testset "Woven" begin
     @testset "loads" begin
-        @test isdefined(Erasure, :LICENSE_TEXT)
+        @test isdefined(Woven, :LICENSE_TEXT)
     end
     include("test_poem.jl")
     include("test_layout.jl")

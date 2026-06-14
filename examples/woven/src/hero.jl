@@ -5,7 +5,7 @@ using HouseStyle: RAMP, fraunces, plexmono, hanken
 using CairoMakie, Makie
 using Makie: Point2f
 
-# ---- LOCAL palette (type-specimen; stays local to Erasure, NOT in HouseStyle) ----------
+# ---- LOCAL palette (type-specimen; stays local to Woven, NOT in HouseStyle) ----------
 _hex(s) = Makie.to_color(s)
 const BG    = _hex("#F6F6F4")
 const INK   = _hex("#161616")
@@ -24,7 +24,7 @@ _chrome_w(font, size, txt) =
 """
     hero(path) -> (; placements, png)
 
-Render the locked Erasure hero: ONE MIT License laid out by the engine and faded to a Plex
+Render the locked Woven hero: ONE MIT License laid out by the engine and faded to a Plex
 Mono ghost; TWO found poems lit in place (RED grant clause, BLACK notice→warranty), every
 word MEASURED at its real face/size then justified with Knuth–Plass so nothing overlaps.
 Draws the two-colour "Free, As Is" masthead, EXHIBIT A, the red rule, the ghost + lit body,

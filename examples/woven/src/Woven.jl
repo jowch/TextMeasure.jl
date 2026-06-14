@@ -1,11 +1,11 @@
-module Erasure
+module Woven
 
 # The project's own LICENSE, verbatim — the FULL body of /LICENSE: the grant paragraph,
 # the notice paragraph ("...included in all copies or substantial portions..."), and the
 # warranty paragraph. Internal newlines are collapsed to spaces; the three paragraphs are
 # joined by a single '\n' (a forced paragraph break). EVERY lit poem word (poem.jl) is a
-# real word of this text, in this order — the gag is that the demo erases the exact text
-# governing it, so do not paraphrase.
+# real word of this text, in this order — the two found poems are WOVEN through the exact
+# text governing the software, so do not paraphrase.
 const LICENSE_TEXT =
     "Permission is hereby granted, free of charge, to any person obtaining a copy " *
     "of this software and associated documentation files (the \"Software\"), to deal " *
@@ -39,4 +39,4 @@ export geometry_rows, hero_digest
 include("hero.jl")
 export hero
 
-end # module
+end # module Woven

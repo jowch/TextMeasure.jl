@@ -1,4 +1,4 @@
-using Erasure: geometry_rows, hero_digest
+using Woven: geometry_rows, hero_digest
 using Test
 
 const GOLDEN_DIR = joinpath(@__DIR__, "golden")

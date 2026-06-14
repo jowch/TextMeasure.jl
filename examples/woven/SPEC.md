@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-06-13 — this piece was redesigned to the two-woven-poems concept; see README.md and the git history. The censor-bar/tap-to-keep design below is retired.
+
 # ERASURE — a poem hiding in the Terms of Service
 
 A blackout / found-poem demo for TextMeasure.jl. A page of real source prose is laid

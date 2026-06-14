@@ -1,10 +1,10 @@
-using Erasure: hero
+using Woven: hero
 using Test
 
 @testset "hero" begin
     @testset "renders a valid PNG and places both poems" begin
         dir = mktempdir()
-        path = joinpath(dir, "erasure-hero.png")
+        path = joinpath(dir, "woven-hero.png")
         result = hero(path)
         @test isfile(path)
         @test filesize(path) > 0

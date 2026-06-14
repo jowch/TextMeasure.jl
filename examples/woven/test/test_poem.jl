@@ -1,4 +1,4 @@
-using Erasure: LICENSE_TEXT, RED_PHRASES, BLACK_PHRASES, CAPS_PHRASES,
+using Woven: LICENSE_TEXT, RED_PHRASES, BLACK_PHRASES, CAPS_PHRASES,
                license_words, strip_word, styled_words, display_str
 using Test
 
