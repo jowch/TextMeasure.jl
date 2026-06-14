@@ -33,7 +33,7 @@ using Test
         end
 
         # REAL case: the full LICENSE at the hero wrap width must reconstruct line-for-line.
-        let mw = 422.0   # == HERO_MAX_WIDTH (golden.jl); the production hero width
+        let mw = 700.0   # == HERO_MAX_WIDTH (golden.jl); the production hero width
             prep = prepare(b, Erasure.LICENSE_TEXT)
             lay  = layout(prep; max_width = mw, align = :left)
             boxes = word_boxes(prep; max_width = mw)

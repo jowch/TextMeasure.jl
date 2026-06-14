@@ -2,7 +2,7 @@ using Random
 using TextMeasure: prepare
 
 const _STOPWORDS = Set(["is","the","to","of","a","an","in","and","or","for","be","by",
-                        "so","do","any","no","of","with","from","out","this","shall"])
+                        "so","do","any","no","with","from","out","this","shall"])
 
 "Headless toy state: cached geometry + a mutable kept-set. Toggles never re-measure."
 mutable struct Toy

@@ -1,11 +1,14 @@
 using HouseStyle: digest_rows
 using TextMeasure: prepare, MonospaceBackend
 
-"The deterministic monospace backend the golden + toy use (body face at RAMP.body)."
-golden_backend() = MonospaceBackend(fontsize = 11.0)
+"The deterministic monospace backend the golden + toy use (redaction face at RAMP.subhead).
+Coupled with the hero's MakieBackend fontsize so the page-filling geometry stays in sync."
+golden_backend() = MonospaceBackend(fontsize = 16.0)
 
-"Hero wrap width in px under the golden backend (≈64ch of body 11 mono; 11*0.6*64≈422)."
-const HERO_MAX_WIDTH = 422.0
+"Hero wrap width in px under the golden backend. Tuned so the whole LICENSE forms a
+pleasing wide landscape block (~14 lines at subhead-16 mono). Kept in lockstep with the
+literal in test_wordgeom.jl's full-LICENSE agreement case."
+const HERO_MAX_WIDTH = 700.0
 
 """
     geometry_rows(; max_width=HERO_MAX_WIDTH) -> Vector{String}
