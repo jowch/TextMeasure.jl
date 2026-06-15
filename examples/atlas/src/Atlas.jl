@@ -6,6 +6,7 @@ import HouseStyle
 
 # includes added task-by-task:
 include("data.jl")
+include("pois.jl")
 include("camera.jl")
 include("lod.jl")
 include("place.jl")

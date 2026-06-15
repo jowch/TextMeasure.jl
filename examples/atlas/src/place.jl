@@ -26,8 +26,13 @@ const _PARAMS = RepelParams(; only_move=:both, box_padding=4.0,
                             point_padding=5.0, min_segment_length=2.0)
 const _SOLVER = ProjectionSolver(_PARAMS)
 
-"One frame's placement. `prev`: town_id→prior offset (warm start). `settled`: ids to pin."
-function solve_frame(ids, anchors, sizes, bounds; prev, settled)
+"""
+One frame's placement. `prev`: town_id→prior offset (warm start). `settled`: ids to pin.
+`obstacles`: fixed pixel-space `Rect2f` boxes (coastline samples, areal footprints) that
+every label box is pushed ≥ point_padding px clear of. Default empty keeps the existing
+callers/tests unchanged.
+"""
+function solve_frame(ids, anchors, sizes, bounds; prev, settled, obstacles::Vector{Rect2f}=Rect2f[])
     init = any(id -> haskey(prev, id), ids) ?
            Vec2f[get(prev, id, Vec2f(0,0)) for id in ids] : nothing
     pin  = BitVector(id in settled && haskey(prev, id) for id in ids)
@@ -36,7 +41,7 @@ function solve_frame(ids, anchors, sizes, bounds; prev, settled)
     pinned = pin !== nothing ?
              Vec2f[get(prev, id, Vec2f(0,0)) for id in ids] : Vec2f[]
     r = solve_cluster(_SOLVER, collect(Point2f, anchors), collect(Vec2f, sizes), bounds;
-                      init_state=init, pin_mask=pin, pinned_offsets=pinned)
+                      init_state=init, pin_mask=pin, pinned_offsets=pinned, obstacles=obstacles)
     FramePlacement(collect(Int, ids), collect(Point2f, anchors), collect(Vec2f, sizes),
                    r.offsets, r.dropped)
 end
