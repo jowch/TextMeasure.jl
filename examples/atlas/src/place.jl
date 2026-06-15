@@ -1,7 +1,7 @@
 # DECISION (Task 1 spike): raw `solve_cluster` + our own overlap recompute.
 # Per-frame data→pixel projection (used by the loop task, NOT here):
 #   px = Point2f(Makie.project(ax.scene, :data, :pixel, data_pt)[Vec(1,2)])  # no frame lag after update_state_before_display!
-using Makie, CairoMakie
+using Makie
 using GeometryBasics: Point2f, Vec2f, Rect2f
 
 const _LABEL_FONT = HouseStyle.plexmono("Regular")
@@ -28,7 +28,6 @@ const _SOLVER = ProjectionSolver(_PARAMS)
 
 "One frame's placement. `prev`: town_id→prior offset (warm start). `settled`: ids to pin."
 function solve_frame(ids, anchors, sizes, bounds; prev, settled)
-    n    = length(ids)
     init = any(id -> haskey(prev, id), ids) ?
            Vec2f[get(prev, id, Vec2f(0,0)) for id in ids] : nothing
     pin  = BitVector(id in settled && haskey(prev, id) for id in ids)

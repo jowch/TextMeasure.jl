@@ -26,4 +26,13 @@ using Test
                       settled=Set(ids))
     @test recompute_overlaps(fp2) == 0
     @test maximum(maximum(abs.(fp.offsets[i] .- fp2.offsets[i])) for i in 1:6) < 1.0
+
+    # partial warm-start (the real per-frame case): first 3 settled, last 3 new
+    fp3 = solve_frame(ids, anchors, boxes, bounds;
+                      prev    = Dict(ids[i] => fp.offsets[i] for i in 1:3),
+                      settled = Set(ids[1:3]))
+    @test recompute_overlaps(fp3) == 0
+    for i in 1:3                                  # pinned labels keep their prior offset
+        @test maximum(abs.(fp3.offsets[i] .- fp.offsets[i])) < 0.5
+    end
 end
