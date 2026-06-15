@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> The release tag (v0.2.0) is **deferred** until the greenfield demo gallery
+> The first release tag (v0.1.0) is **deferred** until the greenfield demo gallery
 > ([#30](https://github.com/jowch/TextMeasure.jl/pull/30)) lands; the work below
-> stays under `[Unreleased]` until then.
+> stays under `[Unreleased]` until then. Nothing has been tagged or registered yet.
 
 ### Added
 
