@@ -33,6 +33,10 @@ test-logs/
 # Scratch directories for intermediate/sample render frames (regenerable via render_samples)
 examples/*/_frames/
 
+# Dev-still build artifacts (throwaway; not committed)
+examples/*/atlas-dev.png
+examples/*/src/atlas-dev.png
+
 # Ad-hoc research transcripts pulled into the working tree during investigation
 reference-conversation.md
 
