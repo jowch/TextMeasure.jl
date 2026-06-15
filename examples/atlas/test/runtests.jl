@@ -6,4 +6,5 @@ using Atlas, Test
     end
     include("test_data.jl")
     include("test_camera.jl")
+    include("test_lod.jl")
 end
