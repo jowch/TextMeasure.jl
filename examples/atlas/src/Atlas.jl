@@ -12,7 +12,7 @@ include("lod.jl")
 include("place.jl")
 include("render.jl")
 include("loop.jl")
-# include("golden.jl")
+include("golden.jl")
 
 export render_loop, render_hero, extract_loopframes, warmstart_delta_stats
 

@@ -10,5 +10,6 @@ using Atlas, Test
     include("test_lod.jl")
     include("test_place.jl")
     include("test_clearance.jl")
+    include("test_golden.jl")
     include("test_loop.jl")
 end
