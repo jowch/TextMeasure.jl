@@ -93,17 +93,20 @@ function draw_basemap!(ax, d::AtlasData)
         poly!(ax, ring; color = HouseStyle.PAPER, strokewidth = 0, inspectable = false)
     end
 
-    # 2. Graticule at whole-degree lat/lon intersections (BRASS, 0.25px)
+    # 2. Graticule at half-degree lat/lon lines (translucent BRASS, 0.25px) — a
+    #    recessive grid. Half-degree spacing so at least a couple of lines fall in
+    #    a tight (<1°) view, reading as a grid rather than a lone meridian.
     lon_min, lon_max, lat_min, lat_max = _data_range(d)
+    grat_c = Makie.RGBAf(HouseStyle.BRASS.r, HouseStyle.BRASS.g, HouseStyle.BRASS.b, 0.35)
     # — lon lines (vertical)
-    for lon in lon_min:lon_max
+    for lon in lon_min:0.5:lon_max
         pts = [Point2f(project_point(lon, lat)) for lat in range(lat_min, lat_max; length=64)]
-        lines!(ax, pts; color = HouseStyle.BRASS, linewidth = 0.25, inspectable = false)
+        lines!(ax, pts; color = grat_c, linewidth = 0.25, inspectable = false)
     end
     # — lat lines (horizontal)
-    for lat in lat_min:lat_max
+    for lat in lat_min:0.5:lat_max
         pts = [Point2f(project_point(lon, lat)) for lon in range(lon_min, lon_max; length=64)]
-        lines!(ax, pts; color = HouseStyle.BRASS, linewidth = 0.25, inspectable = false)
+        lines!(ax, pts; color = grat_c, linewidth = 0.25, inspectable = false)
     end
 
     # 3. Coastline hairline (INK, 0.75px) — drawn on top of land
@@ -185,16 +188,18 @@ function draw_labels!(ax, d::AtlasData, fp::FramePlacement, fs::FadeState;
         t === nothing && continue
         α = alpha_of(fs, id)
 
-        ink_c  = id == _SLO_ID ? HouseStyle.BRASS : HouseStyle.INK
+        is_slo  = id == _SLO_ID
+        ink_c   = is_slo ? HouseStyle.BRASS : HouseStyle.INK
         paper_c = HouseStyle.PAPER
+        dsz     = is_slo ? 8.0f0 : 5.0f0   # SLO hero dot reads larger
 
         push!(halo_pos, t.pos)
         push!(halo_colors, Makie.RGBAf(paper_c.r, paper_c.g, paper_c.b, α))
-        push!(halo_markersize, 4.0f0)   # slightly larger halo
+        push!(halo_markersize, dsz + 3.0f0)   # paper ring around the dot
 
         push!(dot_pos, t.pos)
         push!(dot_colors, Makie.RGBAf(ink_c.r, ink_c.g, ink_c.b, α))
-        push!(dot_markersize, 3.0f0)
+        push!(dot_markersize, dsz)
     end
 
     # Halo first (paper ring), then ink dot on top
