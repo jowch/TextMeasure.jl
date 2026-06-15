@@ -64,21 +64,21 @@ function _content_aspect(pagepx)
 end
 
 """
-    _new_axis(; pagepx=(1350, 1080)) -> (fig, ax)
+    _new_axis(; pagepx=(1620, 1080)) -> (fig, ax)
 
 CairoMakie Figure+Axis sized for the page (px, default 5:4). WATER axis background,
 all decorations/spines hidden. NO DataAspect — the axis FILLS its bbox; the camera
 window (camera_rect) is matched to the content aspect so geography isn't distorted.
 Chrome space reserved top/bottom via the bbox inset.
 """
-function _new_axis(; pagepx=(1350, 1080))
+function _new_axis(; pagepx=(1620, 1080))
     W, H = pagepx
     fig = Figure(size = (W, H), backgroundcolor = HouseStyle.PAPER)
 
     ax = Axis(fig;
         bbox = Makie.BBox(_SIDE_PAD, W - _SIDE_PAD,
                           _FOOTER_H, H - _MASTHEAD_H),
-        backgroundcolor = WATER,
+        backgroundcolor = HouseStyle.PAPER,   # LAND is the base; the sea is a polygon (see draw_basemap!)
         xgridvisible    = false, ygridvisible    = false,
         xticksvisible   = false, yticksvisible   = false,
         xlabelvisible   = false, ylabelvisible   = false,
@@ -268,7 +268,7 @@ Build a fresh figure for loop phase `p` and place EVERY label honestly:
 Cold start (no warm-state) — suitable for a single still. The loop task can later
 thread `prev`/`settled` through `solve_frame`.
 """
-function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
+function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
     fig, ax = _new_axis(; pagepx)
     # camera window matched to the drawable content aspect → fills frame, no distortion
     limits!(ax, camera_rect(p; aspect = _content_aspect(pagepx))...)
@@ -368,16 +368,51 @@ end
 
 # ── Draw functions ────────────────────────────────────────────────────────────
 
+# Far-field box (map-units) well outside any dive view, used to close the sea polygon.
+const _OCEAN_FAR_W = Float32(KX * -140.0)
+const _OCEAN_FAR_N = 42.0f0
+const _OCEAN_FAR_S = 20.0f0
+
+"""
+    _ocean_polygon(d) -> Vector{Point2f}
+
+The sea as ONE polygon (map-units): the longest coastline segment, closed around the far
+west/south/north. Land is the PAPER axis base; painting this water polygon over everything
+seaward of the coast means the clipped mainland ring's interior gaps can never show as
+background. Assumes the main coast's first vertex is its northern end (true for our data).
+"""
+function _ocean_polygon(d::AtlasData)
+    isempty(d.coastline) && return Point2f[]
+    main = argmax(length, d.coastline)
+    isempty(main) && return Point2f[]
+    S = main[1]; E = main[end]                       # S = north end, E = south end
+    pts = collect(main)
+    push!(pts, Point2f(E[1], _OCEAN_FAR_S))          # south from the coast's south end
+    push!(pts, Point2f(_OCEAN_FAR_W, _OCEAN_FAR_S))  # far southwest
+    push!(pts, Point2f(_OCEAN_FAR_W, _OCEAN_FAR_N))  # far northwest
+    push!(pts, Point2f(S[1], _OCEAN_FAR_N))          # north, above the coast's north end
+    return pts                                        # poly! closes back to S
+end
+
 """
     draw_basemap!(ax, d::AtlasData)
 
-Water (Axis background) · land poly (PAPER, no stroke) · coastline hairline
-(INK 0.75px, the only 0.75 line) · recessive half-degree graticule (translucent BRASS 0.25px).
+Land = PAPER axis base · sea = one WATER polygon (coast closed around the far field, so no
+land-clip gap can show) · islands repainted PAPER on the sea · coastline hairline (INK
+0.75px, the only 0.75 line) · recessive half-degree graticule (translucent BRASS 0.25px).
 """
 function draw_basemap!(ax, d::AtlasData)
-    for ring in d.land
-        isempty(ring) && continue
-        poly!(ax, ring; color = HouseStyle.PAPER, strokewidth = 0, inspectable = false)
+    # Sea polygon over the PAPER land base.
+    ocean = _ocean_polygon(d)
+    isempty(ocean) || poly!(ax, ocean; color = WATER, strokewidth = 0, inspectable = false)
+
+    # Islands (small land rings, not the mainland) sit on the sea — repaint as land.
+    if !isempty(d.land)
+        mainland = argmax(length, d.land)
+        for ring in d.land
+            (ring === mainland || isempty(ring)) && continue
+            poly!(ax, ring; color = HouseStyle.PAPER, strokewidth = 0, inspectable = false)
+        end
     end
 
     lon_min, lon_max, lat_min, lat_max = _data_range(d)
@@ -612,7 +647,7 @@ Render a single honest frame at loop phase `p` and save to `path`. Assembles the
 measured+solved frame, builds a fully-visible FadeState, draws basemap → areals →
 labels → chrome.
 """
-function _dev_still(p::Real, path::AbstractString; pagepx=(1350, 1080))
+function _dev_still(p::Real, path::AbstractString; pagepx=(1620, 1080))
     d = load_atlas_data()
     fig, ax, af = assemble_frame(d, p; pagepx)
     fp = af.fp

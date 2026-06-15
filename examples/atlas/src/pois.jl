@@ -62,7 +62,7 @@ later in the dive. Each row is
 function atlas_areals()
     raw = [
         ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 150.0,  26.0, 0.0),
-        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 0.065, :range, 200.0, -18.0, 0.25),
+        ("SANTA LUCIA RANGE",  -120.75, 35.52, -42.0, 0.055, :range, 200.0, -18.0, 0.25),
         ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.035, :water, 120.0,  28.0, 0.0),
     ]
     [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px, sweep, tracking)
