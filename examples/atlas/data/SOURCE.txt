@@ -32,5 +32,18 @@ Rows marked source=curated are hand-placed coastal towns:
 town_id is a stable integer key (1..N), assigned once, never renumbered.
 It is the warm-start key in downstream rendering code.
 
-Generated: 2026-06-14
+2026-06-15 densification (all source=curated, appended; ids 20-24, NOT renumbered):
+  Templeton(20), Santa Margarita(21), Nipomo(22), San Miguel(23), Oceano(24) —
+  inland/coastal SLO-county towns. lon/lat hand-entered from public knowledge
+  (~0.001°), pop approximate, rank by size on the same majors/mid/necklace scheme.
+
+POIs / landmarks (atlas_pois() in src/pois.jl)
+----------------------------------------------
+ALL landmarks are hand-placed (curated), not from Natural Earth. lon/lat are from
+public knowledge (~0.001°). Current set: Morro Rock, Hearst Castle, Montaña de Oro,
+Point Buchon, Pismo Dunes, Bishop Peak, Cerro San Luis, Lopez Lake, Santa Margarita
+Lake, Lake Nacimiento, Mission San Luis Obispo, Point Sal. They carry geographic
+anchors only — render still MEASURES + SOLVES every label.
+
+Generated: 2026-06-14 (densified 2026-06-15)
 Script:    examples/atlas/prep/clip.jl

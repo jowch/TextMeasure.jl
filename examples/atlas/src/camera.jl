@@ -1,9 +1,9 @@
-const W_WIDE   = 3.0
-const W_TIGHT  = 0.30
+const W_WIDE   = 2.0
+const W_TIGHT  = 0.55
 const N_FRAMES = 360
 const FPS      = 30
-const _CWIDE   = (-121.0, 35.5)
-const _CTIGHT  = (-120.66, 35.30)
+const _CWIDE   = (-120.90, 35.45)   # central-coast overview
+const _CTIGHT  = (-120.74, 35.31)   # Morro Bay–Los Osos–SLO–Pismo cluster centroid
 
 smoothstep(t) = (t = clamp(t, 0, 1); t*t*(3 - 2t))
 

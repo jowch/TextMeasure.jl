@@ -15,17 +15,18 @@ const MIN_PX  = 13.0    # lower band: a label appears once its type reaches this
 const SLO_PX  = 20.0    # San Luis Obispo is pinned to this constant px size, always shown
 const _BAND_HYST = 0.08 # once shown, widen the band ±8% before hiding (anti-flicker)
 
-const POI_GROUND = 0.0035  # POI ground em (degrees) → landmarks enter last (~w0.53)
+const POI_GROUND = 0.0048  # POI ground em (degrees) → landmarks enter last (~w0.65)
 
 """
 Ground em (degrees lat) for a town by census rank. SLO (rank 1) is pinned, not here.
-Tuned for the reveal schedule: majors enter ~w1.2, the 6–7 band ~w0.87, the 8–9
-necklace ~w0.72 (content_px_w≈1588 → font_px = ground·1956/w_deg).
+Tuned for the [2.0, 0.55] dive so the cluster fills CONTINUOUSLY (no empty mid-frames):
+majors fade in ~w1.6 (0.5-α ~w1.3), the 6–7 band ~w1.1, the 8–9 necklace ~w0.9
+(content_px_w≈1588 → font_px = ground·1588/(KX·w)). These layer the in-frame cluster.
 """
 function town_ground(rank::Integer)::Float64
-    rank ≤ 5 ? 0.008  :   # majors → enter ~w1.2
-    rank ≤ 7 ? 0.0058 :   # ranks 6–7 → enter ~w0.87
-               0.0048     # ranks 8–9 → enter ~w0.72
+    rank ≤ 5 ? 0.011  :   # majors → fade in ~w1.6
+    rank ≤ 7 ? 0.0075 :   # ranks 6–7 → enter ~w1.1
+               0.0062     # ranks 8–9 → enter ~w0.9
 end
 
 # ── Scaling math ──────────────────────────────────────────────────────────────

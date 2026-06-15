@@ -21,11 +21,18 @@ glyph from town dots. Add/trim freely — render LoD-gates by on-screen test onl
 """
 function atlas_pois()
     raw = [
-        ("Morro Rock",      -120.866, 35.369),
-        ("Hearst Castle",   -121.168, 35.685),
-        ("Montaña de Oro",  -120.887, 35.276),
-        ("Point Buchon",    -120.898, 35.254),
-        ("Pismo Dunes",     -120.633, 35.098),
+        ("Morro Rock",              -120.866,  35.369),
+        ("Hearst Castle",           -121.168,  35.685),
+        ("Montaña de Oro",          -120.887,  35.276),
+        ("Point Buchon",            -120.898,  35.254),
+        ("Pismo Dunes",             -120.633,  35.098),
+        ("Bishop Peak",             -120.690,  35.305),
+        ("Cerro San Luis",          -120.674,  35.281),
+        ("Lopez Lake",              -120.470,  35.243),
+        ("Santa Margarita Lake",    -120.503,  35.339),
+        ("Lake Nacimiento",         -120.902,  35.752),
+        ("Mission San Luis Obispo", -120.6655, 35.2806),
+        ("Point Sal",               -120.672,  34.902),
     ]
     [POI(nm, Point2f(project_point(lon, lat)...), :landmark) for (nm, lon, lat) in raw]
 end
@@ -60,13 +67,14 @@ later in the dive. Each row is
 `tracking` is a FRACTION of font_px added to each glyph advance (range breathes; water 0).
 """
 function atlas_areals()
-    # ground°/max_px tuned to the reveal schedule (Ocean → Mountains → … → Bay):
-    # Pacific dominant at w3 (~65px) hands off ~w1.5; Range present-faint at w3 (~33px),
-    # peaks ~w1.5, hands off ~w0.65; Estero swells in the cluster.
+    # ground°/max_px tuned to the [2.0, 0.55] dive (Ocean → Mountains → … → Bay):
+    # Pacific dominant at w2 (~68px), hands off ~w1.1; Range present at w2 (~44px), peaks
+    # ~w1.2, hands off ~w0.68; Estero swells in the cluster. Range anchor nudged east to
+    # -120.78 so it stays in-frame at the narrower W_WIDE=2.0.
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 130.0,  26.0, 0.0),
-        ("SANTA LUCIA RANGE",  -120.75, 35.52, -42.0, 0.05,  :range, 150.0, -18.0, 0.25),
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.020, :water, 110.0,  28.0, 0.0),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.070, :water, 120.0,  26.0, 0.0),
+        ("SANTA LUCIA RANGE",  -120.78, 35.52, -42.0, 0.045, :range, 130.0, -18.0, 0.25),
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.018, :water, 100.0,  28.0, 0.0),
     ]
     [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px, sweep, tracking)
      for (txt, lon, lat, rot, ground, kind, max_px, sweep, tracking) in raw]

@@ -2,6 +2,9 @@ using Atlas: view_width, view_center, camera_rect, W_WIDE, W_TIGHT, N_FRAMES
 using Test
 
 @testset "camera: geometric zoom + seamless loop" begin
+    # the dive is a less-extreme 2.0° → 0.55° (~3.6×), staying where the coast is rich
+    @test W_WIDE  ≈ 2.0
+    @test W_TIGHT ≈ 0.55
     @test view_width(0.0) ≈ W_WIDE
     @test view_width(0.5) ≈ W_TIGHT          # apex at the loop midpoint
     @test view_width(1.0) ≈ W_WIDE           # loop closes on width
