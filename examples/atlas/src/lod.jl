@@ -11,23 +11,23 @@
 # Included after data.jl (uses KX). Replaces the old rank-ladder LoD.
 
 # ── Tunable constants (FIRST GUESSES — nudge these visually) ──────────────────
-const MIN_PX  = 26.0    # lower band: a label appears once its type reaches this px height
-const SLO_PX  = 40.0    # San Luis Obispo is pinned to this constant px size, always shown
+const MIN_PX  = 15.6    # lower band: a label appears once its type reaches this px height
+const SLO_PX  = 24.0    # San Luis Obispo is pinned to this constant px size, always shown
 const _BAND_HYST = 0.08 # once shown, widen the band ±8% before hiding (anti-flicker)
 
-const POI_GROUND = 0.0096  # POI ground em (degrees) → landmarks enter last (~w0.65)
+const POI_GROUND = 0.00576  # POI ground em (degrees) → landmarks enter last (~w0.65)
 
 """
 Ground em (degrees lat) for a town by census rank. SLO (rank 1) is pinned, not here.
-Sizes are 2× the prior tuning (MIN_PX + every ground doubled together), so each feature
-still ENTERS at the SAME view width — just twice as large on screen. For the [2.0, 0.55]
+Sizes are 1.2× the original tuning (MIN_PX + every ground scaled together), so each feature
+still ENTERS at the SAME view width — just 20% larger on screen. For the [2.0, 0.55]
 dive: majors fade in ~w1.6 (0.5-α ~w1.3), the 6–7 band ~w1.1, the 8–9 necklace ~w0.9
 (content_px_w≈1588 → font_px = ground·1588/(KX·w)).
 """
 function town_ground(rank::Integer)::Float64
-    rank ≤ 5 ? 0.022  :   # majors → fade in ~w1.6
-    rank ≤ 7 ? 0.015  :   # ranks 6–7 → enter ~w1.1
-               0.0124     # ranks 8–9 → enter ~w0.9
+    rank ≤ 5 ? 0.0132 :   # majors → fade in ~w1.6
+    rank ≤ 7 ? 0.009  :   # ranks 6–7 → enter ~w1.1
+               0.00744    # ranks 8–9 → enter ~w0.9
 end
 
 # ── Scaling math ──────────────────────────────────────────────────────────────
