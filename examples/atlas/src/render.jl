@@ -181,9 +181,11 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1600, 1000))
         coast_capped && break
     end
 
-    # areals: measure each, project its anchor, add its rotated AABB as an obstacle
+    # areals: zoom-gated (big regions only at wide w), measure each, project its
+    # anchor, add its rotated AABB as an obstacle
     areals = Tuple{String,Point2f,Float64,Symbol}[]
     for a in atlas_areals()
+        (w >= a.wmin && w <= a.wmax) || continue
         apx = _data_to_px(ax, a.pos)
         box = _measure_areal_box(a)
         push!(obstacles, _rotated_aabb(apx, box, a.rotation))
@@ -467,7 +469,7 @@ function _dev_still(p::Real, path::AbstractString; pagepx=(1600, 1000))
     w     = view_width(p)
     w_str = string(round(w; digits=2))
     ls    = n_leaders == 1 ? "" : "s"
-    metrics = "w $(w_str)° · $(n_placed)/$(length(fp.ids)) placed · $(n_town)t $(n_poi)p · $(length(af.obstacles)) obs · $(n_leaders) leader$(ls)"
+    metrics = "w $(w_str)° · $(n_placed)/$(length(fp.ids)) placed · $(n_leaders) leader$(ls)"
 
     draw_basemap!(ax, d)
     draw_areals!(ax, af.areals)

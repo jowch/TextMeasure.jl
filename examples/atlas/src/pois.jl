@@ -42,20 +42,24 @@ struct Areal
     rotation :: Float64     # degrees (counter-clockwise)
     fontsize :: Float64     # pt
     kind     :: Symbol      # :water | :range
+    wmin     :: Float64     # eligible when wmin ≤ view_width(°) ≤ wmax …
+    wmax     :: Float64     # … so big regions label the WIDE shots, small features the TIGHT ones
 end
 
 """
     atlas_areals() -> Vector{Areal}
 
-Region labels. Positions / rotations are FIRST GUESSES — easy to nudge: each is one
-`(text, lon, lat, rotation_deg, fontsize, kind)` row. The operator fine-tunes visually.
+Region labels, zoom-gated like a real map: the big regions (Pacific Ocean, the range)
+appear only on the WIDE establishing shots where there's room; small features (Estero
+Bay) appear on the TIGHT shots. Each row is
+`(text, lon, lat, rotation_deg, fontsize, kind, wmin°, wmax°)` — easy to nudge visually.
 """
 function atlas_areals()
     raw = [
-        ("PACIFIC OCEAN",      -121.05, 35.15, -38.0, 30.0, :water),
-        ("SANTA LUCIA RANGE",  -120.62, 35.55, -40.0, 20.0, :range),
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 14.0, :water),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 34.0, :water, 1.2, Inf),
+        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 24.0, :range, 0.9, Inf),
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 14.0, :water, 0.0, 1.0),
     ]
-    [Areal(txt, Point2f(project_point(lon, lat)...), rot, fs, kind)
-     for (txt, lon, lat, rot, fs, kind) in raw]
+    [Areal(txt, Point2f(project_point(lon, lat)...), rot, fs, kind, wmin, wmax)
+     for (txt, lon, lat, rot, fs, kind, wmin, wmax) in raw]
 end
