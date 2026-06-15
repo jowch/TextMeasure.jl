@@ -11,7 +11,7 @@
 # Included after data.jl (uses KX). Replaces the old rank-ladder LoD.
 
 # ── Tunable constants (FIRST GUESSES — nudge these visually) ──────────────────
-const MIN_PX  = 10.0    # lower band: a label appears once its type reaches this px height
+const MIN_PX  = 13.0    # lower band: a label appears once its type reaches this px height
 const SLO_PX  = 20.0    # San Luis Obispo is pinned to this constant px size, always shown
 const _BAND_HYST = 0.08 # once shown, widen the band ±8% before hiding (anti-flicker)
 

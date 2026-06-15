@@ -31,37 +31,40 @@ function atlas_pois()
 end
 
 """
-A rotated region label ("areal"): water bodies, ranges. Anchored at a real lon/lat,
-drawn rotated to follow a feature. Its on-screen size is GEOGRAPHIC — `ground` is its
-em in degrees of latitude, so it grows with zoom like every other label. `max_px` is
-the upper hand-off: a coarse region hides once its type outgrows that pixel height.
-The drawn box is MEASURED by TextMeasure at the current font_px — these are inputs to
-measurement, never a hand-sized box.
+A CURVED region label ("areal"): water bodies, ranges. Anchored at a real lon/lat, laid
+out glyph-by-glyph along a circular arc (each glyph MEASURED by TextMeasure). Its size is
+GEOGRAPHIC — `ground` is its em in degrees of latitude, so it grows with zoom; `max_px`
+is the upper hand-off (a coarse region hides once its type outgrows that pixel height).
+`rotation` is the base tilt (deg); `sweep` is the signed total bend across the baseline
+(deg, 0 = straight); `tracking` is extra px added per glyph advance (caps breathing room).
 """
 struct Areal
     text     :: String
     pos      :: Point2f     # projected map-units
-    rotation :: Float64     # degrees (counter-clockwise)
+    rotation :: Float64     # base tilt, degrees (counter-clockwise)
     ground   :: Float64     # ground em (degrees latitude) → font_px = ground * P
     kind     :: Symbol      # :water | :range
     max_px   :: Float64     # upper band: hide (hand off) when font_px exceeds this
+    sweep    :: Float64     # signed total bend across the baseline, degrees (0 = straight)
+    tracking :: Float64     # extra px per-glyph advance fraction of font_px (caps breathing)
 end
 
 """
     atlas_areals() -> Vector{Areal}
 
-Region labels sized geographically: the big regions (Pacific Ocean, the range) have the
-largest ground ems so they dominate the WIDE establishing shots, then HAND OFF (hide)
+Region labels, curved + sized geographically. The big regions (Pacific Ocean, the range)
+have the largest ground ems so they dominate the WIDE establishing shots, then HAND OFF
 once they outgrow the frame past `max_px`; smaller features (Estero Bay) reach legibility
-later in the dive. Each row is `(text, lon, lat, rotation_deg, ground°, kind, max_px)` —
-easy to nudge visually.
+later in the dive. Each row is
+`(text, lon, lat, rotation°, ground°, kind, max_px, sweep°, tracking)` — easy to nudge.
+`tracking` is a FRACTION of font_px added to each glyph advance (range breathes; water 0).
 """
 function atlas_areals()
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 150.0),
-        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 0.065, :range, 200.0),
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.035, :water, 120.0),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 150.0,  26.0, 0.0),
+        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 0.065, :range, 200.0, -18.0, 0.25),
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.035, :water, 120.0,  28.0, 0.0),
     ]
-    [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px)
-     for (txt, lon, lat, rot, ground, kind, max_px) in raw]
+    [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px, sweep, tracking)
+     for (txt, lon, lat, rot, ground, kind, max_px, sweep, tracking) in raw]
 end

@@ -50,6 +50,7 @@ const _TOP_PAD     = 10.0   # px from the very top edge to the masthead baseline
 const _COAST_STRIDE  = 5     # sample every Nth smoothed coastline vertex
 const _COAST_BOX     = 8.0   # px side of each coastline obstacle box (centered on vertex)
 const _COAST_MAX     = 200   # cap total coastline obstacle boxes (keeps the solve fast)
+const _AREAL_OBSTACLE_STRIDE = 2   # subsample every Nth per-glyph areal box for obstacles
 
 """
     _content_aspect(pagepx) -> Float64
@@ -144,29 +145,103 @@ end
 
 """
 The drawn string + face for an areal:
-- :water → Newsreader italic, TITLE-CASE (not letterspaced).
-- :range → Hanken, LETTERSPACED caps.
+- :water → Newsreader italic, TITLE-CASE.
+- :range → Hanken, caps (per-glyph `tracking` gives the breathing room; no space hack).
 Returns `(drawn_string, font)`.
 """
 function _areal_drawn(a::Areal)
-    if a.kind === :water
-        (titlecase(a.text), FACE_WATER)
-    else
-        (_letterspace(a.text), FACE_LAND)
-    end
+    a.kind === :water ? (titlecase(a.text), FACE_WATER) : (a.text, FACE_LAND)
 end
 
 """
-Axis-aligned bounding box (px) of a rotated label of size `box` (w,h) centered at
-`center`px, rotated `rot_deg` degrees. Used as a solver obstacle footprint.
+True advance (px) of a single space at _REF_PX for `font` — measured by difference, since
+a lone `" "` is whitespace-trimmed to width 0 by the layout engine. `adv(\"x x\") − adv(\"xx\")`
+recovers the inter-word advance, keeping it TextMeasure-derived (no hand-picked gap).
 """
-function _rotated_aabb(center::Point2f, box::Vec2f, rot_deg::Real)
-    θ = deg2rad(rot_deg)
-    hw, hh = box[1] / 2, box[2] / 2
-    # extents of the rotated rectangle (half-width/height of its AABB)
-    ex = abs(hw * cos(θ)) + abs(hh * sin(θ))
-    ey = abs(hw * sin(θ)) + abs(hh * cos(θ))
-    Rect2f(center[1] - ex, center[2] - ey, 2ex, 2ey)
+function _space_advance(font)
+    Float32(measure_label("x x", font, _REF_PX)[1] - measure_label("xx", font, _REF_PX)[1])
+end
+
+"Per-char advance (px) of `s` at `fpx`, measured ONCE at _REF_PX and scaled. No kerning."
+function _char_advances(s::AbstractString, font, fpx::Real)
+    chars = collect(s)
+    scale = Float32(fpx / _REF_PX)
+    sp    = _space_advance(font)                  # recovered space advance (lone space → 0)
+    # measure each char's reference advance once (box width == advance, no kerning);
+    # substitute the recovered advance for spaces so words don't collapse together.
+    [(c == ' ' ? sp : Float32(measure_label(string(c), font, _REF_PX)[1])) * scale for c in chars]
+end
+
+"""
+    _areal_glyphs(a, apx, fpx) -> (glyphs, boxes)
+
+Lay areal `a`'s drawn string glyph-by-glyph along a circular arc centered on pixel anchor
+`apx`, at on-screen size `fpx`. Each glyph is MEASURED (its advance) by TextMeasure and
+single-measure-scaled. `a.sweep` is the signed total bend (deg) across the baseline (0 =
+straight), `a.rotation` the base tilt, `a.tracking` extra px (fraction of fpx) per advance.
+
+Returns:
+- `glyphs::Vector{(char::Char, pos::Point2f, rot_rad::Float64)}` for drawing;
+- `boxes::Vector{Rect2f}` per-glyph footprints (≈ advance × fpx) for solver obstacles.
+"""
+function _areal_glyphs(a::Areal, apx::Point2f, fpx::Real)
+    drawn, font = _areal_drawn(a)
+    chars = collect(drawn)
+    isempty(chars) && return (Tuple{Char,Point2f,Float64}[], Rect2f[])
+
+    advs = _char_advances(drawn, font, fpx)
+    track = Float32(a.tracking * fpx)            # extra px per glyph
+    advs = advs .+ track
+    L = sum(advs)                                # total baseline length (px)
+
+    # signed arc-length of each glyph CENTER from the baseline midpoint
+    cum = 0.0f0
+    centers = Vector{Float32}(undef, length(advs))
+    for i in eachindex(advs)
+        centers[i] = cum + advs[i] / 2 - L / 2
+        cum += advs[i]
+    end
+
+    base = deg2rad(a.rotation)
+    t    = (cos(base), sin(base))                # unit tangent
+    θ    = deg2rad(a.sweep)
+
+    glyphs = Vector{Tuple{Char,Point2f,Float64}}(undef, length(chars))
+    boxes  = Vector{Rect2f}(undef, length(chars))
+    gh     = Float32(fpx)                         # glyph box height ≈ font_px
+
+    if abs(a.sweep) < 0.5                          # STRAIGHT (R → ∞)
+        for i in eachindex(chars)
+            s = centers[i]
+            pos = Point2f(apx[1] + s * t[1], apx[2] + s * t[2])
+            glyphs[i] = (chars[i], pos, base)
+            boxes[i]  = Rect2f(pos[1] - advs[i]/2, pos[2] - gh/2, advs[i], gh)
+        end
+    else                                           # ARC of radius R = L/θ
+        # Center of curvature sits on the side the text bends TOWARD. For sweep>0 the
+        # baseline bows so its ends rise (concave up in the un-tilted frame): center is
+        # ABOVE, i.e. along +normal where normal = left of tangent = (−sinθ, cosθ).
+        sgn = sign(θ)                              # +1 bends one way, −1 the other
+        nrm = (-sin(base), cos(base))              # left-normal of the tangent
+        R   = Float32(L / abs(θ))
+        # center on the concave side (toward which the text curves)
+        Cc  = Point2f(apx[1] + sgn * R * nrm[1], apx[2] + sgn * R * nrm[2])
+        # angle from center to the midpoint anchor
+        α0  = atan(apx[2] - Cc[2], apx[1] - Cc[1])
+        # At the midpoint the CCW tangent equals +sgn*t, so walking +s (rightward along
+        # the baseline) advances the circle angle by +sgn*(s/R). Both position and glyph
+        # rotation share this step, keeping the string in reading order and upright.
+        for i in eachindex(chars)
+            dα  = sgn * (centers[i] / R)
+            αi  = α0 + dα
+            pos = Point2f(Cc[1] + R * cos(αi), Cc[2] + R * sin(αi))
+            rot = base + dα                        # base tilt + incremental bend
+            glyphs[i] = (chars[i], pos, rot)
+            boxes[i]  = Rect2f(pos[1] - advs[i]/2, pos[2] - gh/2, advs[i], gh)
+        end
+    end
+
+    return (glyphs, boxes)
 end
 
 # ── Frame assembly (the honest core) ─────────────────────────────────────────
@@ -176,9 +251,9 @@ struct AssembledFrame
     fp        :: FramePlacement                 # ids = towns + POIs, all solved together
     kind_of   :: Dict{Int,Symbol}               # id → :town | :poi
     font_px   :: Dict{Int,Float64}              # id → on-screen type height (px) it's drawn at
-    # (text, px anchor, rot, kind, font_px) — areal size is dynamic/geographic too
-    areals    :: Vector{Tuple{String,Point2f,Float64,Symbol,Float64}}
-    obstacles :: Vector{Rect2f}                 # coastline + areal footprints (px)
+    # per visible areal: (kind, font_px, glyph layout). Each glyph = (char, pos px, rot rad).
+    areals    :: Vector{Tuple{Symbol,Float64,Vector{Tuple{Char,Point2f,Float64}}}}
+    obstacles :: Vector{Rect2f}                 # coastline + per-glyph areal footprints (px)
     coast_capped :: Bool
 end
 
@@ -188,7 +263,8 @@ end
 Build a fresh figure for loop phase `p` and place EVERY label honestly:
 - point labels (active towns + on-screen POIs) measured via TextMeasure, placed by
   one `solve_cluster` call against each other, the sampled coastline, and the areals;
-- areals measured via TextMeasure, their rotated AABBs added as obstacles.
+- areals laid out glyph-by-glyph along an arc (each glyph MEASURED), their per-glyph
+  boxes added as obstacles.
 Cold start (no warm-state) — suitable for a single still. The loop task can later
 thread `prev`/`settled` through `solve_frame`.
 """
@@ -260,19 +336,22 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
         coast_capped && break
     end
 
-    # areals: geographic-scaling too. font_px = ground * P; show in [MIN_PX, max_px]
-    # (coarse regions hand off when they outgrow the frame). Measure-once-scale; the
-    # rotated AABB of the scaled box is added as an obstacle.
-    areals = Tuple{String,Point2f,Float64,Symbol,Float64}[]
+    # areals: geographic-scaling + CURVED. font_px = ground * P; show in [MIN_PX, max_px]
+    # (coarse regions hand off when they outgrow the frame). Each areal is laid out
+    # glyph-by-glyph along an arc (every glyph MEASURED + single-measure-scaled); its
+    # solver obstacle is the UNION OF PER-GLYPH BOXES (subsampled), so town labels dodge
+    # only the actual letters — not a giant tilted AABB.
+    areals = Tuple{Symbol,Float64,Vector{Tuple{Char,Point2f,Float64}}}[]
     for a in atlas_areals()
         apx = _data_to_px(ax, a.pos)
         _in_rect(apx, page_rect) || continue
         fpx = font_px(a.ground, w, content_px_w)
         visible(fpx, a.max_px, false) || continue
-        drawn, font = _areal_drawn(a)
-        box = _scaled_box(_unit_box(drawn, font), fpx)
-        push!(obstacles, _rotated_aabb(apx, box, a.rotation))
-        push!(areals, (a.text, apx, a.rotation, a.kind, fpx))
+        glyphs, gboxes = _areal_glyphs(a, apx, fpx)
+        for i in 1:_AREAL_OBSTACLE_STRIDE:length(gboxes)   # subsample glyph footprints
+            push!(obstacles, gboxes[i])
+        end
+        push!(areals, (a.kind, fpx, glyphs))
     end
 
     # --- (c) ONE solve over all point labels, with obstacles ---
@@ -323,29 +402,28 @@ end
 """
     draw_areals!(ax, areals)
 
-Draw rotated region labels at their PIXEL anchors (space=:pixel), each in the SAME
-face/size/string it was MEASURED with:
-- :water → Newsreader ITALIC, title-case (not letterspaced), color WATER_INK.
-- :range → Hanken, letterspaced caps, color HouseStyle.GRAY.
-Drawn UNDER the point labels; the solver keeps point labels off these via obstacles.
-`areals` entries are `(raw_text, px_anchor, rotation_deg, kind, font_px)`; the raw_text
-is re-resolved to its drawn string + face here, and drawn at the dynamic `font_px`.
+Draw each CURVED areal glyph-by-glyph (space=:pixel) along its precomputed arc layout.
+Per glyph: `text!` at the glyph's pixel position, rotated to the local tangent, at the
+areal's dynamic `font_px`, in the areal face (Newsreader italic for :water / Hanken for
+:range) and color (WATER_INK for :water / GRAY for :range). ~10–17 text! calls per areal.
+Drawn UNDER the point labels; the solver keeps point labels off these via per-glyph obstacles.
+`areals` entries are `(kind, font_px, glyphs)` where each glyph = (char, pos px, rot rad).
 """
 function draw_areals!(ax, areals)
-    by_text = Dict(a.text => a for a in atlas_areals())
-    for (text, apx, rot, kind, fpx) in areals
-        a = by_text[text]
-        drawn, font = _areal_drawn(a)
-        col = kind === :range ? HouseStyle.GRAY : WATER_INK
-        text!(ax, apx;
-            text        = drawn,
-            rotation    = deg2rad(rot),
-            fontsize    = fpx,
-            font        = font,
-            color       = col,
-            align       = (:center, :center),
-            space       = :pixel,
-            inspectable = false)
+    for (kind, fpx, glyphs) in areals
+        font = kind === :water ? FACE_WATER : FACE_LAND
+        col  = kind === :range ? HouseStyle.GRAY : WATER_INK
+        for (ch, pos, rot) in glyphs
+            text!(ax, pos;
+                text        = string(ch),
+                rotation    = rot,
+                fontsize    = fpx,
+                font        = font,
+                color       = col,
+                align       = (:center, :center),
+                space       = :pixel,
+                inspectable = false)
+        end
     end
     return ax
 end
