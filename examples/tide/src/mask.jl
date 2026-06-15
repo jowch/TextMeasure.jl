@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # mask.jl — the per-frame region mask: this frame's surviving (un-flooded) area as a BitMatrix.
 #
 # THE ENGINE TECHNIQUE this file showcases: a region for `shape_pack` is just a BitMatrix of

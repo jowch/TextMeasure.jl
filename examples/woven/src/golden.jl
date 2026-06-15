@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using HouseStyle: digest_rows
 using TextMeasure: MonospaceBackend
 

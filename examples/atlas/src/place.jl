@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # DECISION (Task 1 spike): raw `solve_cluster` + our own overlap recompute.
 # Per-frame data→pixel projection (used by the loop task, NOT here):
 #   px = Point2f(Makie.project(ax.scene, :data, :pixel, data_pt)[Vec(1,2)])  # no frame lag after update_state_before_display!

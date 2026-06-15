@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 const W_WIDE   = 2.0
 const W_TIGHT  = 0.55
 const N_FRAMES = 360

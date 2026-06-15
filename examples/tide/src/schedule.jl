@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # schedule.jl — the 6-press CCW tide sweep that drives the loop.
 #
 # The tide sweeps COUNTERCLOCKWISE around the block: W → SW → SE → E → NE → NW → back to W. Each

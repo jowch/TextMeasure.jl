@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas: view_width, view_center, camera_rect, W_WIDE, W_TIGHT, N_FRAMES
 using Test
 

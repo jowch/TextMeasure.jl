@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Woven: placement_table
 using TextMeasure: MonospaceBackend, measure
 using Test

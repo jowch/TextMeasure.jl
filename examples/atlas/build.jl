@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # build.jl — render the Atlas deliverables.
 #
 # Run from examples/atlas/:

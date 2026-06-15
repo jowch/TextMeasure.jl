@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas, Test
 
 @testset "Atlas" begin

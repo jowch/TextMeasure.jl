@@ -2,19 +2,18 @@
 #
 # What it does:
 #   * License-audit gate: every examples/*.jl file must carry an SPDX MIT header.
-#   * Per-demo matrix: boots each merged demo in a clean env (plain Pkg.instantiate +
-#     Pkg.test; in-repo deps resolved via each demo's [sources] table). Each demo's own
-#     test suite carries the milestone PROPERTY tests, which therefore run on every PR:
-#       - doi_infograph: title-autoshrink property (100 random titles fit)
-#       - cover:         20-random-inset property
-#       - layouts:       shape_pack invariants (segment_index ∈ range; per-band chords; overflow)
-#   * Font pinning: installs DejaVu Sans + Liberation Serif (+ poppler-utils for the
-#     pdftotext golden checks) before the CairoMakie demos render.
+#   * Per-demo matrix: boots each gallery piece in a clean env (plain Pkg.instantiate +
+#     Pkg.test; in-repo deps resolved via each piece's [sources] table). Each piece's own
+#     test suite carries its DETERMINISTIC GOLDEN (hash the computed layout table, never
+#     pixels) + property tests, which therefore run on every PR:
+#       - atlas:   geometric LoD/opacity golden + coast-clearance over the dive
+#       - tide:    per-band justify golden + measure-once-per-loop invariant
+#       - woven:   found-poem geometry golden
+#       - layouts: shape_pack invariants (segment_index ∈ range; per-band chords; overflow)
+#   * Font pinning: installs DejaVu Sans + Liberation Serif before the CairoMakie pieces
+#     render (the gallery pieces also bundle their own OFL fonts under examples/fonts).
 #   * Failure-to-issue plumbing: on scheduled/main runs, a demo failure opens/updates a
 #     canonical `[demo-health] <demo> regression` issue (deduped); a green run auto-closes it.
-#
-# Scope note: examples/asteroid_tui (#E) is intentionally EXCLUDED from the matrix — it is
-# WIP and not yet on main. Add it to `matrix.demo` when #E merges.
 #
 # Runner scope: ubuntu-latest only. The font-pinning step uses apt (Linux). The spec's
 # macOS/Windows matrix dimension is descoped here to keep the apt-based font pinning the
@@ -56,8 +55,8 @@ jobs:
       matrix:
         # Match CI.yml: compat floor + latest stable.
         version: ['1.11', '1']
-        # The six demos merged to main. asteroid_tui (#E) is added when it merges.
-        demo: [cover, doi_infograph, justification, layouts, map_feature, silhouettes]
+        # The three gallery pieces + the shared layouts library.
+        demo: [atlas, tide, woven, layouts]
     steps:
       - uses: actions/checkout@v6
 

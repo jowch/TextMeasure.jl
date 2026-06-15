@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas: atlas_pois, atlas_areals, POI, Areal, measure_boxes
 using GeometryBasics: Point2f, Rect2f
 using Test

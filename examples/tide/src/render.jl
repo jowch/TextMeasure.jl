@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # render.jl — the Makie renderer for The Tide. Draws ANY `frame_layout` result (the hero, every
 # loop frame, the samples, the thumbnail) — this is the pure RENDER layer; all layout lives in
 # frame.jl. Rendering conventions worth noting for a reader:

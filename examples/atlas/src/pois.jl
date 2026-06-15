@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # pois.jl — hand-placed feature anchors (the ONLY hand-positioned data in the
 # piece: each POI / areal carries a real geographic location. Everything that
 # follows — every label box — is MEASURED by TextMeasure and PLACED by

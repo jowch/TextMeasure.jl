@@ -29,18 +29,17 @@ line-breaking, CJK, hyphenation, justification, rotation.
 
 ## Demos / Gallery
 
-The [`examples/`](examples/) directory is a gallery of measurement-driven layout demos
-built on this engine — editorial covers, map feature pages, justification comparisons,
-shape-conforming text packing, and an adaptive academic-paper infographic. See
-**[examples/README.md](examples/README.md)** for the full index with screenshots and
-run instructions for each.
+The [`examples/`](examples/) directory is a small gallery of measurement-driven gallery
+pieces built on this engine — three registers on one house-style spine, *measure once,
+then **press · erase · place** — many*:
 
-The hero is the **DOIInfograph 6-up grid** (`examples/doi_infograph/`): six very
-different papers — short and 125-char titles, 8 to 446 authors, with and without
-abstracts — all composed by the *same* measurement-driven template. That uniformity
-is the proof of adaptiveness.
+- **[The Tide](examples/tide/)** — a wavy tide-line *kneads* a justified prose block, the
+  engine re-flowing it into the wave's wake every frame.
+- **[Woven](examples/woven/)** — the project's MIT license faded to a ghost, with two
+  found poems lit in place through it.
+- **[The Atlas](examples/atlas/)** — a seamless zoom-dive over the California coast whose
+  place-labels are measured here and placed collision-free, live, every frame.
 
-[![DOIInfograph 6-up grid](examples/doi_infograph/assets/grid_hero.png)](examples/doi_infograph/assets/grid_hero.pdf)
+See **[examples/README.md](examples/README.md)** for screenshots and run instructions.
 
-GitHub shrinks the PNG above; for per-panel detail open the high-resolution vector
-composite (selectable text): **[`grid_hero.pdf`](examples/doi_infograph/assets/grid_hero.pdf)**.
+[![The Atlas](examples/atlas/atlas-hero.png)](examples/atlas/)

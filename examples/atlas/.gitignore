@@ -1,5 +1,6 @@
-# Generated artifacts — never commit
+# Generated artifacts — never commit (EXCEPT the committed gallery hero)
 atlas-*.png
+!atlas-hero.png
 atlas-*.gif
 atlas-*.mp4
 strip-*.png

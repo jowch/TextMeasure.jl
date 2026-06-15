@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # frame.jl — PREPARE-ONCE core, the heart of the piece. The font engine is touched EXACTLY ONCE
 # (`prepare_tide`); every one of the N_FRAMES frames is then pure arithmetic over the cached
 # widths (`frame_layout`), calling `shape_pack` exactly once per frame. This measure-once /

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Tide
 using Tide: press_at, DIRECTIONS, N_FRAMES, FRAMES_PER_PRESS, N_PRESSES
 using Test

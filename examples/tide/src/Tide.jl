@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 module Tide
 
 # The Tide — a kinetic-typography gallery piece built on TextMeasure's layout engine.

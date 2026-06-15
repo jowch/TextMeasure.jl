@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # golden.jl — the DETERMINISTIC golden invariant for The Tide.
 #
 # THE GALLERY RULE: hash the COMPUTED layout table, never the rendered pixels. The table is built

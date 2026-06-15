@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 import TextMeasure
 using TextMeasure: Segment, Prepared, FontMetrics
 using TextMeasureLayouts: knuth_plass

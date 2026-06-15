@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Woven: save_png
 using CairoMakie
 using Test

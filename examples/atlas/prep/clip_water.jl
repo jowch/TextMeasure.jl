@@ -1,4 +1,5 @@
 #!/usr/bin/env julia
+# SPDX-License-Identifier: MIT
 # prep/clip_water.jl — fetch + clip inland-water layers (lakes + rivers) into the Atlas
 # basemap data dir, mirroring prep/clip.jl. Run manually (network-touching):
 #   julia --project examples/atlas/prep/clip_water.jl

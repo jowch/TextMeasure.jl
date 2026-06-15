@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # test_loop.jl — warm-start stability + seam-closure tests for the Atlas loop.
 #
 # These tests are headless (no ffmpeg, no video encode): they exercise the warm-start

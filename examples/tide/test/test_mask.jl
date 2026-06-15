@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Tide
 using Tide: prepare_tide, frame_layout, region_mask, make_band_interval, DIRECTIONS,
             CELL, N_FRAMES, FRAMES_PER_PRESS

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # The locked sea-prose for The Tide. ONE paragraph, no hard line breaks — it wraps to the
 # region and justifies full-time (the paragraph's last line stays ragged, as normal).
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env julia
+# SPDX-License-Identifier: MIT
 # prep/clip.jl — one-shot fetcher + clipper for Atlas basemap data
 # Run manually: julia --project examples/atlas/prep/clip.jl
 # Writes to examples/atlas/data/. DO NOT run from tests (network-touching).

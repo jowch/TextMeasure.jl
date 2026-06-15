@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using HouseStyle, Test, Colors
 
 @testset "HouseStyle loads" begin

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 module Woven
 
 # The project's own LICENSE, verbatim — the FULL body of /LICENSE: the grant paragraph,

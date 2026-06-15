@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # render.jl — CairoMakie render layer: basemap + measured/solved labels + areals + chrome
 #
 # Depends on: data.jl, pois.jl, camera.jl, lod.jl, place.jl

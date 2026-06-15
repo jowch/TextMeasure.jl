@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas: load_atlas_data, project_point, PHI0, KX
 using Test
 

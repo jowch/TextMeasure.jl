@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # loop.jl — the seamless MP4 loop + sample-frame + ghosted-thumbnail renderers.
 #
 # All reuse `draw_frame!` from render.jl. The loop bundle grows-to-fit on ALL 6 directions so the

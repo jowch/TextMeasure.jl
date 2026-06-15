@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas: font_px, visible, band_alpha, town_ground, pixels_per_unit,
              MIN_PX, SLO_PX, POI_GROUND, load_atlas_data
 using Atlas: atlas_areals

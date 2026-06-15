@@ -64,8 +64,7 @@ stretch/shrink glue, and `:newline` as forced breaks.
   matching `layout`).
 
 Justification is **out of TextMeasure's library scope** (see `CLAUDE.md`); `knuth_plass`
-lives here as a downstream demo utility. The renderable greedy-vs-K-P comparison exhibit is
-in [`examples/justification/`](../justification).
+lives here as a downstream demo utility, consumed by the gallery pieces (The Tide / Woven).
 
 ## Run the tests
 

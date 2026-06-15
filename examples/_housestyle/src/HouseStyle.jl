@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 module HouseStyle
 using Colors
 using SHA

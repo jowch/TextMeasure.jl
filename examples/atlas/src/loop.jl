@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # loop.jl — seamless zoom-dive MP4 loop + hero still + loopframe extraction.
 #
 # HONESTY INVARIANT (preserved every frame):

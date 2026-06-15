@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Tide
 using Tide: prepare_tide, frame_layout, _layout_at, PACK_HOOK, N_FRAMES
 using TextMeasure

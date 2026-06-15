@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # justify.jl — the DEMO-SIDE justify pass: spread each line's words flush to both margins.
 #
 # This is the key "no new engine surface" technique: `shape_pack` does all the line-breaking, and

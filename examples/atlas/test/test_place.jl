@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas: measure_boxes, solve_frame, recompute_overlaps, FramePlacement
 using Atlas: load_atlas_data
 using GeometryBasics: Point2f, Vec2f, Rect2f

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Tide
 using Tide: geometry_rows, tide_digest, GOLDEN_FRAMES
 using Test

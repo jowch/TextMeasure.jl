@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 import TextMeasure
 using TextMeasure: MakieBackend
 using TextMeasureLayouts: knuth_plass

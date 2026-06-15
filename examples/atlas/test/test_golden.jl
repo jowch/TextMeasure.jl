@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas
 using Atlas: golden_rows, atlas_digest, GOLDEN_FRAMES
 using Test

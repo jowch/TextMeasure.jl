@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # lod.jl — Geographic-scaling level-of-detail.
 #
 # Labels are sized in GEOGRAPHIC space: each feature has a "ground em" `g` measured in

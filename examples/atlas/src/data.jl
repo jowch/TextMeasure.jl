@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using CSV, GeoJSON, GeoInterface
 using GeometryBasics: Point2f
 

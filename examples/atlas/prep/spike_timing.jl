@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 spike_timing.jl — Atlas demo de-risk spike
 

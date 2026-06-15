@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 using Atlas
 using Atlas: load_atlas_data, assemble_frame, _data_to_px, _in_rect,
              _COAST_STRIDE, _COAST_BOX, _COAST_MAX, _SIDE_PAD, _FOOTER_H, _MASTHEAD_H,
