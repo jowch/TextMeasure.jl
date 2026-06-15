@@ -47,9 +47,9 @@ const _SIDE_PAD    = 16.0   # px left/right margin for chrome text
 const _TOP_PAD     = 10.0   # px from the very top edge to the masthead baseline anchor
 
 # ── Obstacle tuning ──────────────────────────────────────────────────────────
-const _COAST_STRIDE  = 3     # sample every Nth smoothed coastline vertex (denser barrier)
-const _COAST_BOX     = 12.0  # px side of each coastline obstacle box (overlaps → solid wall)
-const _COAST_MAX     = 320   # cap total coastline obstacle boxes (keeps the solve fast)
+const _COAST_STRIDE  = 2     # sample every Nth smoothed coastline vertex (dense barrier)
+const _COAST_BOX     = 14.0  # px side of each coastline obstacle box (fully overlaps → wall)
+const _COAST_MAX     = 400   # cap total coastline obstacle boxes (keeps the solve fast)
 const _AREAL_OBSTACLE_STRIDE = 2   # subsample every Nth per-glyph areal box for obstacles
 
 """
@@ -339,6 +339,7 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
         end
         coast_capped && break
     end
+    coast_capped && @warn "coastline obstacles hit the cap" cap=_COAST_MAX w=w
 
     # areals: geographic-scaling + CURVED. font_px = ground * P; show in [MIN_PX, max_px]
     # (coarse regions hand off when they outgrow the frame). Each areal is laid out
@@ -360,7 +361,11 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
     end
 
     # --- (c) ONE solve over all point labels, with obstacles ---
-    bounds = Rect2f(0, 0, W, H)
+    # bounds = the VISIBLE MAP RECT in ax-scene pixel space (where the anchors live, origin
+    # = axis bottom-left). Confines label boxes to the drawn map area so none extends past
+    # the neat-line. content_px_h matches the axis content height (page − masthead − footer).
+    content_px_h = H - Float32(_MASTHEAD_H) - Float32(_FOOTER_H)
+    bounds = Rect2f(0, 0, content_px_w, content_px_h)
     fp = if isempty(ids)
         FramePlacement(Int[], Point2f[], Vec2f[], Vec2f[], BitVector())
     else
@@ -497,23 +502,38 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     end
 
     # --- leaders (drawn first so markers sit on top) ---
-    # Leader runs anchor → the point on the label's BOX nearest the anchor (its near
-    # edge/corner), not the box center. nearest = clamp(anchor, c-half, c+half).
+    # ONE straight line from the marker EDGE to the label box's nearest point:
+    #   Pℓ = clamp(anchor, box_min, box_max)  (nearest point on the label box to the marker)
+    #   d  = normalize(Pℓ − anchor)           (direction from the dot toward the label)
+    #   marker-end = anchor + d·r             (r = that feature's dot radius + 1px)
+    # so the leader exits the dot's edge in the label's direction (label below ⇒ exits the
+    # bottom, not the side) and runs straight to the label's near edge.
     leader_pts = Point2f[]
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
-        (alpha_of(fs, fp.ids[k]) * get(af.band, fp.ids[k], 1.0)) < 0.05 && continue
+        id = fp.ids[k]
+        (alpha_of(fs, id) * get(af.band, id, 1.0)) < 0.05 && continue
         off = fp.offsets[k]; anc = fp.anchors[k]; sz = fp.sizes[k]
         mag = _norm2(off)
-        if mag > sz[1] * 0.5
-            c    = anc .+ off                          # label box center (px)
-            half = Vec2f(sz[1] / 2, sz[2] / 2)
-            near = Point2f(clamp(anc[1], c[1] - half[1], c[1] + half[1]),
-                           clamp(anc[2], c[2] - half[2], c[2] + half[2]))  # nearest box point
-            dir   = off / mag
-            push!(leader_pts, anc .+ dir .* 5.0f0)     # anchor end, trimmed by point_padding
-            push!(leader_pts, near)                     # near edge/corner of the label box
+        mag > sz[1] * 0.5 || continue                  # only when the label is pushed far
+
+        c    = anc .+ off                              # label box center (px)
+        half = Vec2f(sz[1] / 2, sz[2] / 2)
+        near = Point2f(clamp(anc[1], c[1] - half[1], c[1] + half[1]),   # Pℓ: nearest box point
+                       clamp(anc[2], c[2] - half[2], c[2] + half[2]))
+        toℓ = near .- anc; m2 = _norm2(Vec2f(toℓ...))
+        m2 > 1f-3 || continue
+        d   = toℓ ./ m2                                 # direction dot → label
+        # drawn dot radius + 1px for this feature
+        r = if id == _SLO_ID
+            7.0f0                                       # SLO hero dot 12px → r≈7
+        elseif af.kind_of[id] === :poi
+            5.0f0                                       # POI diamond → r≈5
+        else
+            (town_by_id[id].rank ≤ 5 ? 5.0f0 : 4.5f0)   # major 8px → 5, minor 7px → 4.5
         end
+        push!(leader_pts, anc .+ d .* r)                # marker-EDGE end
+        push!(leader_pts, near)                          # label near-edge end
     end
     if !isempty(leader_pts)
         linesegments!(ax, leader_pts; space = :pixel,

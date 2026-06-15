@@ -10,4 +10,5 @@ using Atlas, Test
     include("test_lod.jl")
     include("test_place.jl")
     include("test_fade.jl")
+    include("test_clearance.jl")
 end
