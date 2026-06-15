@@ -52,9 +52,28 @@ function _load_lines(path)
     out
 end
 
-function load_atlas_data()
-    coastline = _load_lines(joinpath(_DATA_DIR, "coastline.geojson"))
-    land      = _load_lines(joinpath(_DATA_DIR, "land.geojson"))
+# Chaikin corner-cutting: smooths an angular polyline by replacing each segment
+# with points at 1/4 and 3/4, keeping the endpoints. 2 iterations rounds the
+# coarse 10m generalization without inventing large new features.
+function _chaikin(pts::Vector{Point2f}, iters::Int = 2)
+    length(pts) < 3 && return pts
+    out = pts
+    for _ in 1:iters
+        new = Point2f[out[1]]
+        for i in 1:length(out)-1
+            p, q = out[i], out[i+1]
+            push!(new, Point2f(0.75f0 .* p .+ 0.25f0 .* q))
+            push!(new, Point2f(0.25f0 .* p .+ 0.75f0 .* q))
+        end
+        push!(new, out[end])
+        out = new
+    end
+    out
+end
+
+function load_atlas_data(; smooth::Int = 2)
+    coastline = [_chaikin(seg, smooth) for seg in _load_lines(joinpath(_DATA_DIR, "coastline.geojson"))]
+    land      = [_chaikin(ring, smooth) for ring in _load_lines(joinpath(_DATA_DIR, "land.geojson"))]
     towns = Town[]
     for r in CSV.File(joinpath(_DATA_DIR, "towns.csv"))
         push!(towns, Town(r.town_id, r.name,
