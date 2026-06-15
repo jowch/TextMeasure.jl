@@ -1,0 +1,35 @@
+Atlas Basemap Data — Provenance & License
+==========================================
+
+Coastline + Land
+----------------
+Source: Natural Earth 1:10m (https://www.naturalearthdata.com/)
+Via:    https://github.com/nvkelso/natural-earth-vector (public domain)
+Files:  ne_10m_coastline.geojson, ne_10m_land.geojson
+        Fetched and clipped by examples/atlas/prep/clip.jl
+Clip:   lon ∈ [-122.2, -119.6], lat ∈ [34.3, 37.0]
+        (Central California: Monterey Bay → Point Conception, with margin)
+Method: vertex-in-expanded-bbox filter (expand +0.5°) with path-splitting;
+        coastline stored as LineString sub-paths, land as Polygon rings.
+        EXPAND=0.5° keeps paths continuous at frame edges.
+License: Public Domain. No attribution required.
+
+Towns (towns.csv)
+-----------------
+Rows marked source=NE are verbatim Natural Earth ne_10m_populated_places rows
+(NAME, lon/lat, POP_MAX, SCALERANK extracted verbatim from the download).
+There are 8 NE rows — all towns whose centroid falls within the bbox rectangle.
+Note: Fresno (town_id=8) is technically in the bbox rectangle but is in the
+Central Valley, not on the coast; it is included as a verbatim NE row.
+
+Rows marked source=curated are hand-placed coastal towns:
+  lon/lat hand-entered from public knowledge (accurate to ~0.001°)
+  pop = approximate real population
+  rank = ordinal importance (lower = more important)
+  rank scheme: majors 1–5, mid 6–7, necklace 8–9
+
+town_id is a stable integer key (1..N), assigned once, never renumbered.
+It is the warm-start key in downstream rendering code.
+
+Generated: 2026-06-14
+Script:    examples/atlas/prep/clip.jl
