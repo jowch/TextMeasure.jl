@@ -19,6 +19,16 @@ _norm2(v::Vec2f) = sqrt(v[1]^2 + v[2]^2)
 # ── Palette (water colors not in HouseStyle) ────────────────────────────────
 const WATER      = Makie.RGBf((0xDC, 0xE3, 0xE5) ./ 255...)
 const WATER_LINE = Makie.RGBf((0x9F, 0xB2, 0xBA) ./ 255...)
+const WATER_INK  = Makie.RGBf((0x5E, 0x77, 0x85) ./ 255...)   # deeper water ink for italic hydrography
+
+# ── Field-survey type system (faces) ─────────────────────────────────────────
+# Land = Hanken Grotesk · Water/hydrography = Newsreader italic · Title = Newsreader
+# roman · Mono = Plex Mono (instrument readout only).
+const FACE_LAND    = HouseStyle.hanken("Regular")     # settlements, POIs, terrain
+const FACE_LAND_SB = HouseStyle.hanken("SemiBold")    # major settlements + region legend
+const FACE_WATER   = joinpath(HouseStyle.FONTS_DIR, "Newsreader", "Newsreader-Italic.ttf")  # hydrography
+const FACE_TITLE   = joinpath(HouseStyle.FONTS_DIR, "Newsreader", "Newsreader.ttf")          # masthead serif
+const FACE_MONO    = HouseStyle.plexmono("Regular")   # metrics / scale readout ONLY
 
 # Convenience: project a data-space Point2f to pixel coordinates.
 # IMPORTANT: call Makie.update_state_before_display!(fig) BEFORE using this.
@@ -42,12 +52,25 @@ const _COAST_BOX     = 8.0   # px side of each coastline obstacle box (centered 
 const _COAST_MAX     = 200   # cap total coastline obstacle boxes (keeps the solve fast)
 
 """
-    _new_axis(; pagepx=(1600, 1000)) -> (fig, ax)
+    _content_aspect(pagepx) -> Float64
 
-CairoMakie Figure+Axis sized for the page (px). WATER axis background, DataAspect,
-all decorations/spines hidden. Chrome space reserved top/bottom via the bbox inset.
+Aspect (w÷h) of the drawable map area: page minus side pads and masthead/footer.
+The camera window is matched to this so the map fills the bbox with no letterbox.
 """
-function _new_axis(; pagepx=(1600, 1000))
+function _content_aspect(pagepx)
+    W, H = pagepx
+    (W - 2 * _SIDE_PAD) / (H - _MASTHEAD_H - _FOOTER_H)
+end
+
+"""
+    _new_axis(; pagepx=(1350, 1080)) -> (fig, ax)
+
+CairoMakie Figure+Axis sized for the page (px, default 5:4). WATER axis background,
+all decorations/spines hidden. NO DataAspect — the axis FILLS its bbox; the camera
+window (camera_rect) is matched to the content aspect so geography isn't distorted.
+Chrome space reserved top/bottom via the bbox inset.
+"""
+function _new_axis(; pagepx=(1350, 1080))
     W, H = pagepx
     fig = Figure(size = (W, H), backgroundcolor = HouseStyle.PAPER)
 
@@ -55,7 +78,6 @@ function _new_axis(; pagepx=(1600, 1000))
         bbox = Makie.BBox(_SIDE_PAD, W - _SIDE_PAD,
                           _FOOTER_H, H - _MASTHEAD_H),
         backgroundcolor = WATER,
-        aspect = DataAspect(),
         xgridvisible    = false, ygridvisible    = false,
         xticksvisible   = false, yticksvisible   = false,
         xlabelvisible   = false, ylabelvisible   = false,
@@ -85,9 +107,49 @@ _in_rect(px, rect::Rect2f) =
     px[1] >= rect.origin[1] && px[1] <= rect.origin[1] + rect.widths[1] &&
     px[2] >= rect.origin[2] && px[2] <= rect.origin[2] + rect.widths[2]
 
-"Measure ONE areal's text box (w,h) in px via TextMeasure at its own fontsize."
+# ── Per-label type roles (face + ramp size + color + casing) ─────────────────
+# HONESTY: each label is MEASURED at exactly the (font, size) it is DRAWN with.
+
+"Measure ONE label string at its actual (font, size) → pixel box (w,h)."
+measure_label(name, font, size) = only(measure_boxes([name]; font = font, fontsize = Float64(size)))
+
+"Letterspace a caps string the way it's drawn (and therefore measured)."
+_letterspace(s) = join(collect(s), " ")
+
+"""
+Resolve a point feature (town/POI) to its drawn style:
+returns `(font, size_pt, color_role)` where color_role ∈ (:ink, :gray).
+- Major towns (rank ≤ 5): Hanken SemiBold, subhead 16, ink.
+- Minor towns: Hanken Regular, body 11, ink.
+- POIs (landmarks): Hanken Regular, caption 9, gray.
+"""
+function _point_style(kind::Symbol, is_major::Bool)
+    if kind === :town
+        is_major ? (FACE_LAND_SB, HouseStyle.RAMP.subhead, :ink) :
+                   (FACE_LAND,    HouseStyle.RAMP.body,    :ink)
+    else  # :poi
+        (FACE_LAND, HouseStyle.RAMP.caption, :gray)
+    end
+end
+
+"""
+The drawn string + face for an areal:
+- :water → Newsreader italic, TITLE-CASE (not letterspaced).
+- :range → Hanken, LETTERSPACED caps.
+Returns `(drawn_string, font)`.
+"""
+function _areal_drawn(a::Areal)
+    if a.kind === :water
+        (titlecase(a.text), FACE_WATER)
+    else
+        (_letterspace(a.text), FACE_LAND)
+    end
+end
+
+"Measure ONE areal at its ACTUAL face + size, using the SAME string it is drawn with."
 function _measure_areal_box(a::Areal)
-    only(measure_boxes([a.text]; fontsize = a.fontsize, font = HouseStyle.plexmono("Regular")))
+    s, font = _areal_drawn(a)
+    only(measure_boxes([s]; fontsize = a.fontsize, font = font))
 end
 
 """
@@ -124,9 +186,10 @@ Build a fresh figure for loop phase `p` and place EVERY label honestly:
 Cold start (no warm-state) — suitable for a single still. The loop task can later
 thread `prev`/`settled` through `solve_frame`.
 """
-function assemble_frame(d::AtlasData, p::Real; pagepx=(1600, 1000))
+function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
     fig, ax = _new_axis(; pagepx)
-    limits!(ax, camera_rect(p)...)
+    # camera window matched to the drawable content aspect → fills frame, no distortion
+    limits!(ax, camera_rect(p; aspect = _content_aspect(pagepx))...)
     Makie.update_state_before_display!(fig)   # camera matrices now reflect THIS frame
 
     W, H = Float32.(pagepx)
@@ -142,25 +205,27 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1600, 1000))
     ids      = Int[]
     px_anch  = Point2f[]
     names    = String[]
+    sizes    = Vec2f[]                 # measured per-label at its OWN (face, size)
     kind_of  = Dict{Int,Symbol}()
 
     for id in tids
         t  = town_by_id[id]
         px = _data_to_px(ax, t.pos)
         _in_rect(px, page_rect) || continue
+        font, size, _ = _point_style(:town, t.rank ≤ 5)
         push!(ids, id); push!(px_anch, px); push!(names, t.name)
+        push!(sizes, measure_label(t.name, font, size))   # measured at this label's face+size
         kind_of[id] = :town
     end
     for (k, poi) in enumerate(pois)
         px = _data_to_px(ax, poi.pos)
         _in_rect(px, page_rect) || continue
         pid = _POI_BASE + k
+        font, size, _ = _point_style(:poi, false)
         push!(ids, pid); push!(px_anch, px); push!(names, poi.name)
+        push!(sizes, measure_label(poi.name, font, size))  # measured at the POI face+size
         kind_of[pid] = :poi
     end
-
-    # --- (b) MEASURE every point label (TextMeasure) ---
-    sizes = isempty(names) ? Vec2f[] : measure_boxes(names)
 
     # --- (c) obstacles in PIXEL space ---
     obstacles = Rect2f[]
@@ -240,21 +305,25 @@ end
 """
     draw_areals!(ax, areals)
 
-Draw rotated, letterspaced region labels at their PIXEL anchors (space=:pixel) so the
-rotation is screen-true. Drawn UNDER the point labels (towns/POIs sit on top); the
-solver already keeps point labels off these via obstacle footprints.
-Colors: water/bay = WATER_LINE, range = HouseStyle.GRAY.
+Draw rotated region labels at their PIXEL anchors (space=:pixel), each in the SAME
+face/size/string it was MEASURED with:
+- :water → Newsreader ITALIC, title-case (not letterspaced), color WATER_INK.
+- :range → Hanken, letterspaced caps, color HouseStyle.GRAY.
+Drawn UNDER the point labels; the solver keeps point labels off these via obstacles.
+`areals` entries are `(raw_text, px_anchor, rotation_deg, kind)`; the raw_text is
+re-resolved to its drawn string + face here via the matching `Areal`.
 """
 function draw_areals!(ax, areals)
+    by_text = Dict(a.text => a for a in atlas_areals())
     for (text, apx, rot, kind) in areals
-        col = kind === :range ? HouseStyle.GRAY : WATER_LINE
-        spaced = join(collect(text), " ")   # fake letterspacing
-        # font size baked into the obstacle measurement is recovered per-areal below
+        a = by_text[text]
+        drawn, font = _areal_drawn(a)
+        col = kind === :range ? HouseStyle.GRAY : WATER_INK
         text!(ax, apx;
-            text        = spaced,
+            text        = drawn,
             rotation    = deg2rad(rot),
-            fontsize    = _areal_fontsize(text),
-            font        = HouseStyle.plexmono("Regular"),
+            fontsize    = a.fontsize,
+            font        = font,
             color       = col,
             align       = (:center, :center),
             space       = :pixel,
@@ -263,30 +332,22 @@ function draw_areals!(ax, areals)
     return ax
 end
 
-# Map an areal's text back to its declared fontsize (single source of truth = atlas_areals()).
-function _areal_fontsize(text::AbstractString)
-    for a in atlas_areals()
-        a.text == text && return a.fontsize
-    end
-    Float64(HouseStyle.RAMP.subhead)
-end
-
 """
-    draw_labels!(ax, d, af::AssembledFrame, fs::FadeState; fontsize=14.0)
+    draw_labels!(ax, d, af::AssembledFrame, fs::FadeState)
 
-Draw the point-label layer (towns + POIs) for one frame from the solved placement:
-- leaders (BRASS 0.5px) for labels pushed far from their anchor — drawn first;
-- markers: town dots (INK, brass SLO hero) with PAPER halo; POIs a hollow INK
-  diamond (PAPER fill, INK stroke) to read distinctly from filled town dots;
-- labels: Plex Mono `fontsize`, INK for towns, GRAY for POIs, at the solved offset.
+Draw the point-label layer (towns + POIs) for one frame from the solved placement.
+Each label is drawn at the SAME (face, size) it was measured at (Field-survey roles):
+- major towns → Hanken SemiBold subhead 16 INK; minor towns → Hanken Regular body 11 INK;
+- POIs → Hanken Regular caption 9 GRAY (hollow diamond marker).
+Leaders (BRASS 0.5px) for far-pushed labels drawn first; town dots (brass SLO hero)
+with PAPER halo; POIs hollow INK diamonds; markers on top.
 """
-function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState; fontsize = 14.0)
+function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     fp = af.fp
     isempty(fp.ids) && return ax
 
     town_by_id = Dict(t.town_id => t for t in d.towns)
     pois       = atlas_pois()
-    label_font = HouseStyle.plexmono("Regular")
 
     # resolve id → (data anchor pos, display name, kind)
     function feature(id)
@@ -315,11 +376,12 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState; fonts
             color = HouseStyle.BRASS, linewidth = 0.5, inspectable = false)
     end
 
-    # --- collect per-feature draw data ---
+    # --- collect markers (batched) + per-label text rows ---
     town_halo_pos = Point2f[]; town_halo_c = Makie.RGBAf[]; town_halo_sz = Float32[]
     town_dot_pos  = Point2f[]; town_dot_c  = Makie.RGBAf[]; town_dot_sz  = Float32[]
     poi_pos       = Point2f[]; poi_fill    = Makie.RGBAf[]; poi_stroke   = Makie.RGBAf[]
-    text_pos = Point2f[]; text_str = String[]; text_off = Vec2f[]; text_col = Makie.RGBAf[]
+    # text rows drawn one-by-one (each at its own measured face+size)
+    text_rows = NamedTuple[]   # (pos, name, off, font, size, color)
 
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
@@ -329,43 +391,42 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState; fonts
         pos, name, kind = feature(id)
 
         if kind === :town
-            is_slo  = id == _SLO_ID
-            ink_c   = is_slo ? HouseStyle.BRASS : HouseStyle.INK
-            t       = town_by_id[id]
+            is_slo   = id == _SLO_ID
+            t        = town_by_id[id]
             is_major = t.rank ≤ 5
-            dsz     = is_slo ? 11.0f0 : (is_major ? 8.0f0 : 7.0f0)
+            ink_c    = is_slo ? HouseStyle.BRASS : HouseStyle.INK
+            dsz      = is_slo ? 11.0f0 : (is_major ? 8.0f0 : 7.0f0)
             push!(town_halo_pos, pos)
             push!(town_halo_c, Makie.RGBAf(HouseStyle.PAPER.r, HouseStyle.PAPER.g, HouseStyle.PAPER.b, α))
             push!(town_halo_sz, dsz + 4.0f0)
             push!(town_dot_pos, pos)
             push!(town_dot_c, Makie.RGBAf(ink_c.r, ink_c.g, ink_c.b, α))
             push!(town_dot_sz, dsz)
-            push!(text_col, Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α))
+            font, size, _ = _point_style(:town, is_major)
+            col = Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α)
+            push!(text_rows, (pos=pos, name=name, off=fp.offsets[k], font=font, size=size, color=col))
         else  # :poi
             push!(poi_pos, pos)
             push!(poi_fill,   Makie.RGBAf(HouseStyle.PAPER.r, HouseStyle.PAPER.g, HouseStyle.PAPER.b, α))
             push!(poi_stroke, Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α))
-            push!(text_col, Makie.RGBAf(HouseStyle.GRAY.r, HouseStyle.GRAY.g, HouseStyle.GRAY.b, α))
+            font, size, _ = _point_style(:poi, false)
+            col = Makie.RGBAf(HouseStyle.GRAY.r, HouseStyle.GRAY.g, HouseStyle.GRAY.b, α)
+            push!(text_rows, (pos=pos, name=name, off=fp.offsets[k], font=font, size=size, color=col))
         end
-
-        push!(text_pos, pos)               # DATA anchor + solved pixel offset
-        push!(text_str, name)
-        push!(text_off, fp.offsets[k])
     end
 
-    # halos first, then labels, then markers on top
+    # halos first, then labels (per-label face/size), then markers on top
     if !isempty(town_halo_pos)
         scatter!(ax, town_halo_pos; color = town_halo_c, markersize = town_halo_sz,
                  strokewidth = 0, inspectable = false)
     end
 
-    if !isempty(text_pos)
-        text!(ax, text_pos; text = text_str, offset = text_off, markerspace = :pixel,
-              fontsize = fontsize, font = label_font, color = text_col,
+    for r in text_rows
+        text!(ax, r.pos; text = r.name, offset = r.off, markerspace = :pixel,
+              fontsize = Float64(r.size), font = r.font, color = r.color,
               align = (:center, :center), inspectable = false)
     end
 
-    # town ink dots
     if !isempty(town_dot_pos)
         scatter!(ax, town_dot_pos; color = town_dot_c, markersize = town_dot_sz,
                  strokewidth = 0, inspectable = false)
@@ -383,9 +444,10 @@ end
 """
     draw_chrome!(ax, fig, d; metrics::AbstractString="")
 
-Masthead "THE ATLAS" (Fraunces display, top-aligned so it clears the edge), brass
-dateline rule, region "CENTRAL COAST" (Fraunces title, top-aligned), 1.0px BRASS
-neat-line, corner cartouche/metrics (Plex Mono 9), footer (Plex Mono 9 brass).
+Masthead "The Atlas" (Newsreader roman display 44, title-case, top-aligned), brass
+dateline rule, region "C E N T R A L  C O A S T" (Hanken SemiBold subhead 16,
+letterspaced caps, top-aligned), 1.0px BRASS neat-line, corner metrics (Plex Mono 9),
+footer (Plex Mono 9 brass).
 """
 function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
     W, H = fig.scene.viewport[].widths
@@ -394,16 +456,16 @@ function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
 
     title_y = H - Float32(_TOP_PAD)   # anchor near the very top, top-aligned text
 
-    # Masthead — top-left, top-aligned so the cap-line clears the page edge
+    # Masthead — Newsreader roman, title-case, top-left, top-aligned
     text!(scene, Point2f(_SIDE_PAD, title_y);
-        text = "THE ATLAS", fontsize = Float64(HouseStyle.RAMP.display),
-        font = HouseStyle.fraunces("144pt-Regular"), color = HouseStyle.INK,
+        text = "The Atlas", fontsize = Float64(HouseStyle.RAMP.display),
+        font = FACE_TITLE, color = HouseStyle.INK,
         align = (:left, :top), space = :pixel, inspectable = false)
 
-    # Region label — top-right, top-aligned
+    # Region label — Hanken SemiBold, letterspaced caps, top-right, top-aligned
     text!(scene, Point2f(W - _SIDE_PAD, title_y);
-        text = "CENTRAL COAST", fontsize = Float64(HouseStyle.RAMP.title),
-        font = HouseStyle.fraunces("144pt-Regular"), color = HouseStyle.INK,
+        text = _letterspace("CENTRAL COAST"), fontsize = Float64(HouseStyle.RAMP.subhead),
+        font = FACE_LAND_SB, color = HouseStyle.INK,
         align = (:right, :top), space = :pixel, inspectable = false)
 
     # Brass dateline rule under the masthead (just above the axis top)
@@ -421,18 +483,17 @@ function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
          Point2f(ax_left,  ax_top),    Point2f(ax_left,  ax_bottom)];
         color = HouseStyle.BRASS, linewidth = 1.0, space = :pixel, inspectable = false)
 
-    footer_font = HouseStyle.plexmono("Regular")
-
+    # Metrics + footer — Plex Mono (the instrument readout), BRASS caption 9
     if !isempty(metrics)
         text!(scene, Point2f(ax_right - Float32(_SIDE_PAD), ax_bottom + 6.0f0);
             text = metrics, fontsize = Float64(HouseStyle.RAMP.caption),
-            font = footer_font, color = HouseStyle.BRASS,
+            font = FACE_MONO, color = HouseStyle.BRASS,
             align = (:right, :bottom), space = :pixel, inspectable = false)
     end
 
     text!(scene, Point2f(W / 2.0f0, Float32(_FOOTER_H) / 2.0f0);
         text = HouseStyle.footer("The Atlas"), fontsize = Float64(HouseStyle.RAMP.caption),
-        font = footer_font, color = HouseStyle.BRASS,
+        font = FACE_MONO, color = HouseStyle.BRASS,
         align = (:center, :center), space = :pixel, inspectable = false)
 
     return fig
@@ -447,7 +508,7 @@ Render a single honest frame at loop phase `p` and save to `path`. Assembles the
 measured+solved frame, builds a fully-visible FadeState, draws basemap → areals →
 labels → chrome.
 """
-function _dev_still(p::Real, path::AbstractString; pagepx=(1600, 1000))
+function _dev_still(p::Real, path::AbstractString; pagepx=(1350, 1080))
     d = load_atlas_data()
     fig, ax, af = assemble_frame(d, p; pagepx)
     fp = af.fp

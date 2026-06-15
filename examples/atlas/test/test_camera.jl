@@ -15,4 +15,12 @@ using Test
     # center pans toward the cluster and returns
     @test view_center(0.5)[1] > view_center(0.0)[1]   # panned east (less negative lon)
     @test collect(view_center(1.0)) ≈ collect(view_center(0.0))
+
+    # camera_rect: the data window matches the requested CONTENT aspect, so an
+    # isotropic projection fills the frame without distortion. width/height of the
+    # returned rect (in map-units) ≈ aspect.
+    for A in (5/4, 16/10, 1.0)
+        xmin, xmax, ymin, ymax = camera_rect(0.3; aspect = A)
+        @test (xmax - xmin) / (ymax - ymin) ≈ A
+    end
 end

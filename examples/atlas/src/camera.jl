@@ -24,13 +24,21 @@ function view_center(p)
       (1-d)*_CWIDE[2] + d*_CTIGHT[2] )
 end
 
-"Axis limits Rect (in projected map-units) for loop phase p; aspect from page (w:h)."
-function camera_rect(p; aspect = 16/10)
+"""
+    camera_rect(p; aspect)
+
+Axis limits Rect (in projected map-units) for loop phase p. `aspect` is the
+**content** aspect (drawable width÷height of the axis bbox in px); the returned
+window matches it so the isotropic KX/cosφ0 projection fills the frame WITHOUT
+geographic distortion. `view_width` sets the longitudinal half-extent; the
+latitudinal half-extent is divided by `aspect`. Default 5:4 (the page default).
+"""
+function camera_rect(p; aspect = 5/4)
     w_deg = view_width(p)
     cx, cy = view_center(p)
-    # project center + half-extents into map-units (x compressed by KX)
-    hx = KX * w_deg / 2
-    hy = (w_deg / aspect) / 2
+    # project center + half-extents into map-units (x already compressed by KX).
+    hx = KX * w_deg / 2          # longitudinal half-extent (map-units)
+    hy = hx / aspect             # latitudinal half-extent → window matches content aspect
     px = KX * cx
     (px - hx, px + hx, cy - hy, cy + hy)   # (xmin,xmax,ymin,ymax) for limits!
 end

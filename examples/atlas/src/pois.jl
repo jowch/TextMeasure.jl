@@ -55,10 +55,11 @@ Bay) appear on the TIGHT shots. Each row is
 `(text, lon, lat, rotation_deg, fontsize, kind, wmin°, wmax°)` — easy to nudge visually.
 """
 function atlas_areals()
+    # fontsizes are √2 RAMP tiers (display 44 · deck 31 · subhead 16) — never off-ramp.
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 34.0, :water, 1.2, Inf),
-        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 24.0, :range, 0.9, Inf),
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 14.0, :water, 0.0, 1.0),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 44.0, :water, 1.2, Inf),  # display
+        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 31.0, :range, 0.9, Inf),  # deck
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 16.0, :water, 0.0, 1.0),  # subhead
     ]
     [Areal(txt, Point2f(project_point(lon, lat)...), rot, fs, kind, wmin, wmax)
      for (txt, lon, lat, rot, fs, kind, wmin, wmax) in raw]
