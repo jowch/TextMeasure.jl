@@ -17,7 +17,7 @@ using GeometryBasics: Point2f, Vec2f, Rect2f
 _norm2(v::Vec2f) = sqrt(v[1]^2 + v[2]^2)
 
 # ── Palette (water colors not in HouseStyle) ────────────────────────────────
-const WATER      = Makie.RGBf((0xDC, 0xE3, 0xE5) ./ 255...)
+const WATER      = Makie.RGBf((0xD2, 0xDC, 0xDF) ./ 255...)   # deeper/cooler sea field
 const WATER_LINE = Makie.RGBf((0x9F, 0xB2, 0xBA) ./ 255...)
 const WATER_INK  = Makie.RGBf((0x5E, 0x77, 0x85) ./ 255...)   # deeper water ink for italic hydrography
 
@@ -421,7 +421,7 @@ function draw_basemap!(ax, d::AtlasData)
     end
 
     lon_min, lon_max, lat_min, lat_max = _data_range(d)
-    grat_c = Makie.RGBAf(HouseStyle.BRASS.r, HouseStyle.BRASS.g, HouseStyle.BRASS.b, 0.35)
+    grat_c = Makie.RGBAf(HouseStyle.BRASS.r, HouseStyle.BRASS.g, HouseStyle.BRASS.b, 0.30)
     for lon in lon_min:0.5:lon_max
         pts = [Point2f(project_point(lon, lat)) for lat in range(lat_min, lat_max; length=64)]
         lines!(ax, pts; color = grat_c, linewidth = 0.25, inspectable = false)
@@ -524,6 +524,8 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     town_halo_pos = Point2f[]; town_halo_c = Makie.RGBAf[]; town_halo_sz = Float32[]
     town_dot_pos  = Point2f[]; town_dot_c  = Makie.RGBAf[]; town_dot_sz  = Float32[]
     poi_pos       = Point2f[]; poi_fill    = Makie.RGBAf[]; poi_stroke   = Makie.RGBAf[]
+    # SLO hero dot is drawn SEPARATELY, on top of everything (brass + ink ring).
+    slo_pos = Point2f(NaN, NaN); slo_alpha = 0.0
     # text rows drawn one-by-one (each at its own measured face+size)
     text_rows = NamedTuple[]   # (pos, name, off, font, size, color)
 
@@ -542,13 +544,19 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
             t        = town_by_id[id]
             is_major = t.rank ≤ 5
             ink_c    = is_slo ? HouseStyle.BRASS : HouseStyle.INK
-            dsz      = is_slo ? 11.0f0 : (is_major ? 8.0f0 : 7.0f0)
+            dsz      = is_major ? 8.0f0 : 7.0f0          # batched town dot size
+            # halo for ALL towns (incl. SLO) — paper ring under the dot
+            halo_sz  = is_slo ? 16.0f0 : dsz + 4.0f0     # SLO halo sized to its 12px hero dot
             push!(town_halo_pos, pos)
             push!(town_halo_c, Makie.RGBAf(HouseStyle.PAPER.r, HouseStyle.PAPER.g, HouseStyle.PAPER.b, α))
-            push!(town_halo_sz, dsz + 4.0f0)
-            push!(town_dot_pos, pos)
-            push!(town_dot_c, Makie.RGBAf(ink_c.r, ink_c.g, ink_c.b, α))
-            push!(town_dot_sz, dsz)
+            push!(town_halo_sz, halo_sz)
+            if is_slo
+                slo_pos = pos; slo_alpha = α            # drawn separately, on top
+            else
+                push!(town_dot_pos, pos)
+                push!(town_dot_c, Makie.RGBAf(ink_c.r, ink_c.g, ink_c.b, α))
+                push!(town_dot_sz, dsz)
+            end
             font, _ = _point_style(:town, is_major)
             col = Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α)
             push!(text_rows, (pos=pos, name=name, off=fp.offsets[k], font=font, size=size, color=col))
@@ -583,6 +591,17 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
         scatter!(ax, poi_pos; marker = :diamond, markersize = 9.0f0,
                  color = poi_fill, strokecolor = poi_stroke, strokewidth = 1.0,
                  inspectable = false)
+    end
+
+    # SLO hero dot — drawn LAST, on top of everything: BRASS fill, 12px, 1.5px INK ring
+    # (the one allowed 1.5 stroke; it's a point marker, not a map line). Its PAPER halo
+    # was already drawn in the batch. Pinned alpha (= 1 in the still).
+    if slo_alpha > 0.01
+        scatter!(ax, [slo_pos];
+            marker = :circle, markersize = 12.0f0,
+            color = Makie.RGBAf(HouseStyle.BRASS.r, HouseStyle.BRASS.g, HouseStyle.BRASS.b, slo_alpha),
+            strokecolor = Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, slo_alpha),
+            strokewidth = 1.5, inspectable = false)
     end
 
     return ax
