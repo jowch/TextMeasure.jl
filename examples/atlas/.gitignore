@@ -1,0 +1,8 @@
+# Generated artifacts — never commit
+atlas-*.png
+atlas-*.gif
+atlas-dive.mp4
+strip-*.png
+loopframe-*.png
+_frames/
+Manifest.toml

@@ -259,17 +259,22 @@ struct AssembledFrame
 end
 
 """
-    assemble_frame(d, p; pagepx) -> (fig, ax, AssembledFrame)
+    assemble_frame(d, p; pagepx, prev, settled) -> (fig, ax, AssembledFrame)
 
 Build a fresh figure for loop phase `p` and place EVERY label honestly:
 - point labels (active towns + on-screen POIs) measured via TextMeasure, placed by
   one `solve_cluster` call against each other, the sampled coastline, and the areals;
 - areals laid out glyph-by-glyph along an arc (each glyph MEASURED), their per-glyph
   boxes added as obstacles.
-Cold start (no warm-state) — suitable for a single still. The loop task can later
-thread `prev`/`settled` through `solve_frame`.
+
+`prev`: Dict{Int,Vec2f} mapping feature id → prior frame's solved offset (warm-start).
+`settled`: Set{Int} of ids to pin (empty for video — labels must adapt as boxes grow).
+Both default to empty so `_dev_still` remains cold/unchanged.
 """
-function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
+function assemble_frame(d::AtlasData, p::Real;
+                        pagepx  = (1620, 1080),
+                        prev    :: Dict{Int,Vec2f} = Dict{Int,Vec2f}(),
+                        settled :: Set{Int}        = Set{Int}())
     fig, ax = _new_axis(; pagepx)
     # camera window matched to the drawable content aspect → fills frame, no distortion
     limits!(ax, camera_rect(p; aspect = _content_aspect(pagepx))...)
@@ -360,7 +365,7 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
         push!(areals, (a.kind, fpx, ba, glyphs))
     end
 
-    # --- (c) ONE solve over all point labels, with obstacles ---
+    # --- (c) ONE solve over all point labels, with obstacles + warm-start ---
     # bounds = the VISIBLE MAP RECT in ax-scene pixel space (where the anchors live, origin
     # = axis bottom-left). Confines label boxes to the drawn map area so none extends past
     # the neat-line. content_px_h matches the axis content height (page − masthead − footer).
@@ -370,7 +375,7 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
         FramePlacement(Int[], Point2f[], Vec2f[], Vec2f[], BitVector())
     else
         solve_frame(ids, px_anch, sizes, bounds;
-                    prev = Dict{Int,Vec2f}(), settled = Set{Int}(), obstacles = obstacles)
+                    prev = prev, settled = settled, obstacles = obstacles)
     end
 
     return fig, ax, AssembledFrame(fp, kind_of, fpx_of, band_of, areals, obstacles, coast_capped)
