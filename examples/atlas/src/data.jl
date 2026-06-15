@@ -20,6 +20,8 @@ struct AtlasData
     coastline :: Vector{Vector{Point2f}}   # projected polylines
     land      :: Vector{Vector{Point2f}}   # projected rings
     towns     :: Vector{Town}
+    lakes     :: Vector{Vector{Point2f}}   # projected lake rings (inland water polygons)
+    rivers    :: Vector{Vector{Point2f}}   # projected river centrelines (hydrography lines)
 end
 
 const _DATA_DIR = normpath(joinpath(@__DIR__, "..", "data"))
@@ -37,6 +39,11 @@ function _load_lines(path)
         if trait isa GeoInterface.LineStringTrait
             # coords::Vector{Tuple{Float32,Float32}} — one polyline per feature
             push!(out, [_pt(p) for p in coords])
+        elseif trait isa GeoInterface.PolygonTrait
+            # coords::Vector{rings}; ring = Vector{Tuple} — one ring list per polygon
+            for ring in coords
+                push!(out, [_pt(p) for p in ring])
+            end
         elseif trait isa GeoInterface.MultiPolygonTrait
             # coords::Vector{polygons} where polygon = Vector{rings},
             # ring = Vector{Tuple{Float32,Float32}}
@@ -71,14 +78,24 @@ function _chaikin(pts::Vector{Point2f}, iters::Int = 2)
     out
 end
 
+# Optional layer (lakes/rivers were added after the first basemap); load gracefully so a
+# data dir without them still works. Chaikin-smoothed like the coast.
+function _load_optional(name, smooth)
+    path = joinpath(_DATA_DIR, name)
+    isfile(path) || return Vector{Point2f}[]
+    [_chaikin(seg, smooth) for seg in _load_lines(path)]
+end
+
 function load_atlas_data(; smooth::Int = 2)
     coastline = [_chaikin(seg, smooth) for seg in _load_lines(joinpath(_DATA_DIR, "coastline.geojson"))]
     land      = [_chaikin(ring, smooth) for ring in _load_lines(joinpath(_DATA_DIR, "land.geojson"))]
+    lakes     = _load_optional("lakes.geojson",  smooth)
+    rivers    = _load_optional("rivers.geojson", smooth)
     towns = Town[]
     for r in CSV.File(joinpath(_DATA_DIR, "towns.csv"))
         push!(towns, Town(r.town_id, r.name,
                           Point2f(project_point(r.lon, r.lat)...),
                           r.pop, r.rank, r.source))
     end
-    AtlasData(coastline, land, towns)
+    AtlasData(coastline, land, towns, lakes, rivers)
 end

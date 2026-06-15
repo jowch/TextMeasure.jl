@@ -12,7 +12,7 @@ using Test
     areals = atlas_areals()
     @test !isempty(areals)
     @test all(a -> a isa Areal, areals)
-    @test all(a -> a.kind in (:water, :range), areals)
+    @test all(a -> a.kind in (:water, :range, :river), areals)
     @test all(a -> a.ground > 0, areals)              # geographic em (degrees)
     @test all(a -> a.max_px > 0, areals)              # upper hand-off band
     @test all(a -> isfinite(a.sweep), areals)         # curvature (deg, 0 = straight)

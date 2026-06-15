@@ -63,17 +63,12 @@ function render_loop(path::String = joinpath(@__DIR__, "..", "atlas-dive.mp4");
     # Accumulate per-frame max offset-delta for the stability report.
     frame_deltas = Float32[]   # one value per frame (the MAX delta over shared labels)
 
-    fs = FadeState()           # carry fade state across frames so labels fade in cleanly
-
     @info "render_loop: rendering $n frames …" pagepx scale fps crf
 
     for frame in 0:(n - 1)
         p  = frame / n
         fig, ax, af = assemble_frame(d, p; pagepx, prev)
         fp = af.fp
-
-        # FadeState: register the active id set, advance clock.
-        update_fade!(fs, fp.ids, frame)
 
         # Per-frame warm-start stability: max |offset_new − offset_prev| over shared ids.
         if !isempty(prev) && !isempty(fp.ids)
@@ -97,8 +92,9 @@ function render_loop(path::String = joinpath(@__DIR__, "..", "atlas-dive.mp4");
         metrics  = "w $(round(w; digits=2))° · $(n_placed) placed"
 
         draw_basemap!(ax, d)
+        draw_hydrography!(ax, d, w)
         draw_areals!(ax, af.areals)
-        draw_labels!(ax, d, af, fs)
+        draw_labels!(ax, d, af)
         draw_chrome!(ax, fig, d; metrics, w_deg = w, pagepx)
 
         save(joinpath(tmp, "f$(lpad(frame, 4, '0')).png"), fig; px_per_unit = scale)
@@ -158,7 +154,7 @@ the inward zoom, many labels visible). Cold placement (no warm-start) — fine f
 Returns `(; path, pagepx, scale, p, bytes)`.
 """
 function render_hero(path::String = joinpath(@__DIR__, "..", "atlas-hero.png");
-                     p::Real     = 0.40,
+                     p::Real     = 0.33,
                      scale::Real = 8,
                      pagepx      = (1620, 1080))
     out = _dev_still(p, path; pagepx)

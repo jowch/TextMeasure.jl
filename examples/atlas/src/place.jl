@@ -26,15 +26,25 @@ const _PARAMS = RepelParams(; only_move=:both, box_padding=5.0,
                             point_padding=5.5, min_segment_length=2.0)
 const _SOLVER = ProjectionSolver(_PARAMS)
 
+# Cartographic default: seed an uncontested label to the UPPER-RIGHT of its dot (Imhof's
+# preferred position) instead of the solver's bare default (straight below). The seed offset
+# puts the label box's lower-left corner ~_SEED_PAD px off the anchor.
+const _SEED_PAD = 5.0f0
+_seed_offset(sz::Vec2f) = Vec2f(sz[1]/2 + _SEED_PAD, sz[2]/2 + _SEED_PAD)
+
 """
 One frame's placement. `prev`: town_id→prior offset (warm start). `settled`: ids to pin.
 `obstacles`: fixed pixel-space `Rect2f` boxes (coastline samples, areal footprints) that
 every label box is pushed ≥ point_padding px clear of. Default empty keeps the existing
 callers/tests unchanged.
 """
-function solve_frame(ids, anchors, sizes, bounds; prev, settled, obstacles::Vector{Rect2f}=Rect2f[])
-    init = any(id -> haskey(prev, id), ids) ?
-           Vec2f[get(prev, id, Vec2f(0,0)) for id in ids] : nothing
+function solve_frame(ids, anchors, sizes, bounds; prev, settled, obstacles::Vector{Rect2f}=Rect2f[],
+                     seeds::Dict{Int,Vec2f}=Dict{Int,Vec2f}())
+    # Always seed: warm-started ids keep their prior offset (continuity); everyone else starts
+    # at their geography-aware seed (caller-supplied) or the upper-right default. The solver
+    # then relaxes/legalizes from there.
+    init = Vec2f[haskey(prev, ids[i]) ? prev[ids[i]] :
+                 get(seeds, ids[i], _seed_offset(sizes[i])) for i in eachindex(ids)]
     pin  = BitVector(id in settled && haskey(prev, id) for id in ids)
     any(pin) || (pin = nothing)   # pass nothing when nothing is pinned (avoid length check)
     # pinned_offsets must be length n when pin_mask is provided (solver contract)

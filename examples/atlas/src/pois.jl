@@ -72,9 +72,14 @@ function atlas_areals()
     # ~w1.2, hands off ~w0.68; Estero swells in the cluster. Range anchor nudged east to
     # -120.78 so it stays in-frame at the narrower W_WIDE=2.0.
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.070, :water, 120.0,  26.0, 0.0),
-        ("SANTA LUCIA RANGE",  -120.78, 35.52, -42.0, 0.045, :range, 130.0, -18.0, 0.25),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.047, :water, 120.0,  26.0, 0.0),
+        ("SANTA LUCIA RANGE",  -120.78, 35.52, -42.0, 0.045, :range, 100.0, -18.0, 0.25),
         ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.018, :water, 100.0,  28.0, 0.0),
+        # Salinas River — kind :river: opacity is gated by the hydrography LoD (river_alpha),
+        # NOT band_alpha/max_px, so the label appears with the river line at valley scale.
+        # Anchor sits ON the river's on-view reach (lon≈-120.66, lat≈35.52 from the centerline
+        # data) and the tilt/sweep follow its local NW–SE run, so it hugs the line at all zooms.
+        ("SALINAS RIVER",      -120.66, 35.52, -48.0, 0.013, :river, 300.0,  14.0, 0.0),
     ]
     [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px, sweep, tracking)
      for (txt, lon, lat, rot, ground, kind, max_px, sweep, tracking) in raw]

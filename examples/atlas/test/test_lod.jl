@@ -20,11 +20,13 @@ const _CPW = 1620 - 2 * 16   # 1588 px
     @test !visible(font_px(g, 3.0, _CPW), Inf, false)     # tiny wide → hidden
     @test  visible(font_px(g, 0.6, _CPW), Inf, false)     # grown past floor → shown
 
-    # Pacific Ocean: shown on the wide establishing shot, HANDS OFF (hidden) once it
-    # outgrows its max_px deeper in the dive.
+    # Pacific Ocean SCALES WITH ALTITUDE: shown on the wide establishing shot and KEEPS growing
+    # as the dive tightens — no max_px hand-off any more (render thins it via areal_recede, not by
+    # hiding). With the fade-in-only band (max = Inf) it stays visible as it swells, cloud-like.
     ocean = only(filter(a -> a.text == "PACIFIC OCEAN", atlas_areals()))
-    @test  visible(font_px(ocean.ground, 3.0, _CPW), ocean.max_px, false)  # in band at w3
-    @test !visible(font_px(ocean.ground, 0.8, _CPW), ocean.max_px, false)  # outgrew max_px → off
+    @test font_px(ocean.ground, 3.0, _CPW) < font_px(ocean.ground, 0.8, _CPW)  # grows as we dive
+    @test visible(font_px(ocean.ground, 3.0, _CPW), Inf, false)                # shown wide
+    @test visible(font_px(ocean.ground, 0.8, _CPW), Inf, false)                # STILL shown deeper
 
     @test SLO_PX ≥ MIN_PX
     @test POI_GROUND > 0

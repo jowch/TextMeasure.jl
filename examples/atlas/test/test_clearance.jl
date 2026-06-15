@@ -1,7 +1,7 @@
 using Atlas
 using Atlas: load_atlas_data, assemble_frame, _data_to_px, _in_rect,
              _COAST_STRIDE, _COAST_BOX, _COAST_MAX, _SIDE_PAD, _FOOTER_H, _MASTHEAD_H,
-             alpha_of, FadeState, update_fade!, FADE_FRAMES, atlas_pois
+             atlas_pois
 using GeometryBasics: Point2f, Vec2f, Rect2f
 using Makie: limits!
 import Makie
@@ -42,12 +42,11 @@ using Test
 
     for p in 0.0:0.09:1.0
         fig, ax, af = assemble_frame(d, p; pagepx)
-        fs = FadeState(); update_fade!(fs, af.fp.ids, 0); fs._last = FADE_FRAMES
         cb = coast_boxes(ax); fp = af.fp
         for k in eachindex(fp.ids)
             fp.dropped[k] && continue
             id = fp.ids[k]
-            (alpha_of(fs, id) * get(af.band, id, 1.0)) > 0.02 || continue
+            get(af.band, id, 1.0) > 0.02 || continue
             c = fp.anchors[k] .+ fp.offsets[k]; s = fp.sizes[k]
             lb = Rect2f(c[1]-s[1]/2, c[2]-s[2]/2, s[1], s[2])
             # HARD requirement: no drawn label touches the coast barrier…

@@ -37,6 +37,22 @@ It is the warm-start key in downstream rendering code.
   inland/coastal SLO-county towns. lon/lat hand-entered from public knowledge
   (~0.001°), pop approximate, rank by size on the same majors/mid/necklace scheme.
 
+Inland water — lakes.geojson + rivers.geojson
+----------------------------------------------
+Source: Natural Earth 1:10m (https://www.naturalearthdata.com/), public domain.
+Files:  ne_10m_lakes + ne_10m_lakes_north_america (lakes, Polygon),
+        ne_10m_rivers_lake_centerlines (rivers, LineString).
+        Fetched and clipped by examples/atlas/prep/clip_water.jl (same bbox + EXPAND=0.5°
+        vertex filter / path-splitting as clip.jl).
+In-bbox content (this is ALL NE 10m carries here):
+  rivers : Salinas (threads through the view) + San Joaquin (inland edge).
+  lakes  : Millerton Lake, San Luis Reservoir (both near the NE/E bbox edge, normally
+           outside the dive view).
+NOTE: the smaller SLO-county reservoirs labelled as POIs (Lopez Lake, Santa Margarita
+Lake, Lake Nacimiento) are NOT in Natural Earth 10m — too small for that scale — so they
+remain text POIs with hand-authored anchors, not water polygons.
+License: Public Domain. No attribution required.
+
 POIs / landmarks (atlas_pois() in src/pois.jl)
 ----------------------------------------------
 ALL landmarks are hand-placed (curated), not from Natural Earth. lon/lat are from

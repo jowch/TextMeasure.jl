@@ -9,7 +9,6 @@ using Atlas, Test
     include("test_camera.jl")
     include("test_lod.jl")
     include("test_place.jl")
-    include("test_fade.jl")
     include("test_clearance.jl")
     include("test_loop.jl")
 end

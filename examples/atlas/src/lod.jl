@@ -30,6 +30,15 @@ function town_ground(rank::Integer)::Float64
                0.00744    # ranks 8–9 → enter ~w0.9
 end
 
+# ── Hydrography level-of-detail (rivers + lakes) ──────────────────────────────
+# Inland water is mid-scale detail: absent at the wide ocean overview (which reads as
+# coast + ranges), fading in as the camera reaches valley scale. Opacity by view width.
+const _RIVER_W_HI = 1.45   # at/above this width: no hydrography (overview stays clean)
+const _RIVER_W_LO = 0.95   # at/below this width: hydrography at full strength
+
+"Hydrography opacity (rivers/lakes) for view width `w_deg` — 0 at the overview → 1 at valley scale."
+river_alpha(w_deg::Real)::Float64 = smoothstep((_RIVER_W_HI - w_deg) / (_RIVER_W_HI - _RIVER_W_LO))
+
 # ── Scaling math ──────────────────────────────────────────────────────────────
 
 "Pixels per map-unit at view width `w_deg` for a content area `content_px_w` wide."

@@ -1,6 +1,6 @@
 # render.jl — CairoMakie render layer: basemap + measured/solved labels + areals + chrome
 #
-# Depends on: data.jl, pois.jl, camera.jl, lod.jl, place.jl, fade.jl
+# Depends on: data.jl, pois.jl, camera.jl, lod.jl, place.jl
 # `using CairoMakie` lives here deliberately — kept out of place.jl.
 #
 # HONESTY INVARIANT: every point label (town + POI) is MEASURED by TextMeasure
@@ -16,6 +16,67 @@ using GeometryBasics: Point2f, Vec2f, Rect2f
 # Inline 2-D vector magnitude (avoids LinearAlgebra stdlib dep declaration)
 _norm2(v::Vec2f) = sqrt(v[1]^2 + v[2]^2)
 
+"Min-dimension overlap (px) of two boxes; >0 ⇒ they overlap in both axes."
+function _box_ovl(a::Rect2f, b::Rect2f)
+    ox = min(a.origin[1]+a.widths[1], b.origin[1]+b.widths[1]) - max(a.origin[1], b.origin[1])
+    oy = min(a.origin[2]+a.widths[2], b.origin[2]+b.widths[2]) - max(a.origin[2], b.origin[2])
+    min(ox, oy)
+end
+
+"""
+Leader length: distance from the anchor (dot) to the NEAREST point of a label box at offset
+`off` with size `sz`. This is the visible gap a leader would span — NOT the centre offset
+(which grows with label WIDTH, so wide labels at their natural upper-right rest position have a
+large centre offset but a tiny leader). 0 when the box covers the dot.
+"""
+function _leader_len(off::Vec2f, sz::Vec2f)
+    nx = clamp(0f0, off[1]-sz[1]/2, off[1]+sz[1]/2)
+    ny = clamp(0f0, off[2]-sz[2]/2, off[2]+sz[2]/2)
+    sqrt(nx^2 + ny^2)
+end
+
+"Total px the box `a` pokes outside rect `b` (0 when fully inside)."
+function _oob(a::Rect2f, b::Rect2f)
+    max(0f0, b.origin[1]-a.origin[1]) + max(0f0, b.origin[2]-a.origin[2]) +
+    max(0f0, (a.origin[1]+a.widths[1])-(b.origin[1]+b.widths[1])) +
+    max(0f0, (a.origin[2]+a.widths[2])-(b.origin[2]+b.widths[2]))
+end
+
+"""
+Candidate seed offsets in Imhof preference order (best first): the label box placed with its
+near corner/edge ~_SEED_PAD off the dot, in 8 compass directions.
+"""
+function _seed_candidates(sz::Vec2f)
+    hw = sz[1]/2 + _SEED_PAD; hh = sz[2]/2 + _SEED_PAD
+    (Vec2f(hw, hh), Vec2f(hw, -hh), Vec2f(-hw, hh), Vec2f(-hw, -hh),
+     Vec2f(hw, 0f0), Vec2f(-hw, 0f0), Vec2f(0f0, hh), Vec2f(0f0, -hh))
+end
+
+"""
+    _choose_seed(anchor, sz, obstacles, placed, bounds) -> Vec2f
+
+Geography-aware seed: of the 8 candidate directions, pick the one whose label box least
+overlaps the obstacles (coast + areals), the already-placed neighbour labels, and the frame
+bounds. This is what makes a coastal feature's label seed to the OPEN-WATER side (away from the
+crowded land + the coastline), instead of always upper-right. Imhof order breaks ties toward
+the upper-right. The solver then relaxes from this seed.
+"""
+function _choose_seed(anchor::Point2f, sz::Vec2f, obstacles, placed, bounds::Rect2f)
+    hw = sz[1]/2; hh = sz[2]/2
+    best = Vec2f(hw+_SEED_PAD, hh+_SEED_PAD); bestscore = Inf32
+    for (i, off) in enumerate(_seed_candidates(sz))
+        c = anchor .+ off
+        box = Rect2f(c[1]-hw, c[2]-hh, sz[1], sz[2])
+        s = 0f0
+        for o in obstacles; ov = _box_ovl(box, o); ov > 0 && (s += ov); end
+        for b in placed;    ov = _box_ovl(box, b); ov > 0 && (s += ov); end
+        s += 2f0 * _oob(box, bounds)        # staying on-frame matters more than a little overlap
+        s += 0.02f0 * i                     # Imhof tiebreak → prefer upper-right
+        s < bestscore && (bestscore = s; best = off)
+    end
+    best
+end
+
 # ── Palette (water colors not in HouseStyle) ────────────────────────────────
 const WATER      = Makie.RGBf((0xD2, 0xDC, 0xDF) ./ 255...)   # deeper/cooler sea field
 const WATER_LINE = Makie.RGBf((0x9F, 0xB2, 0xBA) ./ 255...)
@@ -28,6 +89,7 @@ const FACE_LAND    = HouseStyle.hanken("Regular")     # settlements, POIs, terra
 const FACE_LAND_SB = HouseStyle.hanken("SemiBold")    # major settlements + region legend
 const FACE_WATER   = joinpath(HouseStyle.FONTS_DIR, "Newsreader", "Newsreader-Italic.ttf")  # hydrography
 const FACE_TITLE   = joinpath(HouseStyle.FONTS_DIR, "Newsreader", "Newsreader.ttf")          # masthead serif
+const FACE_TITLE_IT = FACE_WATER  # Newsreader italic — the serif-italic run of the masthead
 const FACE_MONO    = HouseStyle.plexmono("Regular")   # metrics / scale readout ONLY
 
 # Convenience: project a data-space Point2f to pixel coordinates.
@@ -38,19 +100,69 @@ _data_to_px(ax, p::Point2f) = Point2f(Makie.project(ax.scene, :data, :pixel, p)[
 const _SLO_ID  = 5      # "San Luis Obispo" — row 5 in towns.csv (the brass hero)
 const _POI_BASE = 1000  # POI synthetic ids = _POI_BASE + index (disjoint from town_ids)
 
+# Pin SLO's label at a fixed offset (see assemble_frame). The A/B confirmed the pin HELPS
+# (fewer contested-cluster flips with it on), so it's kept on; the Ref stays as a toggle.
+const _PIN_SLO = Ref(true)
+
+# Occlusion cull: a label fades to 0 as a higher-priority box overlaps it by up to this many
+# px (min dimension); a smooth ramp so a label sitting on a higher one holds steady, not strobes.
+const _CULL_HIDE = 12.0
+
 # ── Page layout constants ────────────────────────────────────────────────────
 # Trimmed from the first pass (operator: "frame a bit too big") — less dead margin,
 # taller masthead so the title clears the top edge and the neat-line sits below it.
-const _MASTHEAD_H  = 76.0   # px reserved above the axis for chrome
-const _FOOTER_H    = 20.0   # px reserved below the axis
+const _MASTHEAD_H  = 100.0  # px reserved above the axis for chrome (taller → big title clears)
+const _FOOTER_H    = 14.0   # px reserved below the axis (footer text removed → thin margin)
 const _SIDE_PAD    = 16.0   # px left/right margin for chrome text
-const _TOP_PAD     = 10.0   # px from the very top edge to the masthead baseline anchor
+const _TOP_PAD     = 14.0   # px from the very top edge to the masthead title (top-aligned)
+
+# ── Masthead type sizes (hierarchy: title ≫ region > in-map labels) ───────────
+const _TITLE_PX   = 52.0    # "The Atlas" — the emphasis (Newsreader italic serif)
+const _IMPRINT_PX = 42.0    # "TextMeasure.jl ·" imprint (Hanken SemiBold) — near the title, not equal
+const _REGION_PX  = 24.0    # "CENTRAL COAST" — subordinate, shares the title's CAP centreline
+# Cap-top as a fraction of font size, MEASURED per face (FreeType 'H' ink height): used to
+# place each run's baseline so the CAPITALS share one centre line. ÷2 = cap centre ÷ baseline.
+const _CAP_NEWS   = 0.335f0 # Newsreader italic (cap 0.67)
+const _CAP_HANK   = 0.349f0 # Hanken Grotesk   (cap 0.697)
 
 # ── Obstacle tuning ──────────────────────────────────────────────────────────
 const _COAST_STRIDE  = 2     # sample every Nth smoothed coastline vertex (dense barrier)
 const _COAST_BOX     = 14.0  # px side of each coastline obstacle box (fully overlaps → wall)
 const _COAST_MAX     = 400   # cap total coastline obstacle boxes (keeps the solve fast)
 const _AREAL_OBSTACLE_STRIDE = 2   # subsample every Nth per-glyph areal box for obstacles
+
+# ── In-map type ceiling (hierarchy: title > region > map labels) ──────────────
+# The masthead must read as the largest type on the page. "The Atlas" is display 44;
+# "Central Coast" is deck 31; every IN-MAP label is capped here so a deep-zoom town can
+# never out-size the chrome. The geographic font_px still drives the FADE (band_alpha on
+# the true size); only the DRAWN/solved size is clamped.
+const MAX_LABEL_PX = 48.0    # in-map ceiling: labels SCALE with zoom up to here (just under the
+                             # title 52), so type grows through the dive instead of flatlining
+const MAX_AREAL_PX = 220.0   # high SAFETY ceiling only — areals scale with altitude (clouds);
+                             # the wide-shot size is held under the title via per-areal `ground`
+const _AREAL_OBSTACLE_ALPHA = 0.5  # areal acts as a solver obstacle only while this opaque
+
+# ── Viewport edge fade (don't draw labels for off-screen features; no edge pop) ──
+# A label's opacity ramps to 0 as its anchor nears the neat-line and is 0 outside the
+# visible map rect — so features outside the view aren't labelled, and ones crossing the
+# edge during the dive fade instead of popping (kills edge flicker).
+const _EDGE_RAMP   = 40.0    # px inside the neat-line over which a label fades 0→1
+const _OBS_MARGIN  = 48.0    # px beyond the neat-line still sampled for coast/areal obstacles
+
+# ── Leader cap (no long stray wires crossing areals) ──────────────────────────
+# If the solver pushes a label's center beyond this from its anchor, the leader reads as a
+# stray wire (and tends to cross an areal); drop the label instead. Stable frame-to-frame
+# because the camera + warm-start move offsets smoothly, so the same labels drop each frame.
+const _LEADER_MAX  = 46.0    # px LEADER length (dot→nearest edge) at which a label is fully gone
+const _LEADER_RAMP = 14.0    # px ramp below _LEADER_MAX over which it fades out (no hard pop)
+const _LEADER_DRAW = 12.0    # px leader length above which a connector line is actually drawn
+
+# ── Areal recede (regions step back as towns/landmarks take focus) ────────────
+# At the wide overview an areal is the subject (full opacity); as the camera dives to town
+# scale it recedes to a faint orientation mark. Multiplier by view width (degrees).
+const _AREAL_W_HI  = 1.30    # at/above this width: areals at full weight
+const _AREAL_W_LO  = 0.75    # at/below this width: areals at the recede floor
+const _AREAL_FLOOR = 0.24    # faint cloud floor at depth — present, but towns read over it
 
 """
     _content_aspect(pagepx) -> Float64
@@ -108,6 +220,30 @@ _in_rect(px, rect::Rect2f) =
     px[1] >= rect.origin[1] && px[1] <= rect.origin[1] + rect.widths[1] &&
     px[2] >= rect.origin[2] && px[2] <= rect.origin[2] + rect.widths[2]
 
+"""
+    _edge_alpha(px, cw, ch; ramp=_EDGE_RAMP) -> Float64
+
+Opacity factor from an anchor's position relative to the visible map rect `[0,cw]×[0,ch]`
+(axis-scene px, the frame `_data_to_px` returns). 0 outside / on the neat-line, ramping
+smoothly to 1 once the anchor is `ramp` px inside. Multiplied into a label's band-opacity
+so off-screen features are unlabelled and edge-crossing ones fade instead of popping.
+"""
+function _edge_alpha(px, cw::Real, ch::Real; ramp::Real = _EDGE_RAMP)
+    d = min(px[1], cw - px[1], px[2], ch - px[2])   # signed distance to nearest edge
+    d <= 0 ? 0.0 : smoothstep(d / ramp)
+end
+
+"""
+    _areal_recede(w_deg) -> Float64
+
+Opacity multiplier that lets region areals step back as the camera dives: 1.0 at the wide
+overview (`w ≥ _AREAL_W_HI`), easing to `_AREAL_FLOOR` at town scale (`w ≤ _AREAL_W_LO`).
+"""
+function _areal_recede(w_deg::Real)
+    t = smoothstep((w_deg - _AREAL_W_LO) / (_AREAL_W_HI - _AREAL_W_LO))
+    _AREAL_FLOOR + (1.0 - _AREAL_FLOOR) * t
+end
+
 # ── Per-label type roles + measure-once-then-scale ───────────────────────────
 # HONESTY: each label is MEASURED ONCE at a reference size (its actual face), giving a
 # unit box; the per-frame box is that unit box scaled by font_px/_REF_PX. We never
@@ -124,6 +260,7 @@ _unit_box(name, font) = measure_label(name, font, _REF_PX)
 
 "Scale a unit box (measured at _REF_PX) to the given on-screen font_px."
 _scaled_box(unit::Vec2f, fpx::Real) = Vec2f(unit .* Float32(fpx / _REF_PX))
+
 
 "Letterspace a caps string the way it's drawn (and therefore measured)."
 _letterspace(s) = join(collect(s), " ")
@@ -150,7 +287,7 @@ The drawn string + face for an areal:
 Returns `(drawn_string, font)`.
 """
 function _areal_drawn(a::Areal)
-    a.kind === :water ? (titlecase(a.text), FACE_WATER) : (a.text, FACE_LAND)
+    a.kind === :range ? (a.text, FACE_LAND) : (titlecase(a.text), FACE_WATER)
 end
 
 """
@@ -281,9 +418,15 @@ function assemble_frame(d::AtlasData, p::Real;
     Makie.update_state_before_display!(fig)   # camera matrices now reflect THIS frame
 
     W, H = Float32.(pagepx)
-    margin       = 80.0f0
-    page_rect    = Rect2f(-margin, -margin, W + 2margin, H + 2margin)
-    content_px_w = W - 2 * _SIDE_PAD     # drawable width → sets pixels-per-map-unit
+    content_px_w = W - 2 * _SIDE_PAD                       # drawable width → pixels-per-map-unit
+    content_px_h = H - Float32(_MASTHEAD_H) - Float32(_FOOTER_H)  # drawable height
+    # `_data_to_px` returns AXIS-SCENE px (origin = axis bottom-left), so the VISIBLE map is
+    # [0,content_px_w]×[0,content_px_h]. Labels are clipped/faded to that rect (_edge_alpha);
+    # obstacles are sampled a little BEYOND it so the coast/areal walls stay continuous at the
+    # frame edge. (The old `page_rect` was in figure space — far too permissive, which is why
+    # off-screen features were getting labelled.)
+    obs_rect = Rect2f(-Float32(_OBS_MARGIN), -Float32(_OBS_MARGIN),
+                      content_px_w + 2Float32(_OBS_MARGIN), content_px_h + 2Float32(_OBS_MARGIN))
 
     w = view_width(p)                    # degrees of longitude across the frame
     town_by_id = Dict(t.town_id => t for t in d.towns)
@@ -302,12 +445,15 @@ function assemble_frame(d::AtlasData, p::Real;
 
     for t in d.towns
         px = _data_to_px(ax, t.pos)
-        _in_rect(px, page_rect) || continue
+        edge = _edge_alpha(px, content_px_w, content_px_h)
+        edge > 0.02 || continue                       # off-screen / on the neat-line → unlabelled
         is_slo = t.town_id == _SLO_ID
-        fpx = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, content_px_w)
-        # SLO is pinned (α 1.0); others fade in/out across the band. Draw when α > 0.02.
-        ba  = is_slo ? 1.0 : band_alpha(fpx, Inf)
+        # GEOGRAPHIC size drives the band FADE; the DRAWN/solved size is capped at MAX_LABEL_PX
+        # so a deep-zoom town can't out-size the masthead. SLO is pinned (already ≤ cap).
+        fpx_geo = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, content_px_w)
+        ba  = (is_slo ? 1.0 : band_alpha(fpx_geo, Inf)) * edge
         ba > 0.02 || continue
+        fpx = min(fpx_geo, MAX_LABEL_PX)
         font, _ = _point_style(:town, t.rank ≤ 5)
         unit = _unit_box(t.name, font)
         push!(ids, t.town_id); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
@@ -315,10 +461,12 @@ function assemble_frame(d::AtlasData, p::Real;
     end
     for (k, poi) in enumerate(pois)
         px = _data_to_px(ax, poi.pos)
-        _in_rect(px, page_rect) || continue
-        fpx = font_px(POI_GROUND, w, content_px_w)
-        ba  = band_alpha(fpx, Inf)
+        edge = _edge_alpha(px, content_px_w, content_px_h)
+        edge > 0.02 || continue
+        fpx_geo = font_px(POI_GROUND, w, content_px_w)
+        ba  = band_alpha(fpx_geo, Inf) * edge
         ba > 0.02 || continue
+        fpx = min(fpx_geo, MAX_LABEL_PX)
         pid = _POI_BASE + k
         font, _ = _point_style(:poi, false)
         unit = _unit_box(poi.name, font)
@@ -335,7 +483,7 @@ function assemble_frame(d::AtlasData, p::Real;
     for seg in d.coastline
         for i in 1:_COAST_STRIDE:length(seg)
             px = _data_to_px(ax, seg[i])
-            _in_rect(px, page_rect) || continue
+            _in_rect(px, obs_rect) || continue
             push!(obstacles, Rect2f(px[1] - half, px[2] - half, _COAST_BOX, _COAST_BOX))
             if length(obstacles) >= _COAST_MAX
                 coast_capped = true
@@ -345,6 +493,7 @@ function assemble_frame(d::AtlasData, p::Real;
         coast_capped && break
     end
     coast_capped && @warn "coastline obstacles hit the cap" cap=_COAST_MAX w=w
+    n_coast = length(obstacles)   # obstacles[1:n_coast] are the coast wall (areals appended next)
 
     # areals: geographic-scaling + CURVED. font_px = ground * P; show in [MIN_PX, max_px]
     # (coarse regions hand off when they outgrow the frame). Each areal is laid out
@@ -354,13 +503,26 @@ function assemble_frame(d::AtlasData, p::Real;
     areals = Tuple{Symbol,Float64,Float64,Vector{Tuple{Char,Point2f,Float64}}}[]
     for a in atlas_areals()
         apx = _data_to_px(ax, a.pos)
-        _in_rect(apx, page_rect) || continue
-        fpx = font_px(a.ground, w, content_px_w)
-        ba  = band_alpha(fpx, a.max_px)            # fades in past the floor, out past max_px
+        # NO viewport gate on the anchor: a swollen areal's anchor can leave the frame while its
+        # glyphs still span it — gating on the anchor made the Range POOF out and back. Opacity
+        # (the size hand-off below) decides visibility; Makie clips the off-screen glyphs.
+        fpx_geo = font_px(a.ground, w, content_px_w)   # GEOGRAPHIC: grows as the camera dives
+        # :river follows the hydrography LoD. Region areals scale with altitude AND hand off
+        # smoothly by their OWN size: band_alpha(fpx, max_px) fades each in as it's legible,
+        # lets it swell, then fades it OUT as it outgrows the frame (you pass through the cloud).
+        # Per-areal, so the big Range is gone by the time the inland towns appear, while the
+        # small Estero Bay persists at depth. (No global recede — that made the Range linger.)
+        ba  = a.kind === :river ? river_alpha(w) : band_alpha(fpx_geo, a.max_px)
         ba > 0.02 || continue
+        fpx = min(fpx_geo, MAX_AREAL_PX)               # only a high safety ceiling now
         glyphs, gboxes = _areal_glyphs(a, apx, fpx)
-        for i in 1:_AREAL_OBSTACLE_STRIDE:length(gboxes)   # subsample glyph footprints
-            push!(obstacles, gboxes[i])
+        # Obstacle only while SUBSTANTIAL (near full opacity at the wide shot). Once an areal
+        # recedes to a faint cloud, town labels are free to sit over it — a giant faint glyph
+        # shouldn't shove the whole field around.
+        if ba > _AREAL_OBSTACLE_ALPHA
+            for i in 1:_AREAL_OBSTACLE_STRIDE:length(gboxes)   # subsample glyph footprints
+                push!(obstacles, gboxes[i])
+            end
         end
         push!(areals, (a.kind, fpx, ba, glyphs))
     end
@@ -368,14 +530,89 @@ function assemble_frame(d::AtlasData, p::Real;
     # --- (c) ONE solve over all point labels, with obstacles + warm-start ---
     # bounds = the VISIBLE MAP RECT in ax-scene pixel space (where the anchors live, origin
     # = axis bottom-left). Confines label boxes to the drawn map area so none extends past
-    # the neat-line. content_px_h matches the axis content height (page − masthead − footer).
-    content_px_h = H - Float32(_MASTHEAD_H) - Float32(_FOOTER_H)
+    # the neat-line.
     bounds = Rect2f(0, 0, content_px_w, content_px_h)
+
+    # Geography-aware seeds: place labels high→low priority; each NEW label seeds to the
+    # candidate direction that best avoids the coast/areals + already-placed neighbours (so a
+    # coastal feature's label seeds to the OPEN-WATER side, and SLO dodges the range areal it
+    # would otherwise sit on). Warm-started ids keep their prior offset for continuity.
+    seeds = Dict{Int,Vec2f}()
+    let placed = Rect2f[]
+        prio_seed(id) = id == _SLO_ID ? -1.0 :
+            (get(kind_of, id, :poi) === :town ?
+             Float64(haskey(town_by_id, id) ? town_by_id[id].rank : 50) : 100.0 + (id - _POI_BASE))
+        for k in sort(collect(eachindex(ids)); by = k -> prio_seed(ids[k]))
+            off = haskey(prev, ids[k]) ? prev[ids[k]] :
+                  _choose_seed(px_anch[k], sizes[k], obstacles, placed, bounds)
+            seeds[ids[k]] = off
+            c = px_anch[k] .+ off; s = sizes[k]
+            push!(placed, Rect2f(c[1]-s[1]/2, c[2]-s[2]/2, s[1], s[2]))
+        end
+    end
+
+    # Pin SLO to its (geography-aware) seed — the cluster's deterministic centre, which breaks
+    # the symmetric tie with the co-located "Mission San Luis Obispo" POI (the SLO flicker).
+    # It's placed first above, so every other label dodges it.
+    prev2 = copy(prev); settled2 = copy(settled)
+    if _PIN_SLO[] && (_SLO_ID in ids)
+        prev2[_SLO_ID] = seeds[_SLO_ID]
+        push!(settled2, _SLO_ID)
+    end
+
     fp = if isempty(ids)
         FramePlacement(Int[], Point2f[], Vec2f[], Vec2f[], BitVector())
     else
         solve_frame(ids, px_anch, sizes, bounds;
-                    prev = prev, settled = settled, obstacles = obstacles)
+                    prev = prev2, settled = settled2, obstacles = obstacles, seeds = seeds)
+    end
+
+    # We OWN the visibility decision now (we cleared the solver's `dropped`, whose label-label
+    # tie-breaks flip frame-to-frame → flash). Two deterministic, stable passes:
+    #
+    # (1) HARD coast clearance — a label box overlapping the coast wall is dropped outright (a
+    #     drawn label must never touch the coast). Same geometry every frame → stable.
+    # (2) SMOOTH priority occlusion cull — walk labels high→low priority; a label's opacity
+    #     fades by how much it's overlapped by an already-kept higher-priority box. Fixed
+    #     priority (rank / list order) ⇒ stable choice; the smooth fade means a label sitting on
+    #     a higher one (the Mission on San Luis Obispo) holds steady partial opacity, not strobe.
+    if !isempty(fp.ids)
+        coast = view(obstacles, 1:n_coast)
+        labelbox(k) = (c = fp.anchors[k] .+ fp.offsets[k]; s = fp.sizes[k];
+                       Rect2f(c[1]-s[1]/2, c[2]-s[2]/2, s[1], s[2]))
+        fill!(fp.dropped, false)
+        # (1) coast clearance
+        for k in eachindex(fp.ids)
+            lb = labelbox(k)
+            any(b -> _box_ovl(lb, b) > 0.5, coast) && (fp.dropped[k] = true)
+        end
+        # (2) priority occlusion cull among the survivors
+        prio = function (id)
+            id == _SLO_ID                    ? -1.0 :
+            get(kind_of, id, :poi) === :town ? Float64(haskey(town_by_id, id) ? town_by_id[id].rank : 50) :
+                                               100.0 + (id - _POI_BASE)
+        end
+        order = sort(collect(eachindex(fp.ids)); by = k -> prio(fp.ids[k]))
+        kept = Rect2f[]
+        for k in order
+            fp.dropped[k] && continue                              # coast-dropped → out
+            box = labelbox(k)
+            ov = isempty(kept) ? -Inf : maximum(b -> _box_ovl(box, b), kept)
+            cull_a = smoothstep((_CULL_HIDE - ov) / _CULL_HIDE)   # 1 (clear) → 0 (ov ≥ hide)
+            band_of[fp.ids[k]] *= cull_a
+            cull_a < 0.05 && (fp.dropped[k] = true)               # fully occluded → drop
+            band_of[fp.ids[k]] > 0.4 && push!(kept, box)          # substantially visible → blocks lower
+        end
+    end
+
+    # Leader cap: FADE a label out as its LEADER (dot → nearest box edge) grows past
+    # _LEADER_MAX — a long leader reads as a stray wire and tends to cross an areal. Uses the
+    # leader length, NOT the centre offset (which scales with label width, so wide labels at
+    # their natural rest position would be wrongly faded). Smooth ramp so it never pops.
+    for k in eachindex(fp.ids)
+        fp.dropped[k] && continue
+        lf = smoothstep((_LEADER_MAX - _leader_len(fp.offsets[k], fp.sizes[k])) / _LEADER_RAMP)
+        band_of[fp.ids[k]] *= lf
     end
 
     return fig, ax, AssembledFrame(fp, kind_of, fpx_of, band_of, areals, obstacles, coast_capped)
@@ -450,6 +687,35 @@ function draw_basemap!(ax, d::AtlasData)
 end
 
 """
+    draw_hydrography!(ax, d, w_deg)
+
+Inland water (lakes as WATER polygons, rivers as WATER_INK centrelines), drawn OVER the
+basemap and UNDER the areals/labels, with level-of-detail opacity (`river_alpha`): absent at
+the wide ocean overview, fading in as the camera reaches valley scale. The Salinas River is
+the on-view feature here; lakes appear only if a reservoir falls inside the view. Honest
+Natural-Earth geometry — see data/SOURCE.txt.
+"""
+function draw_hydrography!(ax, d::AtlasData, w_deg::Real)
+    a = river_alpha(w_deg)
+    a > 0.02 || return ax
+    lake_fill   = Makie.RGBAf(WATER.r, WATER.g, WATER.b, a)
+    lake_stroke = Makie.RGBAf(WATER_INK.r, WATER_INK.g, WATER_INK.b, 0.7a)
+    river_c     = Makie.RGBAf(WATER_INK.r, WATER_INK.g, WATER_INK.b, 0.72a)
+    for ring in d.lakes
+        length(ring) ≥ 3 || continue
+        poly!(ax, ring; color = lake_fill, strokecolor = lake_stroke,
+              strokewidth = 0.5, inspectable = false)
+    end
+    # River weight grows a touch as you dive (0.7px → 1.1px) so it reads at valley scale.
+    rw = Float32(0.7 + 0.4a)
+    for seg in d.rivers
+        length(seg) ≥ 2 || continue
+        lines!(ax, seg; color = river_c, linewidth = rw, inspectable = false)
+    end
+    return ax
+end
+
+"""
     draw_areals!(ax, areals)
 
 Draw each CURVED areal glyph-by-glyph (space=:pixel) along its precomputed arc layout.
@@ -462,7 +728,7 @@ band-opacity, so areals fade in past the floor and out past their `max_px` hand-
 """
 function draw_areals!(ax, areals)
     for (kind, fpx, ba, glyphs) in areals
-        font  = kind === :water ? FACE_WATER : FACE_LAND
+        font  = kind === :range ? FACE_LAND : FACE_WATER
         base  = kind === :range ? HouseStyle.GRAY : WATER_INK
         col   = Makie.RGBAf(base.r, base.g, base.b, ba)   # band-opacity into the alpha
         for (ch, pos, rot) in glyphs
@@ -481,16 +747,16 @@ function draw_areals!(ax, areals)
 end
 
 """
-    draw_labels!(ax, d, af::AssembledFrame, fs::FadeState)
+    draw_labels!(ax, d, af::AssembledFrame)
 
 Draw the point-label layer (towns + POIs) for one frame from the solved placement.
-Each label is drawn at the SAME (face, size) it was measured at (Field-survey roles):
-- major towns → Hanken SemiBold subhead 16 INK; minor towns → Hanken Regular body 11 INK;
-- POIs → Hanken Regular caption 9 GRAY (hollow diamond marker).
-Leaders (BRASS 0.5px) for far-pushed labels drawn first; town dots (brass SLO hero)
-with PAPER halo; POIs hollow INK diamonds; markers on top.
+Opacity is `af.band[id]` — the single, stateless per-frame value (legibility × framing ×
+placement); there is no temporal fade. Each label is drawn at the SAME (face, size) it was
+measured at (Field-survey roles): major towns → Hanken SemiBold INK; minor towns → Hanken
+Regular INK; POIs → Hanken Regular GRAY (hollow diamond marker). Leaders (BRASS 0.5px) for
+far-pushed labels drawn first; town dots (brass SLO hero) with PAPER halo; markers on top.
 """
-function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
+function draw_labels!(ax, d::AtlasData, af::AssembledFrame)
     fp = af.fp
     isempty(fp.ids) && return ax
 
@@ -517,10 +783,9 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
         id = fp.ids[k]
-        (alpha_of(fs, id) * get(af.band, id, 1.0)) < 0.05 && continue
+        get(af.band, id, 1.0) < 0.05 && continue
         off = fp.offsets[k]; anc = fp.anchors[k]; sz = fp.sizes[k]
-        mag = _norm2(off)
-        mag > sz[1] * 0.5 || continue                  # only when the label is pushed far
+        _leader_len(off, sz) > _LEADER_DRAW || continue   # only when there's a visible dot→label gap
 
         c    = anc .+ off                              # label box center (px)
         half = Vec2f(sz[1] / 2, sz[2] / 2)
@@ -557,8 +822,8 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
         id = fp.ids[k]
-        # final opacity = time-fade (FadeState) × focus-band opacity (SLO pinned 1.0)
-        α  = alpha_of(fs, id) * get(af.band, id, 1.0)
+        # opacity = the frame's stateless band value (legibility × framing × placement)
+        α  = get(af.band, id, 1.0)
         α < 0.01 && continue
         pos, name, kind = feature(id)
 
@@ -697,7 +962,7 @@ function _graticule_labels!(ax, d::AtlasData, pagepx)
     W, H = Float32.(pagepx)
     aw = W - 2 * Float32(_SIDE_PAD)               # axis-scene width  (ax-relative right edge)
     ah = H - Float32(_MASTHEAD_H) - Float32(_FOOTER_H)  # axis-scene height (top edge)
-    inset = 4.0f0
+    inset = 9.0f0   # inside the inner neat-line (which sits 5px in from the axis edge)
     lon_min, lon_max, lat_min, lat_max = _data_range(d)
 
     # lon labels along the bottom edge (ax-relative). Skip the lower-left (scale bar) and
@@ -710,10 +975,10 @@ function _graticule_labels!(ax, d::AtlasData, pagepx)
             font = FACE_MONO, color = HouseStyle.BRASS,
             align = (:center, :bottom), space = :pixel, inspectable = false)
     end
-    # lat labels along the left edge (ax-relative). Skip y<44 to clear the scale-bar text.
+    # lat labels along the left edge (ax-relative). Skip low y to clear the scale-bar text.
     for lat in ceil(Int, lat_min):floor(Int, lat_max)
         px = _data_to_px(ax, Point2f(project_point((lon_min + lon_max) / 2, lat)))
-        (44 < px[2] < ah - 8) || continue
+        (48 < px[2] < ah - 12) || continue
         text!(ax, Point2f(inset, px[2]);
             text = _lat_label(lat), fontsize = Float64(HouseStyle.RAMP.caption),
             font = FACE_MONO, color = HouseStyle.BRASS,
@@ -722,13 +987,20 @@ function _graticule_labels!(ax, d::AtlasData, pagepx)
     return ax
 end
 
+# A closed rectangle as `linesegments!` point pairs (l,b)→(r,b)→(r,t)→(l,t)→close.
+_rect_segs(l, b, r, t) =
+    [Point2f(l, b), Point2f(r, b), Point2f(r, b), Point2f(r, t),
+     Point2f(r, t), Point2f(l, t), Point2f(l, t), Point2f(l, b)]
+
 """
     draw_chrome!(ax, fig, d; metrics, w_deg, pagepx)
 
-Masthead "The Atlas" (Newsreader roman display 44, title-case, top-aligned), brass
-dateline rule, region "C E N T R A L  C O A S T" (Hanken SemiBold subhead 16,
-letterspaced caps, top-aligned), 1.0px BRASS neat-line, graticule degree labels, a
-dynamic km scale bar (lower-left), corner metrics (Plex Mono 9, lower-right), footer.
+Masthead title "TextMeasure.jl · The Atlas" — a composite line: a light/small "TextMeasure.jl"
+imprint in Hanken Regular + brass middot, then "The Atlas" large in Newsreader ITALIC (the
+emphasis). The region label "C E N T R A L  C O A S T" (Hanken SemiBold letterspaced caps) is
+vertically centred on the title's cap band at the right. A DOUBLE BRASS neat-line frames the
+map (both lines in the margin); then graticule degree labels, a dynamic km scale bar
+(lower-left), and corner metrics (Plex Mono, lower-right).
 """
 function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "",
                       w_deg::Real = 0.0, pagepx = (1620, 1080))
@@ -736,53 +1008,67 @@ function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "",
     W = Float32(W); H = Float32(H)
     scene = fig.scene
 
-    title_y = H - Float32(_TOP_PAD)   # anchor near the very top, top-aligned text
+    # Masthead is drawn as SEPARATE plain text! runs (not Makie rich text, whose baseline
+    # renders ~0.3·size above its anchor — plain text honours :baseline exactly). The runs are
+    # positioned by MEASURED widths (TextMeasure), and every cap-centre is aligned to one line:
+    # each run's baseline = center_y − (capTop÷2)·size, with capTop measured per face
+    # (Newsreader-italic 0.67, Hanken/Plex 0.70). So "The Atlas" and "CENTRAL COAST" caps share
+    # a centre. The "TextMeasure.jl ·" imprint is Hanken SemiBold (the SAME face as CENTRAL
+    # COAST), full ink, sized down so the serif-italic "The Atlas" carries the emphasis.
+    # VERTICALLY CENTRED: every run's CAP-HEIGHT MIDPOINT sits on the shared center_y. Each
+    # run gets its own baseline = center_y − (capTop÷2)·size (capTop measured per face), so the
+    # small imprint floats UP to be centred against the big title rather than sharing its
+    # baseline. → "TextMeasure.jl", "The Atlas", and "CENTRAL COAST" caps all centre on one line.
+    center_y = H - Float32(_MASTHEAD_H) / 2
+    title_baseline   = center_y - _CAP_NEWS * Float32(_TITLE_PX)    # The Atlas
+    imprint_baseline = center_y - _CAP_HANK * Float32(_IMPRINT_PX)  # TextMeasure.jl (own baseline)
+    region_baseline  = center_y - _CAP_HANK * Float32(_REGION_PX)   # CENTRAL COAST
 
-    # Masthead — Newsreader roman, title-case, top-left, top-aligned
-    text!(scene, Point2f(_SIDE_PAD, title_y);
-        text = "The Atlas", fontsize = Float64(HouseStyle.RAMP.display),
-        font = FACE_TITLE, color = HouseStyle.INK,
-        align = (:left, :top), space = :pixel, inspectable = false)
+    gap = 0.42f0 * Float32(_IMPRINT_PX)
+    w_imp = Float32(measure_label("TextMeasure.jl", FACE_LAND_SB, _IMPRINT_PX)[1])
+    w_dot = Float32(measure_label("·",              FACE_LAND_SB, _IMPRINT_PX)[1])
+    x_imp = Float32(_SIDE_PAD)
+    x_dot = x_imp + w_imp + gap
+    x_atlas = x_dot + w_dot + gap
 
-    # Region label — Hanken SemiBold, letterspaced caps, top-right, top-aligned
-    text!(scene, Point2f(W - _SIDE_PAD, title_y);
-        text = _letterspace("CENTRAL COAST"), fontsize = Float64(HouseStyle.RAMP.subhead),
+    text!(scene, Point2f(x_imp, imprint_baseline);
+        text = "TextMeasure.jl", fontsize = _IMPRINT_PX, font = FACE_LAND_SB,
+        color = HouseStyle.INK, align = (:left, :baseline), space = :pixel, inspectable = false)
+    text!(scene, Point2f(x_dot, center_y);   # the dot itself centred on the shared line
+        text = "·", fontsize = _IMPRINT_PX, font = FACE_LAND_SB,
+        color = HouseStyle.BRASS, align = (:left, :center), space = :pixel, inspectable = false)
+    text!(scene, Point2f(x_atlas, title_baseline);
+        text = "The Atlas", fontsize = _TITLE_PX, font = FACE_TITLE_IT,
+        color = HouseStyle.INK, align = (:left, :baseline), space = :pixel, inspectable = false)
+
+    text!(scene, Point2f(W - _SIDE_PAD, region_baseline);
+        text = _letterspace("CENTRAL COAST"), fontsize = _REGION_PX,
         font = FACE_LAND_SB, color = HouseStyle.INK,
-        align = (:right, :top), space = :pixel, inspectable = false)
+        align = (:right, :baseline), space = :pixel, inspectable = false)
 
-    # Brass dateline rule under the masthead (just above the axis top)
-    rule_y = H - Float32(_MASTHEAD_H) + 4.0f0
-    linesegments!(scene, [Point2f(_SIDE_PAD, rule_y), Point2f(W - _SIDE_PAD, rule_y)];
-        color = HouseStyle.BRASS, linewidth = 0.5, space = :pixel, inspectable = false)
-
-    # Neat-line border around the axis bbox (1.0px brass)
+    # Frame — a DOUBLE BRASS neat-line: inner on the map's edge (the axis bbox), outer one
+    # `gap` px OUTSIDE in the PAPER margin. Both lines stay clear of the map content, so the
+    # ocean can't occlude/clip them (the earlier double sat inside the axis → got clipped).
     ax_left = Float32(_SIDE_PAD); ax_right = W - Float32(_SIDE_PAD)
     ax_bottom = Float32(_FOOTER_H); ax_top = H - Float32(_MASTHEAD_H)
-    linesegments!(scene,
-        [Point2f(ax_left,  ax_bottom), Point2f(ax_right, ax_bottom),
-         Point2f(ax_right, ax_bottom), Point2f(ax_right, ax_top),
-         Point2f(ax_right, ax_top),    Point2f(ax_left,  ax_top),
-         Point2f(ax_left,  ax_top),    Point2f(ax_left,  ax_bottom)];
-        color = HouseStyle.BRASS, linewidth = 1.0, space = :pixel, inspectable = false)
+    gap = 4.0f0
+    linesegments!(scene, _rect_segs(ax_left - gap, ax_bottom - gap, ax_right + gap, ax_top + gap);
+        color = HouseStyle.BRASS, linewidth = 1.2, space = :pixel, inspectable = false)
+    linesegments!(scene, _rect_segs(ax_left, ax_bottom, ax_right, ax_top);
+        color = HouseStyle.BRASS, linewidth = 0.6, space = :pixel, inspectable = false)
 
     # Graticule degree labels (whole-degree only) + scale bar — drawn to the AXIS scene
     # (fig.scene content inside the axis bbox is occluded by the axis).
     _graticule_labels!(ax, d, pagepx)
     w_deg > 0 && _scale_bar!(ax, w_deg, pagepx)
 
-    # Metrics — Plex Mono (the instrument readout), BRASS caption 9, lower-right.
+    # Metrics — Plex Mono (the instrument readout), BRASS caption, lower-right of the map.
     if !isempty(metrics)
         text!(scene, Point2f(ax_right - Float32(_SIDE_PAD), ax_bottom + 6.0f0);
             text = metrics, fontsize = Float64(HouseStyle.RAMP.caption),
             font = FACE_MONO, color = HouseStyle.BRASS,
             align = (:right, :bottom), space = :pixel, inspectable = false)
     end
-
-    # Footer — bottom-center.
-    text!(scene, Point2f(W / 2.0f0, Float32(_FOOTER_H) / 2.0f0);
-        text = HouseStyle.footer("The Atlas"), fontsize = Float64(HouseStyle.RAMP.caption),
-        font = FACE_MONO, color = HouseStyle.BRASS,
-        align = (:center, :center), space = :pixel, inspectable = false)
 
     return fig
 end
@@ -793,18 +1079,13 @@ end
     _dev_still(p::Real, path::AbstractString; pagepx=(1600, 1000)) -> path
 
 Render a single honest frame at loop phase `p` and save to `path`. Assembles the
-measured+solved frame, builds a fully-visible FadeState, draws basemap → areals →
-labels → chrome.
+measured+solved frame, then draws basemap → hydrography → areals → labels → chrome.
+Opacity is the frame's stateless band value — no temporal fade needed for a still.
 """
 function _dev_still(p::Real, path::AbstractString; pagepx=(1620, 1080))
     d = load_atlas_data()
     fig, ax, af = assemble_frame(d, p; pagepx)
     fp = af.fp
-
-    # FadeState: register births at frame 0, advance _last to FADE_FRAMES → alpha 1.0.
-    fs = FadeState()
-    update_fade!(fs, fp.ids, 0)
-    fs._last = FADE_FRAMES
 
     # metrics — tightened to the on-screen readout: width + placed count (no dev noise)
     n_placed = count(!, fp.dropped)
@@ -813,8 +1094,9 @@ function _dev_still(p::Real, path::AbstractString; pagepx=(1620, 1080))
     metrics = "w $(w_str)° · $(n_placed) placed"
 
     draw_basemap!(ax, d)
+    draw_hydrography!(ax, d, w)
     draw_areals!(ax, af.areals)
-    draw_labels!(ax, d, af, fs)
+    draw_labels!(ax, d, af)
     draw_chrome!(ax, fig, d; metrics, w_deg = w, pagepx)
 
     save(path, fig)
