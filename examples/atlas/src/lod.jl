@@ -15,15 +15,17 @@ const MIN_PX  = 13.0    # lower band: a label appears once its type reaches this
 const SLO_PX  = 20.0    # San Luis Obispo is pinned to this constant px size, always shown
 const _BAND_HYST = 0.08 # once shown, widen the band ±8% before hiding (anti-flicker)
 
-const POI_GROUND = 0.006  # POI ground em (degrees of latitude)
+const POI_GROUND = 0.0035  # POI ground em (degrees) → landmarks enter last (~w0.53)
 
-"Ground em (degrees lat) for a town by census rank. SLO (rank 1) is pinned, not here."
+"""
+Ground em (degrees lat) for a town by census rank. SLO (rank 1) is pinned, not here.
+Tuned for the reveal schedule: majors enter ~w1.2, the 6–7 band ~w0.87, the 8–9
+necklace ~w0.72 (content_px_w≈1588 → font_px = ground·1956/w_deg).
+"""
 function town_ground(rank::Integer)::Float64
-    rank ≤ 2 ? 0.016 :
-    rank == 3 ? 0.014 :
-    rank ≤ 5 ? 0.012 :   # ranks 4–5
-    rank ≤ 7 ? 0.009 :   # ranks 6–7
-               0.007     # ranks 8–9
+    rank ≤ 5 ? 0.008  :   # majors → enter ~w1.2
+    rank ≤ 7 ? 0.0058 :   # ranks 6–7 → enter ~w0.87
+               0.0048     # ranks 8–9 → enter ~w0.72
 end
 
 # ── Scaling math ──────────────────────────────────────────────────────────────
@@ -47,4 +49,21 @@ function visible(fpx::Real, max_px::Real, shown_before::Bool; min_px::Real = MIN
     lo = shown_before ? min_px * (1 - _BAND_HYST) : min_px
     hi = isfinite(max_px) ? (shown_before ? max_px * (1 + _BAND_HYST) : max_px) : Inf
     lo ≤ fpx ≤ hi
+end
+
+"""
+    band_alpha(fpx, max_px; min_px=MIN_PX) -> Float64
+
+Smooth opacity for the px focus band — opacity as a function of entering/leaving focus.
+A label FADES IN as its type grows past the legibility floor and (for coarse features
+with a finite `max_px`) FADES OUT as it outgrows the frame:
+- fade in : smoothstep over `[min_px, min_px*1.6]` → 0..1.
+- fade out: smoothstep over `[max_px*0.6, max_px]` → 1..0 (only when `max_px` is finite).
+- α = min(fade_in, fade_out); 0 below the floor / above max. `visible == (band_alpha>0)`.
+"""
+function band_alpha(fpx::Real, max_px::Real; min_px::Real = MIN_PX)::Float64
+    fin  = smoothstep((fpx - min_px) / (0.6 * min_px))            # 0 at min_px → 1 at 1.6·min_px
+    fout = isfinite(max_px) ?
+           smoothstep((max_px - fpx) / (0.4 * max_px)) : 1.0      # 1 until 0.6·max → 0 at max_px
+    min(fin, fout)
 end

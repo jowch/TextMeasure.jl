@@ -60,10 +60,13 @@ later in the dive. Each row is
 `tracking` is a FRACTION of font_px added to each glyph advance (range breathes; water 0).
 """
 function atlas_areals()
+    # ground°/max_px tuned to the reveal schedule (Ocean → Mountains → … → Bay):
+    # Pacific dominant at w3 (~65px) hands off ~w1.5; Range present-faint at w3 (~33px),
+    # peaks ~w1.5, hands off ~w0.65; Estero swells in the cluster.
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 150.0,  26.0, 0.0),
-        ("SANTA LUCIA RANGE",  -120.75, 35.52, -42.0, 0.055, :range, 200.0, -18.0, 0.25),
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.035, :water, 120.0,  28.0, 0.0),
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 130.0,  26.0, 0.0),
+        ("SANTA LUCIA RANGE",  -120.75, 35.52, -42.0, 0.05,  :range, 150.0, -18.0, 0.25),
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.020, :water, 110.0,  28.0, 0.0),
     ]
     [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px, sweep, tracking)
      for (txt, lon, lat, rot, ground, kind, max_px, sweep, tracking) in raw]

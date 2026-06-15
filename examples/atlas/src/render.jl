@@ -251,8 +251,9 @@ struct AssembledFrame
     fp        :: FramePlacement                 # ids = towns + POIs, all solved together
     kind_of   :: Dict{Int,Symbol}               # id → :town | :poi
     font_px   :: Dict{Int,Float64}              # id → on-screen type height (px) it's drawn at
-    # per visible areal: (kind, font_px, glyph layout). Each glyph = (char, pos px, rot rad).
-    areals    :: Vector{Tuple{Symbol,Float64,Vector{Tuple{Char,Point2f,Float64}}}}
+    band      :: Dict{Int,Float64}              # id → band-opacity (focus-band fade), SLO pinned 1.0
+    # per visible areal: (kind, font_px, band_alpha, glyph layout). glyph = (char, pos px, rot rad).
+    areals    :: Vector{Tuple{Symbol,Float64,Float64,Vector{Tuple{Char,Point2f,Float64}}}}
     obstacles :: Vector{Rect2f}                 # coastline + per-glyph areal footprints (px)
     coast_capped :: Bool
 end
@@ -292,29 +293,32 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
     sizes    = Vec2f[]                 # scaled box (w,h px) for the solver
     kind_of  = Dict{Int,Symbol}()
     fpx_of   = Dict{Int,Float64}()    # id → font_px it is drawn at
+    band_of  = Dict{Int,Float64}()    # id → band-opacity (focus-band fade), SLO pinned 1.0
 
     for t in d.towns
         px = _data_to_px(ax, t.pos)
         _in_rect(px, page_rect) || continue
         is_slo = t.town_id == _SLO_ID
         fpx = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, content_px_w)
-        # SLO is pinned: always visible. Others gate on the lower band (max_px = Inf).
-        (is_slo || visible(fpx, Inf, false)) || continue
+        # SLO is pinned (α 1.0); others fade in/out across the band. Draw when α > 0.02.
+        ba  = is_slo ? 1.0 : band_alpha(fpx, Inf)
+        ba > 0.02 || continue
         font, _ = _point_style(:town, t.rank ≤ 5)
         unit = _unit_box(t.name, font)
         push!(ids, t.town_id); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
-        kind_of[t.town_id] = :town; fpx_of[t.town_id] = fpx
+        kind_of[t.town_id] = :town; fpx_of[t.town_id] = fpx; band_of[t.town_id] = ba
     end
     for (k, poi) in enumerate(pois)
         px = _data_to_px(ax, poi.pos)
         _in_rect(px, page_rect) || continue
         fpx = font_px(POI_GROUND, w, content_px_w)
-        visible(fpx, Inf, false) || continue
+        ba  = band_alpha(fpx, Inf)
+        ba > 0.02 || continue
         pid = _POI_BASE + k
         font, _ = _point_style(:poi, false)
         unit = _unit_box(poi.name, font)
         push!(ids, pid); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
-        kind_of[pid] = :poi; fpx_of[pid] = fpx
+        kind_of[pid] = :poi; fpx_of[pid] = fpx; band_of[pid] = ba
     end
 
     # --- (b) obstacles in PIXEL space ---
@@ -341,17 +345,18 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
     # glyph-by-glyph along an arc (every glyph MEASURED + single-measure-scaled); its
     # solver obstacle is the UNION OF PER-GLYPH BOXES (subsampled), so town labels dodge
     # only the actual letters — not a giant tilted AABB.
-    areals = Tuple{Symbol,Float64,Vector{Tuple{Char,Point2f,Float64}}}[]
+    areals = Tuple{Symbol,Float64,Float64,Vector{Tuple{Char,Point2f,Float64}}}[]
     for a in atlas_areals()
         apx = _data_to_px(ax, a.pos)
         _in_rect(apx, page_rect) || continue
         fpx = font_px(a.ground, w, content_px_w)
-        visible(fpx, a.max_px, false) || continue
+        ba  = band_alpha(fpx, a.max_px)            # fades in past the floor, out past max_px
+        ba > 0.02 || continue
         glyphs, gboxes = _areal_glyphs(a, apx, fpx)
         for i in 1:_AREAL_OBSTACLE_STRIDE:length(gboxes)   # subsample glyph footprints
             push!(obstacles, gboxes[i])
         end
-        push!(areals, (a.kind, fpx, glyphs))
+        push!(areals, (a.kind, fpx, ba, glyphs))
     end
 
     # --- (c) ONE solve over all point labels, with obstacles ---
@@ -363,7 +368,7 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1620, 1080))
                     prev = Dict{Int,Vec2f}(), settled = Set{Int}(), obstacles = obstacles)
     end
 
-    return fig, ax, AssembledFrame(fp, kind_of, fpx_of, areals, obstacles, coast_capped)
+    return fig, ax, AssembledFrame(fp, kind_of, fpx_of, band_of, areals, obstacles, coast_capped)
 end
 
 # ── Draw functions ────────────────────────────────────────────────────────────
@@ -442,12 +447,14 @@ Per glyph: `text!` at the glyph's pixel position, rotated to the local tangent, 
 areal's dynamic `font_px`, in the areal face (Newsreader italic for :water / Hanken for
 :range) and color (WATER_INK for :water / GRAY for :range). ~10–17 text! calls per areal.
 Drawn UNDER the point labels; the solver keeps point labels off these via per-glyph obstacles.
-`areals` entries are `(kind, font_px, glyphs)` where each glyph = (char, pos px, rot rad).
+`areals` entries are `(kind, font_px, band_alpha, glyphs)`; each glyph's color alpha is the
+band-opacity, so areals fade in past the floor and out past their `max_px` hand-off.
 """
 function draw_areals!(ax, areals)
-    for (kind, fpx, glyphs) in areals
-        font = kind === :water ? FACE_WATER : FACE_LAND
-        col  = kind === :range ? HouseStyle.GRAY : WATER_INK
+    for (kind, fpx, ba, glyphs) in areals
+        font  = kind === :water ? FACE_WATER : FACE_LAND
+        base  = kind === :range ? HouseStyle.GRAY : WATER_INK
+        col   = Makie.RGBAf(base.r, base.g, base.b, ba)   # band-opacity into the alpha
         for (ch, pos, rot) in glyphs
             text!(ax, pos;
                 text        = string(ch),
@@ -495,7 +502,7 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     leader_pts = Point2f[]
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
-        alpha_of(fs, fp.ids[k]) < 0.01 && continue
+        (alpha_of(fs, fp.ids[k]) * get(af.band, fp.ids[k], 1.0)) < 0.05 && continue
         off = fp.offsets[k]; anc = fp.anchors[k]; sz = fp.sizes[k]
         mag = _norm2(off)
         if mag > sz[1] * 0.5
@@ -523,7 +530,8 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
         id = fp.ids[k]
-        α  = alpha_of(fs, id)
+        # final opacity = time-fade (FadeState) × focus-band opacity (SLO pinned 1.0)
+        α  = alpha_of(fs, id) * get(af.band, id, 1.0)
         α < 0.01 && continue
         pos, name, kind = feature(id)
 
