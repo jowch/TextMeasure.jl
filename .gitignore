@@ -34,8 +34,8 @@ test-logs/
 examples/*/_frames/
 
 # Dev-still build artifacts (throwaway; not committed)
-examples/*/atlas-dev.png
-examples/*/src/atlas-dev.png
+examples/*/atlas-dev*.png
+examples/*/src/atlas-dev*.png
 
 # Ad-hoc research transcripts pulled into the working tree during investigation
 reference-conversation.md

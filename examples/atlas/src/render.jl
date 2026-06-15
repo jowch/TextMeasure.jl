@@ -207,6 +207,10 @@ function draw_labels!(ax, d::AtlasData, fp::FramePlacement, fs::FadeState;
     end
 
     # --- Labels ---
+    # IMPORTANT: text! is anchored at the town's DATA position (t.pos) with the
+    # solved PIXEL offset in markerspace=:pixel. `fp.anchors[k]` holds the *pixel*
+    # anchors (what the solver and leaders use) — anchoring text there would place
+    # it at those values interpreted as data-units, off the map. Use t.pos here.
     text_pos     = Point2f[]
     text_strings = String[]
     text_offsets = Vec2f[]
@@ -220,7 +224,7 @@ function draw_labels!(ax, d::AtlasData, fp::FramePlacement, fs::FadeState;
         α = alpha_of(fs, id)
         α < 0.01 && continue
 
-        push!(text_pos,     fp.anchors[k])
+        push!(text_pos,     t.pos)              # DATA anchor (not the pixel anchor)
         push!(text_strings, t.name)
         push!(text_offsets, fp.offsets[k])
         push!(text_alphas,  α)
@@ -419,9 +423,13 @@ function _dev_still(p::Real, path::AbstractString; pagepx=(1600, 1000))
                     settled = Set{Int}())
     end
 
-    # Build a FadeState with all labels fully visible (born FADE_FRAMES frames ago)
+    # Build a FadeState with all labels fully visible.
+    # update_fade! sets born = frame AND _last = frame, so a single call always
+    # yields elapsed 0 → alpha 0. Register the births at frame 0, then advance
+    # _last to FADE_FRAMES so elapsed = FADE_FRAMES → smoothstep(1) → alpha 1.0.
     fs = FadeState()
-    update_fade!(fs, valid_ids, FADE_FRAMES)   # frame = FADE_FRAMES → age ≥ FADE_FRAMES → alpha = 1.0
+    update_fade!(fs, valid_ids, 0)   # born = 0 for every active town
+    fs._last = FADE_FRAMES           # elapsed = FADE_FRAMES → fully visible
 
     # Count leaders for metrics string
     n_placed  = count(!, fp.dropped)
