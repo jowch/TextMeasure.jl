@@ -6,16 +6,15 @@ town_id,name,lon,lat,pop,rank,source
 5,San Luis Obispo,-120.6586,35.2832,65386,1,NE
 6,Santa Maria,-120.4366,34.9401,110705,2,NE
 7,Paso Robles,-120.69,35.6266,27157,6,NE
-8,Fresno,-119.773,36.7477,616353,1,NE
-9,Atascadero,-120.6596,35.4894,30000,6,curated
-10,Lompoc,-120.4579,34.6391,43000,7,curated
-11,Morro Bay,-120.8500,35.3658,10000,7,curated
-12,Pismo Beach,-120.6410,35.1433,8000,7,curated
-13,Cambria,-121.0808,35.5641,6000,8,curated
-14,San Simeon,-121.1897,35.6413,500,9,curated
-15,Los Osos,-120.8277,35.3108,14000,8,curated
-16,Avila Beach,-120.7324,35.1797,1600,9,curated
-17,Cayucos,-120.8933,35.4427,2500,9,curated
-18,Arroyo Grande,-120.5902,35.1186,18000,7,curated
-19,Grover Beach,-120.6218,35.1213,13000,8,curated
-20,Buellton,-120.1938,34.6141,5000,8,curated
+8,Atascadero,-120.6596,35.4894,30000,6,curated
+9,Lompoc,-120.4579,34.6391,43000,7,curated
+10,Morro Bay,-120.8500,35.3658,10000,7,curated
+11,Pismo Beach,-120.6410,35.1433,8000,7,curated
+12,Cambria,-121.0808,35.5641,6000,8,curated
+13,San Simeon,-121.1897,35.6413,500,9,curated
+14,Los Osos,-120.8277,35.3108,14000,8,curated
+15,Avila Beach,-120.7324,35.1797,1600,9,curated
+16,Cayucos,-120.8933,35.4427,2500,9,curated
+17,Arroyo Grande,-120.5902,35.1186,18000,7,curated
+18,Grover Beach,-120.6218,35.1213,13000,8,curated
+19,Buellton,-120.1938,34.6141,5000,8,curated

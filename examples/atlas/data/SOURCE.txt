@@ -18,9 +18,10 @@ Towns (towns.csv)
 -----------------
 Rows marked source=NE are verbatim Natural Earth ne_10m_populated_places rows
 (NAME, lon/lat, POP_MAX, SCALERANK extracted verbatim from the download).
-There are 8 NE rows — all towns whose centroid falls within the bbox rectangle.
-Note: Fresno (town_id=8) is technically in the bbox rectangle but is in the
-Central Valley, not on the coast; it is included as a verbatim NE row.
+There are 7 NE rows. Natural Earth populated_places in the bbox rectangle also
+include Fresno, but it is excluded here: Fresno sits in the Central Valley (north
+of the wide-shot frame), not on the coast, so it is outside this atlas's Central
+Coast subject. Every remaining source=NE row is verbatim NE.
 
 Rows marked source=curated are hand-placed coastal towns:
   lon/lat hand-entered from public knowledge (accurate to ~0.001°)

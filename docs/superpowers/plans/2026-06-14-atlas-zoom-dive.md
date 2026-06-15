@@ -299,7 +299,7 @@ using Test
     @test length(d.towns) ≥ 20
     @test allunique(t.town_id for t in d.towns)
     @test any(t.name == "San Luis Obispo" for t in d.towns)
-    @test count(t -> t.source == "NE", d.towns) == 8
+    @test count(t -> t.source == "NE", d.towns) == 7   # Fresno excluded (off-subject)
     @test length(d.coastline) ≥ 1 && sum(length, d.coastline) ≥ 400   # 10m, not 50m
 end
 ```
