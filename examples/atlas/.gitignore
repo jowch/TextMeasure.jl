@@ -1,8 +1,9 @@
-# Generated artifacts — never commit (EXCEPT the committed gallery hero)
+# Generated artifacts — never commit (EXCEPT the committed gallery hero + dive loop)
 atlas-*.png
 !atlas-hero.png
 atlas-*.gif
 atlas-*.mp4
+!atlas-dive.mp4
 strip-*.png
 loopframe-*.png
 _frames/

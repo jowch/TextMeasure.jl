@@ -3,7 +3,7 @@
 
 Three **measurement-driven** gallery pieces built on
 [TextMeasure.jl](../README.md), one shared house-style spine, three registers —
-*measure once, then **press · erase · place** — many.* Each piece is a self-contained Julia
+*measure once, then **knead · weave · place** — many.* Each piece is a self-contained Julia
 project under `examples/<piece>/` with its own `Project.toml`, `README.md`, and deterministic
 golden test (hash the **computed** layout table, never pixels).
 
@@ -18,12 +18,14 @@ julia --project=examples/<piece> -e 'using Pkg; Pkg.instantiate()'
 
 ---
 
-## The Tide — *press*
+## The Tide — *knead*
 
-![The Tide](tide/tide-hero.png)
+[![The Tide](tide/tide-hero.png)](tide/tide-loop.mp4)
+
+*▶ [Watch the loop](tide/tide-loop.mp4)*
 
 A short original prose passage about the sea working the shore, set as a justified block on a
-warm sunset palette. A wavy coral **tide-line** sweeps around the block and *kneads* the text:
+warm sunset palette. A wavy coral **tide-line** sweeps around the block and **kneads** the text:
 each frame, the engine re-flows the prose into whatever region the wave leaves behind. The font
 engine is touched **once**; every frame after is one `shape_pack` over the cached widths.
 
@@ -35,7 +37,7 @@ julia --project=examples/tide examples/tide/build.jl    # → tide-loop.mp4 + ti
 
 ---
 
-## Woven — *erase*
+## Woven — *weave*
 
 ![Woven](woven/woven-hero.png)
 
@@ -53,7 +55,9 @@ julia --project=examples/woven -e 'using Woven; Woven.hero("examples/woven/woven
 
 ## The Atlas — *place*
 
-![The Atlas](atlas/atlas-hero.png)
+[![The Atlas](atlas/atlas-hero.png)](atlas/atlas-dive.mp4)
+
+*▶ [Watch the dive](atlas/atlas-dive.mp4)*
 
 A seamless-loop **zoom-dive** over the California Central Coast whose every place-label is
 *measured* by TextMeasure and *placed* collision-free by **MakieTextRepel.jl** — re-solved on

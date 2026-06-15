@@ -29,17 +29,27 @@ line-breaking, CJK, hyphenation, justification, rotation.
 
 ## Demos / Gallery
 
-The [`examples/`](examples/) directory is a small gallery of measurement-driven gallery
-pieces built on this engine — three registers on one house-style spine, *measure once,
-then **press · erase · place** — many*:
+The [`examples/`](examples/) directory is a small gallery of measurement-driven pieces built on
+this engine — three registers on one house-style spine: *measure once, then **knead · weave ·
+place** — many.* See **[examples/README.md](examples/README.md)** for run instructions.
 
-- **[The Tide](examples/tide/)** — a wavy tide-line *kneads* a justified prose block, the
-  engine re-flowing it into the wave's wake every frame.
-- **[Woven](examples/woven/)** — the project's MIT license faded to a ghost, with two
-  found poems lit in place through it.
-- **[The Atlas](examples/atlas/)** — a seamless zoom-dive over the California coast whose
-  place-labels are measured here and placed collision-free, live, every frame.
+### The Tide — *knead*
 
-See **[examples/README.md](examples/README.md)** for screenshots and run instructions.
+[![The Tide](examples/tide/tide-hero.png)](examples/tide/tide-loop.mp4)
 
-[![The Atlas](examples/atlas/atlas-hero.png)](examples/atlas/)
+*A wavy coral tide-line **kneads** a justified prose block — each frame the engine re-flows the
+prose into whatever region the wave leaves behind. ▶ [Watch the loop](examples/tide/tide-loop.mp4) · [`examples/tide`](examples/tide/)*
+
+### Woven — *weave*
+
+[![Woven](examples/woven/woven-hero.png)](examples/woven/)
+
+*The project's own MIT license, laid out once and faded to a ghost, with two found poems **woven**
+through it in place — the poems were always in the license text. [`examples/woven`](examples/woven/)*
+
+### The Atlas — *place*
+
+[![The Atlas](examples/atlas/atlas-hero.png)](examples/atlas/atlas-dive.mp4)
+
+*A seamless zoom-dive over the California Central Coast; every place-label is measured here and
+**placed** collision-free by MakieTextRepel, live, on every frame as the camera descends. ▶ [Watch the dive](examples/atlas/atlas-dive.mp4) · [`examples/atlas`](examples/atlas/)*
