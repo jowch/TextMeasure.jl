@@ -107,28 +107,38 @@ _in_rect(px, rect::Rect2f) =
     px[1] >= rect.origin[1] && px[1] <= rect.origin[1] + rect.widths[1] &&
     px[2] >= rect.origin[2] && px[2] <= rect.origin[2] + rect.widths[2]
 
-# ── Per-label type roles (face + ramp size + color + casing) ─────────────────
-# HONESTY: each label is MEASURED at exactly the (font, size) it is DRAWN with.
+# ── Per-label type roles + measure-once-then-scale ───────────────────────────
+# HONESTY: each label is MEASURED ONCE at a reference size (its actual face), giving a
+# unit box; the per-frame box is that unit box scaled by font_px/_REF_PX. We never
+# re-measure per size — the box scales linearly with the dynamic geographic font_px,
+# and the label is DRAWN at exactly that font_px. (`measure_label` stays for one-offs.)
+
+const _REF_PX = 100.0   # reference size for the single per-label measurement
 
 "Measure ONE label string at its actual (font, size) → pixel box (w,h)."
 measure_label(name, font, size) = only(measure_boxes([name]; font = font, fontsize = Float64(size)))
+
+"Unit box (w,h px) of `name` in `font`, measured ONCE at _REF_PX. Scale by font_px/_REF_PX."
+_unit_box(name, font) = measure_label(name, font, _REF_PX)
+
+"Scale a unit box (measured at _REF_PX) to the given on-screen font_px."
+_scaled_box(unit::Vec2f, fpx::Real) = Vec2f(unit .* Float32(fpx / _REF_PX))
 
 "Letterspace a caps string the way it's drawn (and therefore measured)."
 _letterspace(s) = join(collect(s), " ")
 
 """
-Resolve a point feature (town/POI) to its drawn style:
-returns `(font, size_pt, color_role)` where color_role ∈ (:ink, :gray).
-- Major towns (rank ≤ 5): Hanken SemiBold, subhead 16, ink.
-- Minor towns: Hanken Regular, body 11, ink.
-- POIs (landmarks): Hanken Regular, caption 9, gray.
+Resolve a point feature (town/POI) to its drawn (face, color_role). Size is now DYNAMIC
+(geographic), so it is NOT part of the style — see font_px / lod.jl.
+- Major towns (rank ≤ 5): Hanken SemiBold, ink.
+- Minor towns: Hanken Regular, ink.
+- POIs (landmarks): Hanken Regular, gray.
 """
 function _point_style(kind::Symbol, is_major::Bool)
     if kind === :town
-        is_major ? (FACE_LAND_SB, HouseStyle.RAMP.subhead, :ink) :
-                   (FACE_LAND,    HouseStyle.RAMP.body,    :ink)
+        is_major ? (FACE_LAND_SB, :ink) : (FACE_LAND, :ink)
     else  # :poi
-        (FACE_LAND, HouseStyle.RAMP.caption, :gray)
+        (FACE_LAND, :gray)
     end
 end
 
@@ -144,12 +154,6 @@ function _areal_drawn(a::Areal)
     else
         (_letterspace(a.text), FACE_LAND)
     end
-end
-
-"Measure ONE areal at its ACTUAL face + size, using the SAME string it is drawn with."
-function _measure_areal_box(a::Areal)
-    s, font = _areal_drawn(a)
-    only(measure_boxes([s]; fontsize = a.fontsize, font = font))
 end
 
 """
@@ -171,7 +175,9 @@ end
 struct AssembledFrame
     fp        :: FramePlacement                 # ids = towns + POIs, all solved together
     kind_of   :: Dict{Int,Symbol}               # id → :town | :poi
-    areals    :: Vector{Tuple{String,Point2f,Float64,Symbol}}  # (text, px anchor, rot, kind)
+    font_px   :: Dict{Int,Float64}              # id → on-screen type height (px) it's drawn at
+    # (text, px anchor, rot, kind, font_px) — areal size is dynamic/geographic too
+    areals    :: Vector{Tuple{String,Point2f,Float64,Symbol,Float64}}
     obstacles :: Vector{Rect2f}                 # coastline + areal footprints (px)
     coast_capped :: Bool
 end
@@ -193,41 +199,49 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
     Makie.update_state_before_display!(fig)   # camera matrices now reflect THIS frame
 
     W, H = Float32.(pagepx)
-    margin    = 80.0f0
-    page_rect = Rect2f(-margin, -margin, W + 2margin, H + 2margin)
+    margin       = 80.0f0
+    page_rect    = Rect2f(-margin, -margin, W + 2margin, H + 2margin)
+    content_px_w = W - 2 * _SIDE_PAD     # drawable width → sets pixels-per-map-unit
 
-    # --- (a) active towns (LoD) + on-screen POIs ---
-    w    = view_width(p)
-    tids = active_ids(d.towns, w, Int[])
+    w = view_width(p)                    # degrees of longitude across the frame
     town_by_id = Dict(t.town_id => t for t in d.towns)
     pois = atlas_pois()
 
+    # --- (a) geographic-scaling visibility (px band; SLO pinned) ---
+    # For each on-screen feature: font_px = ground * P (SLO pinned to SLO_PX). Show when
+    # legible (≥ MIN_PX) and, for coarse features, until it outgrows max_px. Measure once
+    # at _REF_PX, scale the unit box to font_px; draw at that font_px.
     ids      = Int[]
     px_anch  = Point2f[]
-    names    = String[]
-    sizes    = Vec2f[]                 # measured per-label at its OWN (face, size)
+    sizes    = Vec2f[]                 # scaled box (w,h px) for the solver
     kind_of  = Dict{Int,Symbol}()
+    fpx_of   = Dict{Int,Float64}()    # id → font_px it is drawn at
 
-    for id in tids
-        t  = town_by_id[id]
+    for t in d.towns
         px = _data_to_px(ax, t.pos)
         _in_rect(px, page_rect) || continue
-        font, size, _ = _point_style(:town, t.rank ≤ 5)
-        push!(ids, id); push!(px_anch, px); push!(names, t.name)
-        push!(sizes, measure_label(t.name, font, size))   # measured at this label's face+size
-        kind_of[id] = :town
+        is_slo = t.town_id == _SLO_ID
+        fpx = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, content_px_w)
+        # SLO is pinned: always visible. Others gate on the lower band (max_px = Inf).
+        (is_slo || visible(fpx, Inf, false)) || continue
+        font, _ = _point_style(:town, t.rank ≤ 5)
+        unit = _unit_box(t.name, font)
+        push!(ids, t.town_id); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
+        kind_of[t.town_id] = :town; fpx_of[t.town_id] = fpx
     end
     for (k, poi) in enumerate(pois)
         px = _data_to_px(ax, poi.pos)
         _in_rect(px, page_rect) || continue
+        fpx = font_px(POI_GROUND, w, content_px_w)
+        visible(fpx, Inf, false) || continue
         pid = _POI_BASE + k
-        font, size, _ = _point_style(:poi, false)
-        push!(ids, pid); push!(px_anch, px); push!(names, poi.name)
-        push!(sizes, measure_label(poi.name, font, size))  # measured at the POI face+size
-        kind_of[pid] = :poi
+        font, _ = _point_style(:poi, false)
+        unit = _unit_box(poi.name, font)
+        push!(ids, pid); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
+        kind_of[pid] = :poi; fpx_of[pid] = fpx
     end
 
-    # --- (c) obstacles in PIXEL space ---
+    # --- (b) obstacles in PIXEL space ---
     obstacles = Rect2f[]
 
     # coastline: project + subsample smoothed vertices, emit small boxes, cap count
@@ -246,18 +260,22 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
         coast_capped && break
     end
 
-    # areals: zoom-gated (big regions only at wide w), measure each, project its
-    # anchor, add its rotated AABB as an obstacle
-    areals = Tuple{String,Point2f,Float64,Symbol}[]
+    # areals: geographic-scaling too. font_px = ground * P; show in [MIN_PX, max_px]
+    # (coarse regions hand off when they outgrow the frame). Measure-once-scale; the
+    # rotated AABB of the scaled box is added as an obstacle.
+    areals = Tuple{String,Point2f,Float64,Symbol,Float64}[]
     for a in atlas_areals()
-        (w >= a.wmin && w <= a.wmax) || continue
         apx = _data_to_px(ax, a.pos)
-        box = _measure_areal_box(a)
+        _in_rect(apx, page_rect) || continue
+        fpx = font_px(a.ground, w, content_px_w)
+        visible(fpx, a.max_px, false) || continue
+        drawn, font = _areal_drawn(a)
+        box = _scaled_box(_unit_box(drawn, font), fpx)
         push!(obstacles, _rotated_aabb(apx, box, a.rotation))
-        push!(areals, (a.text, apx, a.rotation, a.kind))
+        push!(areals, (a.text, apx, a.rotation, a.kind, fpx))
     end
 
-    # --- (d) ONE solve over all point labels, with obstacles ---
+    # --- (c) ONE solve over all point labels, with obstacles ---
     bounds = Rect2f(0, 0, W, H)
     fp = if isempty(ids)
         FramePlacement(Int[], Point2f[], Vec2f[], Vec2f[], BitVector())
@@ -266,7 +284,7 @@ function assemble_frame(d::AtlasData, p::Real; pagepx=(1350, 1080))
                     prev = Dict{Int,Vec2f}(), settled = Set{Int}(), obstacles = obstacles)
     end
 
-    return fig, ax, AssembledFrame(fp, kind_of, areals, obstacles, coast_capped)
+    return fig, ax, AssembledFrame(fp, kind_of, fpx_of, areals, obstacles, coast_capped)
 end
 
 # ── Draw functions ────────────────────────────────────────────────────────────
@@ -310,19 +328,19 @@ face/size/string it was MEASURED with:
 - :water → Newsreader ITALIC, title-case (not letterspaced), color WATER_INK.
 - :range → Hanken, letterspaced caps, color HouseStyle.GRAY.
 Drawn UNDER the point labels; the solver keeps point labels off these via obstacles.
-`areals` entries are `(raw_text, px_anchor, rotation_deg, kind)`; the raw_text is
-re-resolved to its drawn string + face here via the matching `Areal`.
+`areals` entries are `(raw_text, px_anchor, rotation_deg, kind, font_px)`; the raw_text
+is re-resolved to its drawn string + face here, and drawn at the dynamic `font_px`.
 """
 function draw_areals!(ax, areals)
     by_text = Dict(a.text => a for a in atlas_areals())
-    for (text, apx, rot, kind) in areals
+    for (text, apx, rot, kind, fpx) in areals
         a = by_text[text]
         drawn, font = _areal_drawn(a)
         col = kind === :range ? HouseStyle.GRAY : WATER_INK
         text!(ax, apx;
             text        = drawn,
             rotation    = deg2rad(rot),
-            fontsize    = a.fontsize,
+            fontsize    = fpx,
             font        = font,
             color       = col,
             align       = (:center, :center),
@@ -359,6 +377,8 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     end
 
     # --- leaders (drawn first so markers sit on top) ---
+    # Leader runs anchor → the point on the label's BOX nearest the anchor (its near
+    # edge/corner), not the box center. nearest = clamp(anchor, c-half, c+half).
     leader_pts = Point2f[]
     for k in eachindex(fp.ids)
         fp.dropped[k] && continue
@@ -366,9 +386,13 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
         off = fp.offsets[k]; anc = fp.anchors[k]; sz = fp.sizes[k]
         mag = _norm2(off)
         if mag > sz[1] * 0.5
+            c    = anc .+ off                          # label box center (px)
+            half = Vec2f(sz[1] / 2, sz[2] / 2)
+            near = Point2f(clamp(anc[1], c[1] - half[1], c[1] + half[1]),
+                           clamp(anc[2], c[2] - half[2], c[2] + half[2]))  # nearest box point
             dir   = off / mag
-            push!(leader_pts, anc .+ dir .* 5.0f0)   # anchor end, trimmed by point_padding
-            push!(leader_pts, anc .+ off)            # label-center end
+            push!(leader_pts, anc .+ dir .* 5.0f0)     # anchor end, trimmed by point_padding
+            push!(leader_pts, near)                     # near edge/corner of the label box
         end
     end
     if !isempty(leader_pts)
@@ -390,6 +414,8 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
         α < 0.01 && continue
         pos, name, kind = feature(id)
 
+        size = af.font_px[id]   # dynamic geographic type height (px) — DRAW at the measured size
+
         if kind === :town
             is_slo   = id == _SLO_ID
             t        = town_by_id[id]
@@ -402,14 +428,14 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
             push!(town_dot_pos, pos)
             push!(town_dot_c, Makie.RGBAf(ink_c.r, ink_c.g, ink_c.b, α))
             push!(town_dot_sz, dsz)
-            font, size, _ = _point_style(:town, is_major)
+            font, _ = _point_style(:town, is_major)
             col = Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α)
             push!(text_rows, (pos=pos, name=name, off=fp.offsets[k], font=font, size=size, color=col))
         else  # :poi
             push!(poi_pos, pos)
             push!(poi_fill,   Makie.RGBAf(HouseStyle.PAPER.r, HouseStyle.PAPER.g, HouseStyle.PAPER.b, α))
             push!(poi_stroke, Makie.RGBAf(HouseStyle.INK.r, HouseStyle.INK.g, HouseStyle.INK.b, α))
-            font, size, _ = _point_style(:poi, false)
+            font, _ = _point_style(:poi, false)
             col = Makie.RGBAf(HouseStyle.GRAY.r, HouseStyle.GRAY.g, HouseStyle.GRAY.b, α)
             push!(text_rows, (pos=pos, name=name, off=fp.offsets[k], font=font, size=size, color=col))
         end

@@ -32,35 +32,36 @@ end
 
 """
 A rotated region label ("areal"): water bodies, ranges. Anchored at a real lon/lat,
-drawn rotated to follow a feature. `text` is the raw caps string (render letterspaces
-it); `rotation` is degrees; `fontsize` in pt. The label box is MEASURED by TextMeasure
-at draw time — these fields are inputs to measurement, not a hand-sized box.
+drawn rotated to follow a feature. Its on-screen size is GEOGRAPHIC — `ground` is its
+em in degrees of latitude, so it grows with zoom like every other label. `max_px` is
+the upper hand-off: a coarse region hides once its type outgrows that pixel height.
+The drawn box is MEASURED by TextMeasure at the current font_px — these are inputs to
+measurement, never a hand-sized box.
 """
 struct Areal
     text     :: String
     pos      :: Point2f     # projected map-units
     rotation :: Float64     # degrees (counter-clockwise)
-    fontsize :: Float64     # pt
+    ground   :: Float64     # ground em (degrees latitude) → font_px = ground * P
     kind     :: Symbol      # :water | :range
-    wmin     :: Float64     # eligible when wmin ≤ view_width(°) ≤ wmax …
-    wmax     :: Float64     # … so big regions label the WIDE shots, small features the TIGHT ones
+    max_px   :: Float64     # upper band: hide (hand off) when font_px exceeds this
 end
 
 """
     atlas_areals() -> Vector{Areal}
 
-Region labels, zoom-gated like a real map: the big regions (Pacific Ocean, the range)
-appear only on the WIDE establishing shots where there's room; small features (Estero
-Bay) appear on the TIGHT shots. Each row is
-`(text, lon, lat, rotation_deg, fontsize, kind, wmin°, wmax°)` — easy to nudge visually.
+Region labels sized geographically: the big regions (Pacific Ocean, the range) have the
+largest ground ems so they dominate the WIDE establishing shots, then HAND OFF (hide)
+once they outgrow the frame past `max_px`; smaller features (Estero Bay) reach legibility
+later in the dive. Each row is `(text, lon, lat, rotation_deg, ground°, kind, max_px)` —
+easy to nudge visually.
 """
 function atlas_areals()
-    # fontsizes are √2 RAMP tiers (display 44 · deck 31 · subhead 16) — never off-ramp.
     raw = [
-        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 44.0, :water, 1.2, Inf),  # display
-        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 31.0, :range, 0.9, Inf),  # deck
-        ("ESTERO BAY",         -120.95, 35.42, -30.0, 16.0, :water, 0.0, 1.0),  # subhead
+        ("PACIFIC OCEAN",      -121.35, 35.25, -34.0, 0.10,  :water, 150.0),
+        ("SANTA LUCIA RANGE",  -120.45, 35.62, -42.0, 0.065, :range, 200.0),
+        ("ESTERO BAY",         -120.95, 35.42, -30.0, 0.035, :water, 120.0),
     ]
-    [Areal(txt, Point2f(project_point(lon, lat)...), rot, fs, kind, wmin, wmax)
-     for (txt, lon, lat, rot, fs, kind, wmin, wmax) in raw]
+    [Areal(txt, Point2f(project_point(lon, lat)...), rot, ground, kind, max_px)
+     for (txt, lon, lat, rot, ground, kind, max_px) in raw]
 end
