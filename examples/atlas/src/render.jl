@@ -588,15 +588,106 @@ function draw_labels!(ax, d::AtlasData, af::AssembledFrame, fs::FadeState)
     return ax
 end
 
+# ── Cartographic chrome helpers (Plex Mono, BRASS — the instrument-readout face) ──
+
+const _KM_PER_DEG_LAT = 111.0      # 1° latitude ≈ 111 km (used for the scale bar)
+const _NICE_KM = (1, 2, 5, 10, 20, 50)   # round scale-bar lengths to choose from
+
+"Format a whole-degree longitude as `NNN°W`/`NNN°E` (our data is western → W)."
+_lon_label(lon::Integer) = "$(abs(lon))°$(lon < 0 ? "W" : "E")"
+"Format a whole-degree latitude as `NN°N`/`NN°S`."
+_lat_label(lat::Integer) = "$(abs(lat))°$(lat < 0 ? "S" : "N")"
+
 """
-    draw_chrome!(ax, fig, d; metrics::AbstractString="")
+    _scale_bar!(ax, w_deg, pagepx)
+
+Dynamic km scale bar, lower-LEFT INSIDE the axis (drawn to `ax` in `space=:pixel`, i.e.
+axis-scene-relative coords, since fig.scene content is occluded by the axis). px_per_km
+= P/111 where P = content_px_w/(KX·w_deg). Picks the NICE km length whose bar lands
+closest to ~120px, draws a 1.0px BRASS bar with end ticks + `0` and `N km` Plex Mono
+caption labels. Recomputed every frame (shrinks as you zoom — correct).
+"""
+function _scale_bar!(ax, w_deg::Real, pagepx)
+    W, H = Float32.(pagepx)
+    content_px_w = W - 2 * _SIDE_PAD
+    px_per_km = (content_px_w / (KX * w_deg)) / _KM_PER_DEG_LAT
+
+    km = argmin(n -> abs(n * px_per_km - 120.0), _NICE_KM)
+    bar_px = Float32(km * px_per_km)
+
+    # axis-scene-relative pixels (origin = axis bottom-left): inset from the lower-left.
+    x0 = 14.0f0
+    y0 = 16.0f0
+    x1 = x0 + bar_px
+    tick = 4.0f0
+
+    linesegments!(ax,
+        [Point2f(x0, y0), Point2f(x1, y0),                 # the bar
+         Point2f(x0, y0 - tick), Point2f(x0, y0 + tick),   # left end tick
+         Point2f(x1, y0 - tick), Point2f(x1, y0 + tick)];  # right end tick
+        color = HouseStyle.BRASS, linewidth = 1.0, space = :pixel, inspectable = false)
+
+    text!(ax, Point2f(x0, y0 + tick + 2.0f0);
+        text = "0", fontsize = Float64(HouseStyle.RAMP.caption),
+        font = FACE_MONO, color = HouseStyle.BRASS,
+        align = (:center, :bottom), space = :pixel, inspectable = false)
+    text!(ax, Point2f(x1, y0 + tick + 2.0f0);
+        text = "$(km) km", fontsize = Float64(HouseStyle.RAMP.caption),
+        font = FACE_MONO, color = HouseStyle.BRASS,
+        align = (:center, :bottom), space = :pixel, inspectable = false)
+
+    return km
+end
+
+"""
+    _graticule_labels!(ax, d, pagepx)
+
+Label the WHOLE-degree grid lines only, drawn to `ax` (axis-scene pixel space, where
+`_data_to_px` already lives, so they survive the axis occlusion). Lon labels (`121°W`)
+along the BOTTOM edge where each integer meridian crosses; lat labels (`35°N`) along the
+LEFT edge where each integer parallel crosses. Only crossings inside the axis are drawn.
+Plex Mono caption 9, BRASS, inset from the neat-line. Skips lon labels near the lower-left
+so they don't collide with the scale bar.
+"""
+function _graticule_labels!(ax, d::AtlasData, pagepx)
+    W, H = Float32.(pagepx)
+    aw = W - 2 * Float32(_SIDE_PAD)               # axis-scene width  (ax-relative right edge)
+    ah = H - Float32(_MASTHEAD_H) - Float32(_FOOTER_H)  # axis-scene height (top edge)
+    inset = 4.0f0
+    lon_min, lon_max, lat_min, lat_max = _data_range(d)
+
+    # lon labels along the bottom edge (ax-relative). Skip the lower-left (scale bar) and
+    # lower-right (metrics readout) so degree labels don't collide with the cartouche.
+    for lon in ceil(Int, lon_min):floor(Int, lon_max)
+        px = _data_to_px(ax, Point2f(project_point(lon, (lat_min + lat_max) / 2)))
+        (150 < px[1] < aw - 110) || continue
+        text!(ax, Point2f(px[1], inset);
+            text = _lon_label(lon), fontsize = Float64(HouseStyle.RAMP.caption),
+            font = FACE_MONO, color = HouseStyle.BRASS,
+            align = (:center, :bottom), space = :pixel, inspectable = false)
+    end
+    # lat labels along the left edge (ax-relative). Skip y<44 to clear the scale-bar text.
+    for lat in ceil(Int, lat_min):floor(Int, lat_max)
+        px = _data_to_px(ax, Point2f(project_point((lon_min + lon_max) / 2, lat)))
+        (44 < px[2] < ah - 8) || continue
+        text!(ax, Point2f(inset, px[2]);
+            text = _lat_label(lat), fontsize = Float64(HouseStyle.RAMP.caption),
+            font = FACE_MONO, color = HouseStyle.BRASS,
+            align = (:left, :center), space = :pixel, inspectable = false)
+    end
+    return ax
+end
+
+"""
+    draw_chrome!(ax, fig, d; metrics, w_deg, pagepx)
 
 Masthead "The Atlas" (Newsreader roman display 44, title-case, top-aligned), brass
 dateline rule, region "C E N T R A L  C O A S T" (Hanken SemiBold subhead 16,
-letterspaced caps, top-aligned), 1.0px BRASS neat-line, corner metrics (Plex Mono 9),
-footer (Plex Mono 9 brass).
+letterspaced caps, top-aligned), 1.0px BRASS neat-line, graticule degree labels, a
+dynamic km scale bar (lower-left), corner metrics (Plex Mono 9, lower-right), footer.
 """
-function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
+function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "",
+                      w_deg::Real = 0.0, pagepx = (1620, 1080))
     W, H = fig.scene.viewport[].widths
     W = Float32(W); H = Float32(H)
     scene = fig.scene
@@ -630,7 +721,12 @@ function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
          Point2f(ax_left,  ax_top),    Point2f(ax_left,  ax_bottom)];
         color = HouseStyle.BRASS, linewidth = 1.0, space = :pixel, inspectable = false)
 
-    # Metrics + footer — Plex Mono (the instrument readout), BRASS caption 9
+    # Graticule degree labels (whole-degree only) + scale bar — drawn to the AXIS scene
+    # (fig.scene content inside the axis bbox is occluded by the axis).
+    _graticule_labels!(ax, d, pagepx)
+    w_deg > 0 && _scale_bar!(ax, w_deg, pagepx)
+
+    # Metrics — Plex Mono (the instrument readout), BRASS caption 9, lower-right.
     if !isempty(metrics)
         text!(scene, Point2f(ax_right - Float32(_SIDE_PAD), ax_bottom + 6.0f0);
             text = metrics, fontsize = Float64(HouseStyle.RAMP.caption),
@@ -638,6 +734,7 @@ function draw_chrome!(ax, fig, d::AtlasData; metrics::AbstractString = "")
             align = (:right, :bottom), space = :pixel, inspectable = false)
     end
 
+    # Footer — bottom-center.
     text!(scene, Point2f(W / 2.0f0, Float32(_FOOTER_H) / 2.0f0);
         text = HouseStyle.footer("The Atlas"), fontsize = Float64(HouseStyle.RAMP.caption),
         font = FACE_MONO, color = HouseStyle.BRASS,
@@ -665,24 +762,16 @@ function _dev_still(p::Real, path::AbstractString; pagepx=(1620, 1080))
     update_fade!(fs, fp.ids, 0)
     fs._last = FADE_FRAMES
 
-    # metrics
-    n_placed  = count(!, fp.dropped)
-    n_town    = count(id -> af.kind_of[id] === :town, fp.ids)
-    n_poi     = count(id -> af.kind_of[id] === :poi,  fp.ids)
-    n_leaders = 0
-    for k in eachindex(fp.ids)
-        fp.dropped[k] && continue
-        _norm2(fp.offsets[k]) > fp.sizes[k][1] * 0.5 && (n_leaders += 1)
-    end
+    # metrics — tightened to the on-screen readout: width + placed count (no dev noise)
+    n_placed = count(!, fp.dropped)
     w     = view_width(p)
     w_str = string(round(w; digits=2))
-    ls    = n_leaders == 1 ? "" : "s"
-    metrics = "w $(w_str)° · $(n_placed)/$(length(fp.ids)) placed · $(n_leaders) leader$(ls)"
+    metrics = "w $(w_str)° · $(n_placed) placed"
 
     draw_basemap!(ax, d)
     draw_areals!(ax, af.areals)
     draw_labels!(ax, d, af, fs)
-    draw_chrome!(ax, fig, d; metrics)
+    draw_chrome!(ax, fig, d; metrics, w_deg = w, pagepx)
 
     save(path, fig)
     return path
