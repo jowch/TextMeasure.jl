@@ -22,8 +22,8 @@ function measure_boxes(strings; fontsize = Float64(HouseStyle.RAMP.body), font =
     [Vec2f(layout(prepare(backend, s)).size[1], boxh) for s in strings]
 end
 
-const _PARAMS = RepelParams(; only_move=:both, box_padding=4.0,
-                            point_padding=5.0, min_segment_length=2.0)
+const _PARAMS = RepelParams(; only_move=:both, box_padding=5.0,
+                            point_padding=5.5, min_segment_length=2.0)
 const _SOLVER = ProjectionSolver(_PARAMS)
 
 """

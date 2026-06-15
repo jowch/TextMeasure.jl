@@ -47,9 +47,9 @@ const _SIDE_PAD    = 16.0   # px left/right margin for chrome text
 const _TOP_PAD     = 10.0   # px from the very top edge to the masthead baseline anchor
 
 # ── Obstacle tuning ──────────────────────────────────────────────────────────
-const _COAST_STRIDE  = 5     # sample every Nth smoothed coastline vertex
-const _COAST_BOX     = 8.0   # px side of each coastline obstacle box (centered on vertex)
-const _COAST_MAX     = 200   # cap total coastline obstacle boxes (keeps the solve fast)
+const _COAST_STRIDE  = 3     # sample every Nth smoothed coastline vertex (denser barrier)
+const _COAST_BOX     = 12.0  # px side of each coastline obstacle box (overlaps → solid wall)
+const _COAST_MAX     = 320   # cap total coastline obstacle boxes (keeps the solve fast)
 const _AREAL_OBSTACLE_STRIDE = 2   # subsample every Nth per-glyph areal box for obstacles
 
 """
