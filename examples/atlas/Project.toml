@@ -1,0 +1,31 @@
+name = "Atlas"
+uuid = "b7e2d1a4-3c5f-4e8a-9b6d-2f1c8a0e4d7b"
+version = "0.1.0"
+authors = ["TextMeasure.jl contributors"]
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+GeoJSON = "61d90e0f-e114-555e-ac52-39dfb47a3ef9"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+HouseStyle = "f1a9b3c2-0d4e-4a6b-9c8d-7e2f1a0b3c4d"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+MakieTextRepel = "2348ae4b-e21f-48c0-a77f-52990745b802"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
+
+# Unregistered packages — resolve by path/url (Julia 1.11+ [sources]).
+[sources]
+HouseStyle = { path = "../_housestyle" }
+TextMeasure = { path = "../.." }
+MakieTextRepel = { url = "https://github.com/jowch/MakieTextRepel.jl", rev = "dc7178205ce4b05e8bd86c4ae10419f0932e14e6" }
+
+[compat]
+julia = "1.11"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
