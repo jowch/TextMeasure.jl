@@ -8,7 +8,8 @@ import HouseStyle
 include("data.jl")
 include("camera.jl")
 include("lod.jl")
-# include("place.jl"); include("fade.jl"); include("render.jl")
+include("place.jl")
+# include("fade.jl"); include("render.jl")
 # include("loop.jl"); include("golden.jl")
 
 end # module
