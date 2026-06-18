@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 using Atlas: measure_boxes, solve_frame, recompute_overlaps, FramePlacement
 using Atlas: load_atlas_data
+using Atlas: _unit_box, measure_label, _char_advances, _REF_PX,
+             _point_style, _areal_drawn, atlas_pois, atlas_areals,
+             _UNITBOX_CACHE, _CHARADV_CACHE, _SPACEADV_CACHE
 using GeometryBasics: Point2f, Vec2f, Rect2f
 using Test
 
@@ -36,4 +39,34 @@ using Test
     for i in 1:3                                  # pinned labels keep their prior offset
         @test maximum(abs.(fp3.offsets[i] .- fp.offsets[i])) < 0.5
     end
+end
+
+@testset "measure-once cache is transparent (cached == fresh)" begin
+    # The per-frame caches must return exactly what an uncached measurement would: text/font
+    # fully determine a reference box at _REF_PX. Guards against a cache-keying regression
+    # silently feeding wrong box sizes to the solver.
+    d = load_atlas_data()
+    for t in d.towns
+        font, _ = _point_style(:town, t.rank ≤ 5)
+        @test _unit_box(t.name, font) == measure_label(t.name, font, _REF_PX)
+    end
+    for poi in atlas_pois()
+        font, _ = _point_style(:poi, false)
+        @test _unit_box(poi.name, font) == measure_label(poi.name, font, _REF_PX)
+    end
+    # areal per-char advances must equal a fully-uncached recompute
+    for ar in atlas_areals()
+        drawn, font = _areal_drawn(ar)
+        fpx, scale  = 37.0, Float32(37.0 / _REF_PX)
+        sp   = Float32(measure_label("x x", font, _REF_PX)[1] - measure_label("xx", font, _REF_PX)[1])
+        want = [(c == ' ' ? sp : Float32(measure_label(string(c), font, _REF_PX)[1])) * scale for c in collect(drawn)]
+        @test _char_advances(drawn, font, fpx) == want
+    end
+
+    # perf-regression guard: the transparency checks above pass whether or not caching is live
+    # (both sides compute the same value), so assert the caches actually filled — if a future
+    # change disables memoization, this fails even though output stays correct.
+    @test !isempty(_UNITBOX_CACHE)
+    @test !isempty(_CHARADV_CACHE)
+    @test !isempty(_SPACEADV_CACHE)
 end
