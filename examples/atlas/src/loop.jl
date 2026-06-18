@@ -3,7 +3,7 @@
 #
 # HONESTY INVARIANT (preserved every frame):
 #   Every label is measured by TextMeasure (via measure_boxes / _unit_box) and
-#   placed by MakieTextRepel (solve_cluster, via solve_frame). No position is
+#   placed by MakieTextRepel (warm_solve, via solve_frame). No position is
 #   hand-picked. The warm-start threads solved offsets from frame N into frame N+1
 #   so the solver RELAXES rather than re-seeds — this is what makes the video smooth.
 #

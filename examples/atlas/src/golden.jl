@@ -6,9 +6,15 @@
 # and no solver: `font_px` comes from each feature's ground-em (degrees), `band` is the
 # legibility/size fade (`band_alpha`) times the viewport edge fade (`_edge_alpha`) over a pure
 # AFFINE projection that reproduces the Makie camera to ≪0.1px. So the digest is reproducible
-# across machines / fonts / Makie versions. (The solver's pixel offsets — Makie/solver-dependent
-# — are deliberately NOT golden'd; this pins the SCALING + FADE behaviour we tune, e.g. town
-# growth, the areal cloud hand-off, and the Range dissolving as the inland towns arrive.)
+# across machines / fonts / Makie versions. This pins the SCALING + FADE behaviour we tune, e.g.
+# town growth, the areal cloud hand-off, and the Range dissolving as the inland towns arrive.
+#
+# RAW solver pixel offsets are still NOT hashed — they flow through Makie's projection, which
+# isn't guaranteed bit-stable across Makie versions. Instead `placement_rows`/`atlas_placement_digest`
+# golden the solver's DISCRETE decisions — which side each label leans (offset quadrant) + whether
+# it's dropped — taken from the real COLD solve. Those decisions only flip on a genuine placement
+# change, so the digest stays machine-stable like the geometric one. (Offset magnitude / frame-to-
+# frame continuity is covered separately by the warm-start delta bound in test_loop.jl.)
 #
 # Included after lod.jl / pois.jl (uses their constants + atlas_pois/atlas_areals).
 
@@ -89,3 +95,33 @@ end
 
 "SHA-256 hex of the canonical (geometric, deterministic) Atlas LoD/opacity table."
 atlas_digest(; pagepx = (1620, 1080)) = digest_rows(golden_rows(; pagepx))
+
+"""
+    placement_rows(; pagepx=(1620,1080)) -> Vector{String}
+
+The solver's DISCRETE placement decisions across `GOLDEN_FRAMES`. For each point label at each
+frame (taken from the real COLD solve — `assemble_frame` with no warm-start, so it's deterministic
+and frame-independent), emit `frame|id|dropped|sx|sy` where `sx`/`sy` are the SIGN of the label's
+offset from its anchor (which quadrant it leans into). Hashing the discrete side, not the pixel
+offset, keeps the digest stable under sub-pixel projection noise (it only changes on a genuine
+re-placement) — machine-independent like the geometric table above.
+"""
+function placement_rows(; pagepx = (1620, 1080))
+    d = load_atlas_data()
+    rows = String[]
+    sgn(x) = x > 0 ? "+" : x < 0 ? "-" : "0"
+    for frame in GOLDEN_FRAMES
+        p = frame / _GOLDEN_N
+        _, _, af = assemble_frame(d, p; pagepx, prev = Dict{Int,Vec2f}())   # cold = deterministic
+        fp = af.fp
+        for i in sortperm(fp.ids)                                            # stable order by id
+            off = fp.offsets[i]
+            push!(rows, string(frame, "|", fp.ids[i], "|", Int(fp.dropped[i]),
+                               "|", sgn(off[1]), "|", sgn(off[2])))
+        end
+    end
+    return rows
+end
+
+"SHA-256 hex of the Atlas discrete-placement table (machine-stable; solver decisions, not pixels)."
+atlas_placement_digest(; pagepx = (1620, 1080)) = digest_rows(placement_rows(; pagepx))

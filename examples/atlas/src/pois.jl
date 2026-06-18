@@ -2,7 +2,7 @@
 # pois.jl — hand-placed feature anchors (the ONLY hand-positioned data in the
 # piece: each POI / areal carries a real geographic location. Everything that
 # follows — every label box — is MEASURED by TextMeasure and PLACED by
-# MakieTextRepel's solve_cluster. These structs supply anchors only, never the
+# MakieTextRepel's warm_solve. These structs supply anchors only, never the
 # label's final screen position.
 #
 # Included after data.jl (uses project_point / Point2f).

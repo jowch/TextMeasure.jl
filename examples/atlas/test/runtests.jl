@@ -3,7 +3,7 @@ using Atlas, Test
 
 @testset "Atlas" begin
     @testset "loads" begin
-        @test isdefined(Atlas, :solve_cluster)  # MakieTextRepel internal API resolved
+        @test isdefined(Atlas, :warm_solve)  # MakieTextRepel public API resolved
     end
     include("test_data.jl")
     include("test_pois.jl")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 using Atlas
-using Atlas: golden_rows, atlas_digest, GOLDEN_FRAMES
+using Atlas: golden_rows, atlas_digest, GOLDEN_FRAMES, placement_rows, atlas_placement_digest
 using Test
 
 # THE DETERMINISTIC GOLDEN. The gallery invariant: hash the COMPUTED layout table, NEVER pixels.
@@ -37,4 +37,31 @@ const GOLDEN_DIR = joinpath(@__DIR__, "golden")
     end
     @test isfile(path)                                       # fails closed without the sha file
     @test cs == strip(read(path, String))                   # regression anchor
+end
+
+# Placement golden: the solver's DISCRETE decisions (which side each label leans + dropped),
+# now that MakieTextRepel guarantees solver determinism (public warm_solve, PR #27). Hashes the
+# side quadrant — NOT pixel offsets — so it stays machine-stable (a quadrant only flips on a real
+# re-placement; offset magnitude/continuity is covered by test_loop's warm-start delta bound).
+# Update with `UPDATE_GOLDEN=1`.
+@testset "golden: deterministic Atlas placement decisions (side + dropped, machine-stable)" begin
+    prows = placement_rows()
+    @test !isempty(prows)
+
+    ps = atlas_placement_digest()
+    @test length(ps) == 64                                   # sha256 hex
+
+    # non-vacuous: the solver actually distributes labels — not every label leans the same way.
+    @test any(r -> endswith(r, "|+|+"), prows)               # some lean upper-right
+    @test any(r -> occursin("|-|", r), prows)                # some lean left
+    @test length(prows) >= 20                                # labels actually get placed across the dive
+
+    ppath = joinpath(GOLDEN_DIR, "atlas-placement.sha256")
+    if get(ENV, "UPDATE_GOLDEN", "") == "1"
+        mkpath(GOLDEN_DIR)
+        write(ppath, ps)
+        write(joinpath(GOLDEN_DIR, "atlas-placement.rows.txt"), join(prows, "\n"))
+    end
+    @test isfile(ppath)                                      # fails closed without the sha file
+    @test ps == strip(read(ppath, String))                  # regression anchor
 end

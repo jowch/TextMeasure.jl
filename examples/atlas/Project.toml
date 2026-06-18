@@ -20,8 +20,9 @@ TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
 HouseStyle = {path = "../_housestyle"}
 # MakieTextRepel has no registered release yet, so it is pinned to a GitHub rev. This atlas
 # leg therefore needs network access at `Pkg.instantiate` time; a GH/network outage can turn
-# its CI red independently of any code change here.
-MakieTextRepel = {rev = "dc7178205ce4b05e8bd86c4ae10419f0932e14e6", url = "https://github.com/jowch/MakieTextRepel.jl"}
+# its CI red independently of any code change here. Pinned past PRs #27 (public `warm_solve`)
+# and #28, so the demo uses only the public API — no internal-solver reach-through.
+MakieTextRepel = {rev = "90f87ed3e9be28f1bfcc4754749fe0c3942fb2c0", url = "https://github.com/jowch/MakieTextRepel.jl"}
 TextMeasure = {path = "../.."}
 
 [compat]

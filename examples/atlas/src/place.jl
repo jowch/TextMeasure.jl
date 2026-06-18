@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
-# DECISION (Task 1 spike): raw `solve_cluster` + our own overlap recompute.
+# DECISION (Task 1 spike): the raw warm-start solve + our own overlap recompute. Originally the
+# unexported `solve_cluster`; migrated to the public `warm_solve` (same seam) once it shipped.
 # Per-frame data→pixel projection (used by the loop task, NOT here):
 #   px = Point2f(Makie.project(ax.scene, :data, :pixel, data_pt)[Vec(1,2)])  # no frame lag after update_state_before_display!
 using Makie
@@ -23,9 +24,8 @@ function measure_boxes(strings; fontsize = Float64(HouseStyle.RAMP.body), font =
     [Vec2f(layout(prepare(backend, s)).size[1], boxh) for s in strings]
 end
 
-const _PARAMS = RepelParams(; only_move=:both, box_padding=5.0,
-                            point_padding=5.5, min_segment_length=2.0)
-const _SOLVER = ProjectionSolver(_PARAMS)
+# Solver config, passed to the public `warm_solve` per call (kwargs, no solver object).
+const _SOLVE_KW = (; only_move=:both, box_padding=5.0, point_padding=5.5, min_segment_length=2.0)
 
 # Cartographic default: seed an uncontested label to the UPPER-RIGHT of its dot (Imhof's
 # preferred position) instead of the solver's bare default (straight below). The seed offset
@@ -51,8 +51,9 @@ function solve_frame(ids, anchors, sizes, bounds; prev, settled, obstacles::Vect
     # pinned_offsets must be length n when pin_mask is provided (solver contract)
     pinned = pin !== nothing ?
              Vec2f[get(prev, id, Vec2f(0,0)) for id in ids] : Vec2f[]
-    r = solve_cluster(_SOLVER, collect(Point2f, anchors), collect(Vec2f, sizes), bounds;
-                      init_state=init, pin_mask=pin, pinned_offsets=pinned, obstacles=obstacles)
+    r = warm_solve(collect(Point2f, anchors), collect(Vec2f, sizes), bounds;
+                   init_state=init, pin_mask=pin, pinned_offsets=pinned, obstacles=obstacles,
+                   _SOLVE_KW...)
     FramePlacement(collect(Int, ids), collect(Point2f, anchors), collect(Vec2f, sizes),
                    r.offsets, r.dropped)
 end
