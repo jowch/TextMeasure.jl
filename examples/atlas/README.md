@@ -2,7 +2,7 @@
 
 <video src="https://github.com/user-attachments/assets/4e82d0a3-eec8-456f-bc18-7044bf49293e" controls muted loop></video>
 
-<sub>▶ inline dive above (renders on GitHub) · [atlas-dive.mp4](atlas-dive.mp4) · [hero still](atlas-hero.png)</sub>
+<sub>▶ inline dive above (renders on GitHub) · [hero still](atlas-hero.png)</sub>
 
 A cartographic gallery piece built on the **TextMeasure** layout engine: a seamless-loop
 **zoom-dive** over the California Central Coast whose every place-label is *measured* by

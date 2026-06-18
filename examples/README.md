@@ -22,7 +22,7 @@ julia --project=examples/<piece> -e 'using Pkg; Pkg.instantiate()'
 
 <video src="https://github.com/user-attachments/assets/e9bd9d54-4def-4d6d-8b5b-e732e0550d8c" controls muted loop></video>
 
-<sub>▶ inline loop above (renders on GitHub) · [tide-loop.mp4](tide/tide-loop.mp4) · [hero still](tide/tide-hero.png)</sub>
+<sub>▶ inline loop above (renders on GitHub) · [hero still](tide/tide-hero.png)</sub>
 
 A short original prose passage about the sea working the shore, set as a justified block on a
 warm sunset palette. A wavy coral **tide-line** sweeps around the block and **kneads** the text:
@@ -57,7 +57,7 @@ julia --project=examples/woven -e 'using Woven; Woven.hero("examples/woven/woven
 
 <video src="https://github.com/user-attachments/assets/4e82d0a3-eec8-456f-bc18-7044bf49293e" controls muted loop></video>
 
-<sub>▶ inline dive above (renders on GitHub) · [atlas-dive.mp4](atlas/atlas-dive.mp4) · [hero still](atlas/atlas-hero.png)</sub>
+<sub>▶ inline dive above (renders on GitHub) · [hero still](atlas/atlas-hero.png)</sub>
 
 A seamless-loop **zoom-dive** over the California Central Coast whose every place-label is
 *measured* by TextMeasure and *placed* collision-free by **MakieTextRepel.jl** — re-solved on
