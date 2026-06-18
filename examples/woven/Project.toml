@@ -1,0 +1,26 @@
+name = "Woven"
+uuid = "e2a5c7d1-3b9f-4e60-8a1c-2d6f0b4e91a3"
+version = "0.1.0"
+authors = ["TextMeasure.jl contributors"]
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+HouseStyle = "f1a9b3c2-0d4e-4a6b-9c8d-7e2f1a0b3c4d"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
+TextMeasureLayouts = "57b0e3ea-cc01-4cc3-9e7e-6e97d1609b9f"
+
+# Unregistered in-repo packages — resolve by path (Julia 1.11+ [sources]).
+[sources]
+HouseStyle = { path = "../_housestyle" }
+TextMeasure = { path = "../.." }
+TextMeasureLayouts = { path = "../layouts" }
+
+[compat]
+julia = "1.11"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

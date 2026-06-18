@@ -1,0 +1,8 @@
+Hanken Grotesk — instanced from google/fonts variable font (OFL).
+source: github.com/google/fonts ofl/hankengrotesk/HankenGrotesk[wght].ttf
+variable sha256: 813b3f8fa0965405669a89b38e51bbefd95eef6b8e20d1cb2d8c10cce062662f
+instanced via: python -m fontTools.varLib.instancer 'HankenGrotesk[wght].ttf' wght=<W> --update-name-table
+  Regular=400  SemiBold=600  Bold=700
+b8a3781b27adac924769049496928444c2db900c1c3f5063c34566066d7e1e5a  HankenGrotesk-Regular.ttf
+cf0d2c80e66b2e36900d0d0ce90297e715bc598545c60343499c80340313d0c9  HankenGrotesk-SemiBold.ttf
+cc55437d4d69bc485cce02c5178f8ed9931316cad987bdcede47a9fbfefa0f1f  HankenGrotesk-Bold.ttf

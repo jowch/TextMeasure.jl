@@ -1,0 +1,13 @@
+Libre Caslon Text — instanced from google/fonts variable font (OFL).
+source: github.com/google/fonts ofl/librecaslontext/LibreCaslonText[wght].ttf
+variable sha256: c11809dbfd5445886293d89b32bfc2584075c80e77750cf1c284113e36b8b3f4
+instanced via: python -m fontTools.varLib.instancer 'LibreCaslonText[wght].ttf' wght=400 --update-name-table
+  Regular=400
+215ee598c7fd659522f4694ed338fea04cb06c36f172d4119a592b96138915da  LibreCaslonText-Regular.ttf
+
+Libre Caslon Text Italic — instanced from google/fonts variable font (OFL).
+source: github.com/google/fonts ofl/librecaslontext/LibreCaslonText-Italic[wght].ttf
+variable sha256: 60ca1a3aade61c8c381800ca85b9b2f0fb341d89ebe065e12cd6ec2ee2e53e54
+instanced via: python -m fontTools.varLib.instancer 'LibreCaslonText-Italic[wght].ttf' wght=400 --update-name-table
+  Italic=400
+9a7a9e26195ef621ced4361b5dbe42d7068e3255a798dfc203a0d069654e89cf  LibreCaslonText-Italic.ttf

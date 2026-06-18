@@ -29,18 +29,27 @@ line-breaking, CJK, hyphenation, justification, rotation.
 
 ## Demos / Gallery
 
-The [`examples/`](examples/) directory is a gallery of measurement-driven layout demos
-built on this engine — editorial covers, map feature pages, justification comparisons,
-shape-conforming text packing, and an adaptive academic-paper infographic. See
-**[examples/README.md](examples/README.md)** for the full index with screenshots and
-run instructions for each.
+The [`examples/`](examples/) directory is a small gallery of measurement-driven pieces built on
+this engine — three registers on one house-style spine: *measure once, then **knead · weave ·
+place** — many.* See **[examples/README.md](examples/README.md)** for run instructions.
 
-The hero is the **DOIInfograph 6-up grid** (`examples/doi_infograph/`): six very
-different papers — short and 125-char titles, 8 to 446 authors, with and without
-abstracts — all composed by the *same* measurement-driven template. That uniformity
-is the proof of adaptiveness.
+### The Tide — *knead*
 
-[![DOIInfograph 6-up grid](examples/doi_infograph/assets/grid_hero.png)](examples/doi_infograph/assets/grid_hero.pdf)
+[![The Tide](examples/tide/tide-hero.png)](examples/tide/tide-loop.mp4)
 
-GitHub shrinks the PNG above; for per-panel detail open the high-resolution vector
-composite (selectable text): **[`grid_hero.pdf`](examples/doi_infograph/assets/grid_hero.pdf)**.
+*A wavy coral tide-line **kneads** a justified prose block — each frame the engine re-flows the
+prose into whatever region the wave leaves behind. ▶ [Watch the loop](examples/tide/tide-loop.mp4) · [`examples/tide`](examples/tide/)*
+
+### Woven — *weave*
+
+[![Woven](examples/woven/woven-hero.png)](examples/woven/)
+
+*The project's own MIT license, laid out once and faded to a ghost, with two found poems **woven**
+through it in place — the poems were always in the license text. [`examples/woven`](examples/woven/)*
+
+### The Atlas — *place*
+
+[![The Atlas](examples/atlas/atlas-hero.png)](examples/atlas/atlas-dive.mp4)
+
+*A seamless zoom-dive over the California Central Coast; every place-label is measured here and
+**placed** collision-free by MakieTextRepel, live, on every frame as the camera descends. ▶ [Watch the dive](examples/atlas/atlas-dive.mp4) · [`examples/atlas`](examples/atlas/)*

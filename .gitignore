@@ -30,6 +30,15 @@ JuliaLocalPreferences.toml
 # Per-agent test output logs (see CLAUDE.md "Test logs")
 test-logs/
 
+# Scratch directories for intermediate/sample render frames (regenerable via render_samples)
+examples/*/_frames/
+
+# Dev-still build artifacts (throwaway; not committed)
+examples/*/atlas-dev*.png
+examples/*/src/atlas-dev*.png
+examples/atlas/strip-*.png
+examples/atlas/atlas-*.png
+
 # Ad-hoc research transcripts pulled into the working tree during investigation
 reference-conversation.md
 

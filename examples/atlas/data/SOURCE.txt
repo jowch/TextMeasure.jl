@@ -1,0 +1,65 @@
+Atlas Basemap Data — Provenance & License
+==========================================
+
+Coastline + Land
+----------------
+Source: Natural Earth 1:10m (https://www.naturalearthdata.com/)
+Via:    https://github.com/nvkelso/natural-earth-vector (public domain)
+Files:  ne_10m_coastline.geojson, ne_10m_land.geojson
+        Fetched and clipped by examples/atlas/prep/clip.jl
+Clip:   lon ∈ [-122.2, -119.6], lat ∈ [34.3, 37.0]
+        (Central California: Monterey Bay → Point Conception, with margin)
+Method: vertex-in-expanded-bbox filter (expand +0.5°) with path-splitting;
+        coastline stored as LineString sub-paths, land as Polygon rings.
+        EXPAND=0.5° keeps paths continuous at frame edges.
+License: Public Domain. No attribution required.
+
+Towns (towns.csv)
+-----------------
+Rows marked source=NE are verbatim Natural Earth ne_10m_populated_places rows
+(NAME, lon/lat, POP_MAX, SCALERANK extracted verbatim from the download).
+There are 7 NE rows. Natural Earth populated_places in the bbox rectangle also
+include Fresno, but it is excluded here: Fresno sits in the Central Valley (north
+of the wide-shot frame), not on the coast, so it is outside this atlas's Central
+Coast subject. Every remaining source=NE row is verbatim NE.
+
+Rows marked source=curated are hand-placed coastal towns:
+  lon/lat hand-entered from public knowledge (accurate to ~0.001°)
+  pop = approximate real population
+  rank = ordinal importance (lower = more important)
+  rank scheme: majors 1–5, mid 6–7, necklace 8–9
+
+town_id is a stable integer key (1..N), assigned once, never renumbered.
+It is the warm-start key in downstream rendering code.
+
+2026-06-15 densification (all source=curated, appended; ids 20-24, NOT renumbered):
+  Templeton(20), Santa Margarita(21), Nipomo(22), San Miguel(23), Oceano(24) —
+  inland/coastal SLO-county towns. lon/lat hand-entered from public knowledge
+  (~0.001°), pop approximate, rank by size on the same majors/mid/necklace scheme.
+
+Inland water — lakes.geojson + rivers.geojson
+----------------------------------------------
+Source: Natural Earth 1:10m (https://www.naturalearthdata.com/), public domain.
+Files:  ne_10m_lakes + ne_10m_lakes_north_america (lakes, Polygon),
+        ne_10m_rivers_lake_centerlines (rivers, LineString).
+        Fetched and clipped by examples/atlas/prep/clip_water.jl (same bbox + EXPAND=0.5°
+        vertex filter / path-splitting as clip.jl).
+In-bbox content (this is ALL NE 10m carries here):
+  rivers : Salinas (threads through the view) + San Joaquin (inland edge).
+  lakes  : Millerton Lake, San Luis Reservoir (both near the NE/E bbox edge, normally
+           outside the dive view).
+NOTE: the smaller SLO-county reservoirs labelled as POIs (Lopez Lake, Santa Margarita
+Lake, Lake Nacimiento) are NOT in Natural Earth 10m — too small for that scale — so they
+remain text POIs with hand-authored anchors, not water polygons.
+License: Public Domain. No attribution required.
+
+POIs / landmarks (atlas_pois() in src/pois.jl)
+----------------------------------------------
+ALL landmarks are hand-placed (curated), not from Natural Earth. lon/lat are from
+public knowledge (~0.001°). Current set: Morro Rock, Hearst Castle, Montaña de Oro,
+Point Buchon, Pismo Dunes, Bishop Peak, Cerro San Luis, Lopez Lake, Santa Margarita
+Lake, Lake Nacimiento, Mission San Luis Obispo, Point Sal. They carry geographic
+anchors only — render still MEASURES + SOLVES every label.
+
+Generated: 2026-06-14 (densified 2026-06-15)
+Script:    examples/atlas/prep/clip.jl

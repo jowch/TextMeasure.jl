@@ -1,0 +1,25 @@
+town_id,name,lon,lat,pop,rank,source
+1,Santa Barbara,-119.7166,34.4108,181632,3,NE
+2,Monterey,-121.8936,36.6003,124288,5,NE
+3,Salinas,-121.6417,36.6822,156784,4,NE
+4,Santa Cruz,-122.0264,36.9719,148444,4,NE
+5,San Luis Obispo,-120.6586,35.2832,65386,1,NE
+6,Santa Maria,-120.4366,34.9401,110705,2,NE
+7,Paso Robles,-120.69,35.6266,27157,6,NE
+8,Atascadero,-120.6596,35.4894,30000,6,curated
+9,Lompoc,-120.4579,34.6391,43000,7,curated
+10,Morro Bay,-120.8500,35.3658,10000,7,curated
+11,Pismo Beach,-120.6410,35.1433,8000,7,curated
+12,Cambria,-121.0808,35.5641,6000,8,curated
+13,San Simeon,-121.1897,35.6413,500,9,curated
+14,Los Osos,-120.8277,35.3108,14000,8,curated
+15,Avila Beach,-120.7324,35.1797,1600,9,curated
+16,Cayucos,-120.8933,35.4427,2500,9,curated
+17,Arroyo Grande,-120.5902,35.1186,18000,7,curated
+18,Grover Beach,-120.6218,35.1213,13000,8,curated
+19,Buellton,-120.1938,34.6141,5000,8,curated
+20,Templeton,-120.708,35.549,7700,7,curated
+21,Santa Margarita,-120.611,35.389,1300,8,curated
+22,Nipomo,-120.476,35.043,18000,7,curated
+23,San Miguel,-120.696,35.752,2300,8,curated
+24,Oceano,-120.612,35.099,7600,8,curated
