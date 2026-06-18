@@ -41,10 +41,11 @@ end
 
 # Placement golden: the solver's DISCRETE decisions (which side each label leans + dropped),
 # now that MakieTextRepel guarantees solver determinism (public warm_solve, PR #27). Hashes the
-# side quadrant — NOT pixel offsets — so it stays machine-stable (a quadrant only flips on a real
-# re-placement; offset magnitude/continuity is covered by test_loop's warm-start delta bound).
-# Update with `UPDATE_GOLDEN=1`.
-@testset "golden: deterministic Atlas placement decisions (side + dropped, machine-stable)" begin
+# side quadrant — NOT pixel offsets — so it's robust to sub-pixel projection drift: a quadrant only
+# flips on a real re-placement. (It still routes through Makie, so it's robust-to-drift, not fully
+# Makie-independent like the geometric table; offset magnitude/continuity is covered by test_loop's
+# warm-start delta bound.) Update with `UPDATE_GOLDEN=1`.
+@testset "golden: deterministic Atlas placement decisions (side + dropped, robust to projection drift)" begin
     prows = placement_rows()
     @test !isempty(prows)
 
