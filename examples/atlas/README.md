@@ -1,12 +1,17 @@
 # The Atlas
 
+<video src="https://github.com/user-attachments/assets/4e82d0a3-eec8-456f-bc18-7044bf49293e" controls muted loop></video>
+
+<sub>▶ inline dive above (renders on GitHub) · [hero still](atlas-hero.png)</sub>
+
 A cartographic gallery piece built on the **TextMeasure** layout engine: a seamless-loop
 **zoom-dive** over the California Central Coast whose every place-label is *measured* by
-TextMeasure and *placed* collision-free by [MakieTextRepel](https://github.com/) — re-solved on
+TextMeasure and *placed* collision-free by [MakieTextRepel](https://github.com/jowch/MakieTextRepel.jl) — re-solved on
 **every frame** as the viewport descends from a 2° establishing shot to a 0.55° plunge over San
 Luis Obispo and back.
 
-Artifacts (rendered into this directory, all gitignored):
+Artifacts (rendered into this directory; the hero still and loop mp4 are committed as the
+README figures, intermediate dev frames are gitignored):
 
 - `atlas-dive.mp4` — the seamless 30fps zoom-dive loop
 - `atlas-hero.png` — the hero still (the Morro Bay–SLO necklace at mid-descent)

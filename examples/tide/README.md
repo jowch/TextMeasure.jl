@@ -1,5 +1,9 @@
 # The Tide
 
+<video src="https://github.com/user-attachments/assets/e9bd9d54-4def-4d6d-8b5b-e732e0550d8c" controls muted loop></video>
+
+<sub>▶ inline loop above (renders on GitHub) · [hero still](tide-hero.png)</sub>
+
 A kinetic-typography gallery piece built on the **TextMeasure** layout engine.
 
 A short original prose passage about the sea working the shore is set as a justified block on a

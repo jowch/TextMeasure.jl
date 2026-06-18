@@ -35,10 +35,10 @@ place** — many.* See **[examples/README.md](examples/README.md)** for run inst
 
 ### The Tide — *knead*
 
-[![The Tide](examples/tide/tide-hero.png)](examples/tide/tide-loop.mp4)
+<video src="https://github.com/user-attachments/assets/e9bd9d54-4def-4d6d-8b5b-e732e0550d8c" controls muted loop></video>
 
 *A wavy coral tide-line **kneads** a justified prose block — each frame the engine re-flows the
-prose into whatever region the wave leaves behind. ▶ [Watch the loop](examples/tide/tide-loop.mp4) · [`examples/tide`](examples/tide/)*
+prose into whatever region the wave leaves behind. ▶ inline loop above · [`examples/tide`](examples/tide/)*
 
 ### Woven — *weave*
 
@@ -49,7 +49,7 @@ through it in place — the poems were always in the license text. [`examples/wo
 
 ### The Atlas — *place*
 
-[![The Atlas](examples/atlas/atlas-hero.png)](examples/atlas/atlas-dive.mp4)
+<video src="https://github.com/user-attachments/assets/4e82d0a3-eec8-456f-bc18-7044bf49293e" controls muted loop></video>
 
 *A seamless zoom-dive over the California Central Coast; every place-label is measured here and
-**placed** collision-free by MakieTextRepel, live, on every frame as the camera descends. ▶ [Watch the dive](examples/atlas/atlas-dive.mp4) · [`examples/atlas`](examples/atlas/)*
+**placed** collision-free by MakieTextRepel, live, on every frame as the camera descends. ▶ inline dive above · [`examples/atlas`](examples/atlas/)*
