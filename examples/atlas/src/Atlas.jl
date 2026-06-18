@@ -2,7 +2,7 @@
 module Atlas
 
 using TextMeasure
-using MakieTextRepel: ProjectionSolver, RepelParams, solve_cluster
+using MakieTextRepel: warm_solve
 import HouseStyle
 
 # includes added task-by-task:

@@ -25,7 +25,7 @@ Nothing on this map is hand-positioned. The piece holds to three claims, each en
    a guessed width. Each label is measured **once** at a reference size; its per-frame box is that
    unit box scaled by `font_px / _REF_PX` (glyph advances scale linearly with size), so the font
    engine is touched once per label and every frame after is arithmetic. *(single-measure-then-scale)*
-2. **Placed.** Every point label's screen position is the output of MakieTextRepel's `solve_cluster`
+2. **Placed.** Every point label's screen position is the output of MakieTextRepel's public `warm_solve`
    — one solve per frame over all labels against each other, the sampled coastline, and the areals.
    As the camera dives, the previous frame's offsets warm-start the next, so labels glide rather
    than jump. Placement is then made deterministic by our own two-pass cull (hard coast clearance +
@@ -52,7 +52,7 @@ Nothing on this map is hand-positioned. The piece holds to three claims, each en
 | `pois.jl` | Hand-authored feature anchors: landmark POIs + the curved region areals (the ONLY hand-placed data). |
 | `camera.jl` | The seamless geometric zoom loop (van Wijk & Nuij easing) → `camera_rect(p)`. |
 | `lod.jl` | Geographic level-of-detail: `font_px` (ground-em × pixels-per-unit), the `band_alpha` fades, hydrography LoD. |
-| `place.jl` | `measure_boxes` (TextMeasure) + `solve_frame` (warm-started `solve_cluster`). |
+| `place.jl` | `measure_boxes` (TextMeasure) + `solve_frame` (warm-started `warm_solve`). |
 | `render.jl` | The honest per-frame pipeline (`assemble_frame`) + the Makie render layer (basemap, areals, labels, chrome). |
 | `loop.jl` | `render_loop` (the MP4) + `render_hero`. |
 | `golden.jl` | The deterministic LoD/opacity golden table (geometric, no pixels). |
@@ -65,7 +65,7 @@ For each loop phase `p`:
 camera_rect(p)                  # camera.jl — this frame's view window (geometric zoom)
   → project anchors to px       # the geography lands on screen
     → font_px + band            # lod.jl   — geographic size + legibility/edge/size fades
-      → measure → seed → solve  # place.jl — measure boxes, geography-aware seed, solve_cluster
+      → measure → seed → solve  # place.jl — measure boxes, geography-aware seed, warm_solve
         → cull + leader fade    # deterministic visibility (coast clearance + occlusion)
           → draw                # render.jl — basemap → hydrography → areals → labels → chrome
 ```

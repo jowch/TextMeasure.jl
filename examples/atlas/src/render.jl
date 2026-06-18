@@ -5,7 +5,7 @@
 # `using CairoMakie` lives here deliberately — kept out of place.jl.
 #
 # HONESTY INVARIANT: every point label (town + POI) is MEASURED by TextMeasure
-# (measure_boxes) and PLACED by MakieTextRepel (solve_cluster, via solve_frame).
+# (measure_boxes) and PLACED by MakieTextRepel (warm_solve, via solve_frame).
 # Rotated region "areals" are likewise MEASURED, and their footprints + sampled
 # coastline vertices are fed back in as solver OBSTACLES so the label field stays
 # clear of them. The only hand-positioned values anywhere are feature anchors
@@ -423,7 +423,7 @@ end
 
 Build a fresh figure for loop phase `p` and place EVERY label honestly:
 - point labels (active towns + on-screen POIs) measured via TextMeasure, placed by
-  one `solve_cluster` call against each other, the sampled coastline, and the areals;
+  one `warm_solve` call against each other, the sampled coastline, and the areals;
 - areals laid out glyph-by-glyph along an arc (each glyph MEASURED), their per-glyph
   boxes added as obstacles.
 
