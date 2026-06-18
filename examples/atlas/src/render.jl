@@ -253,11 +253,22 @@ end
 
 const _REF_PX = 100.0   # reference size for the single per-label measurement
 
+# Measure-once caches. A label/glyph's reference box depends ONLY on (string, font) at
+# _REF_PX — never on font_px, anchor, or frame — yet `assemble_frame` runs per frame
+# (×360). Without caching, every town/POI box and every areal glyph advance was re-measured
+# on each frame; these caches make "measure once, layout many" literally true. Keys fully
+# determine the measurement (fonts are module consts), so there is no staleness hazard.
+const _UNITBOX_CACHE  = Dict{Tuple{String,String}, Vec2f}()    # (name, font)  → ref box (w,h)
+const _CHARADV_CACHE  = Dict{Tuple{Char,String}, Float32}()    # (char, font)  → ref advance
+const _SPACEADV_CACHE = Dict{String, Float32}()                # font          → ref space advance
+
 "Measure ONE label string at its actual (font, size) → pixel box (w,h)."
 measure_label(name, font, size) = only(measure_boxes([name]; font = font, fontsize = Float64(size)))
 
-"Unit box (w,h px) of `name` in `font`, measured ONCE at _REF_PX. Scale by font_px/_REF_PX."
-_unit_box(name, font) = measure_label(name, font, _REF_PX)
+"Unit box (w,h px) of `name` in `font`, measured ONCE at _REF_PX (cached). Scale by font_px/_REF_PX."
+_unit_box(name, font) = get!(_UNITBOX_CACHE, (String(name), font)) do
+    measure_label(name, font, _REF_PX)
+end
 
 "Scale a unit box (measured at _REF_PX) to the given on-screen font_px."
 _scaled_box(unit::Vec2f, fpx::Real) = Vec2f(unit .* Float32(fpx / _REF_PX))
@@ -297,7 +308,14 @@ a lone `" "` is whitespace-trimmed to width 0 by the layout engine. `adv(\"x x\"
 recovers the inter-word advance, keeping it TextMeasure-derived (no hand-picked gap).
 """
 function _space_advance(font)
-    Float32(measure_label("x x", font, _REF_PX)[1] - measure_label("xx", font, _REF_PX)[1])
+    get!(_SPACEADV_CACHE, font) do
+        Float32(measure_label("x x", font, _REF_PX)[1] - measure_label("xx", font, _REF_PX)[1])
+    end
+end
+
+"Reference advance (px) of a single char in `font` at _REF_PX (cached). Box width == advance, no kerning."
+_char_ref_advance(c::Char, font) = get!(_CHARADV_CACHE, (c, font)) do
+    Float32(measure_label(string(c), font, _REF_PX)[1])
 end
 
 "Per-char advance (px) of `s` at `fpx`, measured ONCE at _REF_PX and scaled. No kerning."
@@ -305,9 +323,9 @@ function _char_advances(s::AbstractString, font, fpx::Real)
     chars = collect(s)
     scale = Float32(fpx / _REF_PX)
     sp    = _space_advance(font)                  # recovered space advance (lone space → 0)
-    # measure each char's reference advance once (box width == advance, no kerning);
-    # substitute the recovered advance for spaces so words don't collapse together.
-    [(c == ' ' ? sp : Float32(measure_label(string(c), font, _REF_PX)[1])) * scale for c in chars]
+    # each char's reference advance is measured once and reused; substitute the recovered
+    # advance for spaces so words don't collapse together.
+    [(c == ' ' ? sp : _char_ref_advance(c, font)) * scale for c in chars]
 end
 
 """
