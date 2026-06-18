@@ -6,7 +6,7 @@
 #
 # Produces:
 #   atlas-dive.mp4     — 360-frame seamless zoom-dive loop (scale=2 default; bump to 4 for delivery)
-#   atlas-hero.png     — high-res (scale=8) still at mid-dive (p=0.40)
+#   atlas-hero.png     — still at mid-dive (p=0.33)
 #   loopframe-01..08.png — 8 evenly-spaced extracted frames for visual inspection
 
 using Atlas
