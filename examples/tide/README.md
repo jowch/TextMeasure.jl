@@ -1,10 +1,6 @@
 # The Tide
 
-<!-- INLINE VIDEO — replace the src below with the user-attachments URL you get by dragging
-     tide-loop.mp4 into any PR/issue comment box (GitHub returns a
-     https://github.com/user-attachments/assets/<uuid> URL). Until then the player is a
-     placeholder; the committed mp4 + still links beneath always work, on or off GitHub. -->
-<video src="https://github.com/user-attachments/assets/PASTE-tide-loop-URL-HERE" controls muted loop></video>
+<video src="https://github.com/user-attachments/assets/e9bd9d54-4def-4d6d-8b5b-e732e0550d8c" controls muted loop></video>
 
 <sub>▶ inline loop above (renders on GitHub) · [tide-loop.mp4](tide-loop.mp4) · [hero still](tide-hero.png)</sub>
 

@@ -1,10 +1,6 @@
 # The Atlas
 
-<!-- INLINE VIDEO — replace the src below with the user-attachments URL you get by dragging
-     atlas-dive.mp4 into any PR/issue comment box (GitHub returns a
-     https://github.com/user-attachments/assets/<uuid> URL). Until then the player is a
-     placeholder; the committed mp4 + still links beneath always work, on or off GitHub. -->
-<video src="https://github.com/user-attachments/assets/PASTE-atlas-dive-URL-HERE" controls muted loop></video>
+<video src="https://github.com/user-attachments/assets/4e82d0a3-eec8-456f-bc18-7044bf49293e" controls muted loop></video>
 
 <sub>▶ inline dive above (renders on GitHub) · [atlas-dive.mp4](atlas-dive.mp4) · [hero still](atlas-hero.png)</sub>
 
