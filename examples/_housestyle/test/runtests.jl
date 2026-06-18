@@ -5,7 +5,7 @@ using HouseStyle, Test, Colors
     @test isdefined(HouseStyle, :PAPER)
 end
 
-@testset "palette + ramp (exact, from demos-house-style.md)" begin
+@testset "palette + ramp (exact, from README.md house style)" begin
     @test HouseStyle.PAPER     == colorant"#F4EFE6"
     @test HouseStyle.INK       == colorant"#1A1714"
     @test HouseStyle.BRASS     == colorant"#9A7B4F"
