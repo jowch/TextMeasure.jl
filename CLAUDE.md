@@ -81,4 +81,5 @@ convention. `Line.str`/`width` are whitespace-trimmed; `Line.baseline` uses bloc
 - Adding a backend = subtype `AbstractMeasurementBackend` + implement the two methods. If it needs
   a heavy dep, add it as a weakdep in `Project.toml` and put the methods in a new `ext/` extension,
   mirroring the existing two.
-- Specs and plans for this work live in `docs/superpowers/`.
+- The shared gallery house style (palette, type ramp, fonts, footer rules) lives in
+  `examples/_housestyle/README.md`, mirrored by the `HouseStyle` module in the same directory.
