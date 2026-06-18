@@ -3,13 +3,16 @@ import Printf
 import GeometryBasics as GB
 
 const COL_PROSE  = 0xfa    # 250 grey  — intact asteroid prose
-const COL_SHARD  = 0xdf    # 223 warm  — fracture-shard prose (pops against grey)
+const COL_SHARD  = 0xa7    # 167 red   — fracture-shard prose (impact STATE, pops vs grey;
+                           #             distinct from the brass signature's warm hue)
 const COL_SHIP   = 0x33    # 51 cyan   — ship hull
 const COL_BEAM   = 0xe2    # 226 yellow— projectiles + charge indicator
 const COL_TAG    = 0xf4    # 244 grey  — callout boxes
 const COL_TRAIL  = 0xf3    # 243 grey  — motion trails
 const COL_DEBUG  = 0x2d    # 45 cyan   — debug bbox overlay
 const COL_BORDER = 0xf0    # 240 dim grey — frame + footer
+const COL_RIM    = 0xee    # 238 dimmer grey — silhouette rim (the boundary the prose hugs)
+const COL_BRASS  = 0x89    # 137 muted brass — the house-style signature (footer middot)
 const CHARGE_GLYPH = (' ', '·', '*', '─', '\\', '✸')  # index = charge+1 (1-based)
 
 # House-style gallery footer (docs/superpowers/demos-house-style.md §3): every demo
@@ -40,6 +43,9 @@ function _draw_border!(buf::CellBuffer)
     end
     if nc >= length(FOOTER) + 6
         put_string!(buf, nr, 3, " " * FOOTER * " "; fg = COL_BORDER)
+        # House-style §3: the middot is the signature's smallest appearance — brass.
+        dot = findfirst('·', FOOTER)
+        dot === nothing || put_char!(buf, nr, 3 + 1 + (dot - 1), '·'; fg = COL_BRASS)
     end
     return buf
 end
@@ -137,6 +143,28 @@ function _blit_packed!(buf::CellBuffer, pp, cx::Real, cy::Real; fg, debug::Bool)
     return buf
 end
 
+# Stippled silhouette rim: a faint dotted halo ONE cell OUTSIDE the pack's own
+# rasterised mask, so the shaped-text body reads as a body and the prose is visibly
+# hugging an edge (not floating as a paragraph). It is the SAME raster the prose
+# packed into, dilated by one cell, so the dots ring exactly where the silhouette
+# ends and the prose kisses it from inside — the measurement's "kiss the boundary"
+# tell, made visible. Empty-cells-only, so it never lands on a glyph.
+function _draw_rim!(buf::CellBuffer, pp, cx::Real, cy::Real; fg = COL_RIM)
+    R = pp.raster
+    nr, nc = size(R)
+    (nr < 2 || nc < 2) && return buf
+    r0 = round(Int, cy) - pp.rows ÷ 2
+    c0 = round(Int, cx) - pp.cols ÷ 2
+    filled(r, c) = 1 <= r <= nr && 1 <= c <= nc && @inbounds(R[r, c])
+    @inbounds for r in 0:(nr + 1), c in 0:(nc + 1)
+        filled(r, c) && continue                       # halo is OUTSIDE the mask
+        (filled(r-1, c) || filled(r+1, c) || filled(r, c-1) || filled(r, c+1) ||
+         filled(r-1, c-1) || filled(r-1, c+1) || filled(r+1, c-1) || filled(r+1, c+1)) || continue
+        _put_if_empty!(buf, r0 + r - 1, c0 + c - 1, '·'; fg = fg)
+    end
+    return buf
+end
+
 # Rotate a silhouette's vertices by θ (radians) about the origin. θ=0 is an exact
 # identity (cos 0 = 1, sin 0 = 0), so unrotated bodies and the golden are byte-stable.
 _rotate_poly(poly, θ) = (c = cos(θ); s = sin(θ);
@@ -147,6 +175,7 @@ _pack(body, θ = 0.0) = pack_prose_into(_rotate_poly(body.poly, θ), body.prep;
 
 function _draw_asteroid!(buf::CellBuffer, a, debug::Bool)
     pp = _pack(a, a.θ)
+    debug || _draw_rim!(buf, pp, a.x, a.y)         # faint boundary under the prose
     _blit_packed!(buf, pp, a.x, a.y; fg = COL_PROSE, debug = debug)
     _draw_callout!(buf, a, pp)
     return buf
@@ -155,6 +184,7 @@ end
 # Shards: warm-colored prose so the explosion pops as distinct from grey asteroids.
 function _draw_shard!(buf::CellBuffer, sh, debug::Bool)
     pp = _pack(sh)
+    debug || _draw_rim!(buf, pp, sh.x, sh.y)       # each shard reads as its own broken piece
     _blit_packed!(buf, pp, sh.x, sh.y; fg = COL_SHARD, debug = debug)
     return buf
 end

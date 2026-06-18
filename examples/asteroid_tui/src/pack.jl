@@ -12,9 +12,10 @@ the silhouette's bounding box). `cells :: Vector{Tuple{Int,Int,Char}}` is
 `(row, col, char)` for every glyph, in reading order.
 """
 struct PackedProse
-    rows  :: Int
-    cols  :: Int
-    cells :: Vector{Tuple{Int,Int,Char}}
+    rows   :: Int
+    cols   :: Int
+    cells  :: Vector{Tuple{Int,Int,Char}}
+    raster :: BitMatrix    # the silhouette mask the prose packs into (row 1 = top)
 end
 
 """
@@ -28,7 +29,7 @@ function pack_prose_into(polygon::Vector{GB.Point2{Float64}}, prep::TextMeasure.
                          scale::Real, min_chord_width::Real=3.0)
     xs = [p[1] for p in polygon]; ys = [p[2] for p in polygon]
     span = max(maximum(xs) - minimum(xs), maximum(ys) - minimum(ys))
-    span <= 0 && return PackedProse(1, 1, Tuple{Int,Int,Char}[])
+    span <= 0 && return PackedProse(1, 1, Tuple{Int,Int,Char}[], falses(1, 1))
     cell = span / scale                                   # polygon-units per cell
     raster = rasterize(polygon, cell)                     # BitMatrix, row 1 = top
     cf = raster_chord_fn(raster, 1.0)                     # work in cell units (cell_size 1)
@@ -43,5 +44,5 @@ function pack_prose_into(polygon::Vector{GB.Point2{Float64}}, prep::TextMeasure.
             push!(cells, (row, col0 + k - 1, ch))
         end
     end
-    return PackedProse(size(raster, 1), size(raster, 2), cells)
+    return PackedProse(size(raster, 1), size(raster, 2), cells, raster)
 end
