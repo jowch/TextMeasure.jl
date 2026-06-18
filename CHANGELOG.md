@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> The first release tag (v0.1.0) is **deferred** until the greenfield demo gallery
-> ([#30](https://github.com/jowch/TextMeasure.jl/pull/30)) lands; the work below
-> stays under `[Unreleased]` until then. Nothing has been tagged or registered yet.
+_Nothing yet._
+
+## [0.1.0] - 2026-06-18
+
+First public release: the backend-agnostic measure-once / layout-many text engine, its
+measurement backends (two shipped as package extensions), and a three-piece demo gallery.
 
 ### Added
 
@@ -53,8 +56,8 @@ project with its own `Project.toml`, README, and a deterministic golden test tha
   re-walking the prepared segments.
 - **`examples/atlas`** — *The Atlas* (**place**): a seamless zoom-dive over the California Central
   Coast; every place-label measured by TextMeasure and placed collision-free by
-  [MakieTextRepel.jl](https://github.com/jowch/MakieTextRepel.jl) (`solve_cluster`), re-solved and
-  warm-started every frame. Stateless opacity, deterministic two-pass placement, geography-aware
+  [MakieTextRepel.jl](https://github.com/jowch/MakieTextRepel.jl)'s public `warm_solve`, re-solved
+  and warm-started every frame. Stateless opacity, deterministic two-pass placement, geography-aware
   seeding, altitude-scaled cloud areals. Looping MP4 + hero still.
 
 Shared infrastructure (libraries, not standalone demos):
@@ -73,4 +76,5 @@ Shared infrastructure (libraries, not standalone demos):
   gallery above. Tracking issues for the old plan were closed as not planned; see
   [#30](https://github.com/jowch/TextMeasure.jl/pull/30).
 
-[Unreleased]: https://github.com/jowch/TextMeasure.jl/tree/main
+[Unreleased]: https://github.com/jowch/TextMeasure.jl/compare/v0.1.0...main
+[0.1.0]: https://github.com/jowch/TextMeasure.jl/releases/tag/v0.1.0
