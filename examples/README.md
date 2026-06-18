@@ -20,9 +20,13 @@ julia --project=examples/<piece> -e 'using Pkg; Pkg.instantiate()'
 
 ## The Tide — *knead*
 
-[![The Tide](tide/tide-hero.png)](tide/tide-loop.mp4)
+<!-- INLINE VIDEO — replace the src below with the user-attachments URL you get by dragging
+     tide/tide-loop.mp4 into any PR/issue comment box (GitHub returns a
+     https://github.com/user-attachments/assets/<uuid> URL). Until then the player is a
+     placeholder; the committed mp4 + still links beneath always work, on or off GitHub. -->
+<video src="https://github.com/user-attachments/assets/PASTE-tide-loop-URL-HERE" controls muted loop></video>
 
-*▶ [Watch the loop](tide/tide-loop.mp4)*
+<sub>▶ inline loop above (renders on GitHub) · [tide-loop.mp4](tide/tide-loop.mp4) · [hero still](tide/tide-hero.png)</sub>
 
 A short original prose passage about the sea working the shore, set as a justified block on a
 warm sunset palette. A wavy coral **tide-line** sweeps around the block and **kneads** the text:
@@ -55,9 +59,13 @@ julia --project=examples/woven -e 'using Woven; Woven.hero("examples/woven/woven
 
 ## The Atlas — *place*
 
-[![The Atlas](atlas/atlas-hero.png)](atlas/atlas-dive.mp4)
+<!-- INLINE VIDEO — replace the src below with the user-attachments URL you get by dragging
+     atlas/atlas-dive.mp4 into any PR/issue comment box (GitHub returns a
+     https://github.com/user-attachments/assets/<uuid> URL). Until then the player is a
+     placeholder; the committed mp4 + still links beneath always work, on or off GitHub. -->
+<video src="https://github.com/user-attachments/assets/PASTE-atlas-dive-URL-HERE" controls muted loop></video>
 
-*▶ [Watch the dive](atlas/atlas-dive.mp4)*
+<sub>▶ inline dive above (renders on GitHub) · [atlas-dive.mp4](atlas/atlas-dive.mp4) · [hero still](atlas/atlas-hero.png)</sub>
 
 A seamless-loop **zoom-dive** over the California Central Coast whose every place-label is
 *measured* by TextMeasure and *placed* collision-free by **MakieTextRepel.jl** — re-solved on
