@@ -72,7 +72,7 @@ end
 
     @testset "rest frame (0) placement count exceeds a sane threshold" begin
         fr0 = frame_layout(pb, 0)
-        @test length(fr0.placements) >= 60          # all 83 words at rest; floor well below
+        @test length(fr0.placements) >= 60          # every word placed at rest; floor sits well below the full count
         @test fr0.dir === :W
         @test fr0.b == 0.0                           # frame 0 is the rest rectangle
     end

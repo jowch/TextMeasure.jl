@@ -69,8 +69,8 @@ Shared infrastructure (libraries, not standalone demos):
 ### Changed
 
 - Replaced the original multi-wave demo plan (the retired `cover` / `doi_infograph` /
-  `justification` / `map_feature` / `silhouettes` / `breathing_column` examples) with the
-  three-piece greenfield gallery above. Tracking issues for the old plan were closed as not
-  planned; see [#30](https://github.com/jowch/TextMeasure.jl/pull/30).
+  `justification` / `map_feature` / `silhouettes` examples) with the three-piece greenfield
+  gallery above. Tracking issues for the old plan were closed as not planned; see
+  [#30](https://github.com/jowch/TextMeasure.jl/pull/30).
 
 [Unreleased]: https://github.com/jowch/TextMeasure.jl/tree/main

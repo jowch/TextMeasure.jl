@@ -147,21 +147,21 @@ end
 # ── Hero still ───────────────────────────────────────────────────────────────
 
 """
-    render_hero(path; p, scale) -> NamedTuple
+    render_hero(path; p) -> NamedTuple
 
-One high-resolution still at the dense mid-dive phase (default p=0.40 — halfway through
-the inward zoom, many labels visible). Cold placement (no warm-start) — fine for a still.
+One still at the dense mid-dive phase (default p=0.33 — a third of the way through the
+inward zoom, many labels visible). Cold placement (no warm-start) — fine for a still.
+Rendered at `pagepx`, the same page size the loop uses.
 
-Returns `(; path, pagepx, scale, p, bytes)`.
+Returns `(; path, pagepx, p, bytes)`.
 """
 function render_hero(path::String = joinpath(@__DIR__, "..", "atlas-hero.png");
                      p::Real     = 0.33,
-                     scale::Real = 8,
                      pagepx      = (1620, 1080))
     out = _dev_still(p, path; pagepx)
     bytes = isfile(path) ? filesize(path) : 0
-    @info "render_hero done" path scale p bytes
-    return (; path = out, pagepx, scale, p, bytes)
+    @info "render_hero done" path p bytes
+    return (; path = out, pagepx, p, bytes)
 end
 
 # ── Loopframe extractor ──────────────────────────────────────────────────────

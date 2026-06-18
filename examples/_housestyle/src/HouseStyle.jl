@@ -28,10 +28,10 @@ separator before the size (`Fraunces9pt-Regular.ttf`). So `fraunces("9pt-Regular
 is correct; `fraunces("Regular")` would silently yield the non-existent path
 `FrauncesRegular.ttf`.
 """
-fraunces(name::AbstractString) = joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name).ttf")
+fraunces(name::AbstractString) = _checked(joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name).ttf"))
 
 "Absolute path to a pinned IBM Plex Mono static, e.g. `plexmono(\"Medium\")` (default Regular)."
-plexmono(name::AbstractString="Regular") = joinpath(FONTS_DIR, "IBMPlexMono", "IBMPlexMono-$(name).ttf")
+plexmono(name::AbstractString="Regular") = _checked(joinpath(FONTS_DIR, "IBMPlexMono", "IBMPlexMono-$(name).ttf"))
 
 """
     hanken(weight) -> String
@@ -41,7 +41,14 @@ Absolute path to a pinned Hanken Grotesk static (`Regular` / `SemiBold` / `Bold`
 `"Black"` resolves to a real file. File form: `HankenGrotesk-<weight>.ttf`.
 """
 hanken(weight::AbstractString) =
-    joinpath(FONTS_DIR, "HankenGrotesk", "HankenGrotesk-$(weight == "Black" ? "Bold" : weight).ttf")
+    _checked(joinpath(FONTS_DIR, "HankenGrotesk", "HankenGrotesk-$(weight == "Black" ? "Bold" : weight).ttf"))
+
+# Surface a bad `name`/`weight` (the footgun the helpers above warn about) at the call site
+# with the offending path, instead of letting it fail deep inside the font engine.
+_checked(path::AbstractString) =
+    isfile(path) ? path :
+    error("HouseStyle: no font file at $path — check the name/weight argument (see the \
+           fraunces/plexmono/hanken docstrings for the required filename form).")
 
 "The shared footer string: `TextMeasure.jl · <piece>` (middot U+00B7)."
 footer(piece::AbstractString) = "TextMeasure.jl · $(piece)"

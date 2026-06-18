@@ -48,7 +48,7 @@ function justify_bands(band_order, bands, band_interval, segs, wwidth, natspace)
         k = length(words)
         for w in words; justx[w] = w.x; end     # default: keep natural x
 
-        Lsel, Rsel = band_interval(y, words[1].x)
+        _, Rsel = band_interval(y, words[1].x)
 
         widths = [wwidth[w.segment_index] for w in words]
         natural_right = words[k].x + widths[k]

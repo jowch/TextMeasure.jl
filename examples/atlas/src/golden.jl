@@ -40,9 +40,13 @@ end
 The canonical deterministic LoD/opacity table across `GOLDEN_FRAMES`. For EVERY town, POI, and
 areal at each frame, emit one row `frame|kind|key|fpx|band` where `fpx` is the drawn (capped)
 type height and `band` the pre-cull opacity (legibility/size fade × edge fade). Fixed-size table
-(every feature every frame), so the digest is independent of any visibility threshold. Mirrors
-the per-feature math in `assemble_frame` exactly — minus the Makie projection (replaced by the
-verified affine `_golden_px`) and the solver/cull (pixel-offset dependent).
+(every feature every frame), so the digest is independent of any visibility threshold.
+Re-derives the per-feature LoD from the same shared primitives `assemble_frame` uses
+(`font_px`, `band_alpha`, the `MAX_*_PX` caps) — minus the Makie projection (replaced by the
+verified affine `_golden_px`) and the solver/cull (pixel-offset dependent). The orchestration
+around those primitives is duplicated here rather than shared, so the two paths are kept in
+sync by hand: a regression confined to one would not move the digest. Extracting a single
+`feature_lod` both call would make that drift impossible — a worthwhile follow-up.
 """
 function golden_rows(; pagepx = (1620, 1080))
     d = load_atlas_data()
