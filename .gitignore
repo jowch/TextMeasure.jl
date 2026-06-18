@@ -35,3 +35,9 @@ reference-conversation.md
 
 # Visual-companion brainstorming session artifacts (per-session HTML mockups)
 .superpowers/
+
+# demo render artifacts + local review screenshots (generated)
+examples/*/build/
+.playwright-mcp/
+*-filmstrip-*.png
+E-*.png
