@@ -47,14 +47,15 @@ end
 
 The canonical deterministic LoD/opacity table across `GOLDEN_FRAMES`. For EVERY town, POI, and
 areal at each frame, emit one row `frame|kind|key|fpx|band` where `fpx` is the drawn (capped)
-type height and `band` the pre-cull opacity (legibility/size fade × edge fade). Fixed-size table
+type height and `band` the pre-cull opacity (legibility/size fade, × the viewport edge fade for
+the point kinds `:town`/`:poi` only — areals carry no edge factor). Fixed-size table
 (every feature every frame), so the digest is independent of any visibility threshold.
-Re-derives the per-feature LoD from the same shared primitives `assemble_frame` uses
-(`font_px`, `band_alpha`, the `MAX_*_PX` caps) — minus the Makie projection (replaced by the
-verified affine `_golden_px`) and the solver/cull (pixel-offset dependent). The orchestration
-around those primitives is duplicated here rather than shared, so the two paths are kept in
-sync by hand: a regression confined to one would not move the digest. Extracting a single
-`feature_lod` both call would make that drift impossible — a worthwhile follow-up.
+Computes the per-feature LoD through the SAME `feature_lod` helper `assemble_frame` calls —
+one shared source of truth for the `font_px`/`band_alpha`/`MAX_*_PX` orchestration — so the
+two paths cannot drift: a regression in the LoD math moves this digest by construction. This
+table differs from the live path ONLY in what `feature_lod` deliberately leaves to the caller:
+the Makie projection (here the verified affine `_golden_px`) and the solver/cull (pixel-offset
+dependent, hashed separately by `placement_rows`).
 """
 function golden_rows(; pagepx = (1620, 1080))
     d = load_atlas_data()
@@ -72,23 +73,20 @@ function golden_rows(; pagepx = (1620, 1080))
             px = _golden_px(t.pos, p, pagepx)
             edge = _edge_alpha(px, cpw, cph)
             is_slo = t.town_id == _SLO_ID
-            fpx_geo = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, cpw)
-            band = (is_slo ? 1.0 : band_alpha(fpx_geo, Inf)) * edge
-            fpx = is_slo ? SLO_PX : min(fpx_geo, MAX_LABEL_PX)
+            _, fpx, band_pre = feature_lod(:town, town_ground(t.rank), w, cpw; is_slo)
+            band = band_pre * edge
             push!(rows, string(frame, "|town|", t.town_id, "|", rnd(fpx), "|", rnd(band)))
         end
         for (k, poi) in enumerate(pois)
             px = _golden_px(poi.pos, p, pagepx)
             edge = _edge_alpha(px, cpw, cph)
-            fpx_geo = font_px(POI_GROUND, w, cpw)
-            band = band_alpha(fpx_geo, Inf) * edge
-            fpx = min(fpx_geo, MAX_LABEL_PX)
+            _, fpx, band_pre = feature_lod(:poi, POI_GROUND, w, cpw)
+            band = band_pre * edge
             push!(rows, string(frame, "|poi|", _POI_BASE + k, "|", rnd(fpx), "|", rnd(band)))
         end
         for a in areals
-            fpx_geo = font_px(a.ground, w, cpw)
-            band = a.kind === :river ? river_alpha(w) : band_alpha(fpx_geo, a.max_px)
-            fpx = min(fpx_geo, MAX_AREAL_PX)
+            _, fpx, band = feature_lod(:areal, a.ground, w, cpw;
+                                       is_river = a.kind === :river, max_px = a.max_px)
             push!(rows, string(frame, "|areal|", a.text, "|", rnd(fpx), "|", rnd(band)))
         end
     end
