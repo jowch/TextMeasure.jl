@@ -2,7 +2,8 @@
 using Atlas: measure_boxes, solve_frame, recompute_overlaps, FramePlacement
 using Atlas: load_atlas_data
 using Atlas: _unit_box, measure_label, _char_advances, _REF_PX,
-             _point_style, _areal_drawn, atlas_pois, atlas_areals
+             _point_style, _areal_drawn, atlas_pois, atlas_areals,
+             _UNITBOX_CACHE, _CHARADV_CACHE, _SPACEADV_CACHE
 using GeometryBasics: Point2f, Vec2f, Rect2f
 using Test
 
@@ -61,4 +62,11 @@ end
         want = [(c == ' ' ? sp : Float32(measure_label(string(c), font, _REF_PX)[1])) * scale for c in collect(drawn)]
         @test _char_advances(drawn, font, fpx) == want
     end
+
+    # perf-regression guard: the transparency checks above pass whether or not caching is live
+    # (both sides compute the same value), so assert the caches actually filled — if a future
+    # change disables memoization, this fails even though output stays correct.
+    @test !isempty(_UNITBOX_CACHE)
+    @test !isempty(_CHARADV_CACHE)
+    @test !isempty(_SPACEADV_CACHE)
 end

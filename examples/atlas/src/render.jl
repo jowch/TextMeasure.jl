@@ -258,6 +258,9 @@ const _REF_PX = 100.0   # reference size for the single per-label measurement
 # (×360). Without caching, every town/POI box and every areal glyph advance was re-measured
 # on each frame; these caches make "measure once, layout many" literally true. Keys fully
 # determine the measurement (fonts are module consts), so there is no staleness hazard.
+# SINGLE-THREADED ONLY: bare `Dict` + `get!` is race-free here solely because frame assembly
+# is the serial loop in `loop.jl`. Parallelising frames (`Threads.@threads`) would need a
+# lock or per-thread caches.
 const _UNITBOX_CACHE  = Dict{Tuple{String,String}, Vec2f}()    # (name, font)  → ref box (w,h)
 const _CHARADV_CACHE  = Dict{Tuple{Char,String}, Float32}()    # (char, font)  → ref advance
 const _SPACEADV_CACHE = Dict{String, Float32}()                # font          → ref space advance
@@ -313,7 +316,8 @@ function _space_advance(font)
     end
 end
 
-"Reference advance (px) of a single char in `font` at _REF_PX (cached). Box width == advance, no kerning."
+"Reference advance (px) of a single non-space glyph in `font` at _REF_PX (cached): its box width IS \
+the advance (no kerning). Spaces never reach here — they use `_space_advance` (difference-of-two)."
 _char_ref_advance(c::Char, font) = get!(_CHARADV_CACHE, (c, font)) do
     Float32(measure_label(string(c), font, _REF_PX)[1])
 end
