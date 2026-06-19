@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: MIT
-# DECISION (Task 1 spike): the raw warm-start solve + our own overlap recompute. Originally the
-# unexported `solve_cluster`; migrated to the public `warm_solve` (same seam) once it shipped.
-# Per-frame data→pixel projection (used by the loop task, NOT here):
-#   px = Point2f(Makie.project(ax.scene, :data, :pixel, data_pt)[Vec(1,2)])  # no frame lag after update_state_before_display!
+# place.jl — the label-placement layer. Measure each label into a pixel box (`measure_boxes`,
+# the TextMeasure seam) and solve per-frame non-overlapping offsets via MakieTextRepel's public
+# `warm_solve`, warm-started from the previous frame for temporal stability.
 using Makie
 using GeometryBasics: Point2f, Vec2f, Rect2f
 
