@@ -18,9 +18,9 @@ const GHOST = Makie.RGBA(Makie.RGB(INK), 0.22)
 _make_hero_backend(font, size) =
     MakieBackend(; font = font, fontsize = Float64(size), px_per_unit = 1)
 
-# Masthead chrome face (Hanken sans) + measure helper (own one-shot backend; not cached).
-_chrome_w(font, size, txt) =
-    TextMeasure.measure(MakieBackend(; font = font, fontsize = Float64(size), px_per_unit = 1), txt)
+# Masthead chrome measure helper: width of `txt` in `font` at `size`, via the same
+# px_per_unit=1 backend factory the body uses (own one-shot backend; not cached).
+_chrome_w(font, size, txt) = TextMeasure.measure(_make_hero_backend(font, size), txt)
 
 """
     hero(path) -> (; placements, png)

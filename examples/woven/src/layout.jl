@@ -114,14 +114,10 @@ function placement_table(make_backend; ghost_color, red_color, black_color,
             s = styles[i]
             push!(placements, Placement(i, disp(i), s.font, s.size, s.color,
                                         _role(s, ghost_color, red_color, black_color),
-                                        x, body_top_baseline(ln.baseline)))
+                                        x, ln.baseline))
         end
     end
     # keep placements in reading order (word index) for stable downstream consumers.
     sort!(placements; by = p -> p.index)
     return placements, jl, pitch
 end
-
-# Identity offset hook: the layout frame's baselines are block-top = 0. The hero adds its
-# own page offset; the golden hashes these raw baselines. Kept as a named seam for clarity.
-body_top_baseline(b) = b
