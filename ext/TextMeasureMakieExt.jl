@@ -30,24 +30,13 @@ end
 
 _pixel_size(b::TextMeasure.MakieBackend) = b.fontsize * b.px_per_unit
 
-function TextMeasure.measure(b::TextMeasure.MakieBackend, text::AbstractString)
-    px = _pixel_size(b)
-    w = 0.0
-    for c in text
-        w += FTA.hadvance(FTA.get_extent(b.face, c))
-    end
-    return w * px
-end
+include("shared_metrics.jl")   # _advance_units / _face_metrics, shared with the FreeType backend
 
-function TextMeasure.font_metrics(b::TextMeasure.MakieBackend)
-    px   = _pixel_size(b)
-    upem = b.face.units_per_EM
-    asc  = FTA.ascender(b.face)  * px
-    desc = -FTA.descender(b.face) * px
-    h    = b.face.height
-    la   = h == 0 ? asc + desc : (h / upem) * px
-    return TextMeasure.FontMetrics(asc, desc, la)
-end
+TextMeasure.measure(b::TextMeasure.MakieBackend, text::AbstractString) =
+    _advance_units(b.face, text) * _pixel_size(b)
+
+TextMeasure.font_metrics(b::TextMeasure.MakieBackend) =
+    _face_metrics(b.face, _pixel_size(b))
 
 # ---- RichText bounding box -------------------------------------------------
 # Mirrors Makie's process_rt_node!/new_glyphstate (src/basic_recipes/text.jl) so the

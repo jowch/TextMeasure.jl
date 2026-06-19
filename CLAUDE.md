@@ -67,9 +67,10 @@ A backend subtypes `AbstractMeasurementBackend` and implements two **non-exporte
 - **`FreeTypeBackend`** / **`MakieBackend`** — container structs live in `src/backend_containers.jl`,
   but their keyword constructors and `measure`/`font_metrics` methods are supplied by **package
   extensions** (`ext/TextMeasure{FreeType,Makie}Ext.jl`), gated on weakdeps. They're inert until
-  the user runs `using FreeTypeAbstraction` / `using Makie`. The two extensions share near-identical
-  metric math; keep them in sync. `MakieBackend` should be used with `px_per_unit = 1` to match
-  Makie's markerspace geometry.
+  the user runs `using FreeTypeAbstraction` / `using Makie`. Their advance/metric math is one
+  shared source — `ext/shared_metrics.jl` (`_advance_units` / `_face_metrics`), `include`d by both
+  — so the two cannot drift. `MakieBackend` should be used with `px_per_unit = 1` to match Makie's
+  markerspace geometry.
 - **`FigletBackend`** (`ext/TextMeasureFigletExt.jl`, gated on `FIGlet`) — `measure` returns widths
   in **character cells, not pixels** (FIGlet glyphs live on a fixed integer grid), so it has no
   `fontsize` and no `measure_bounds`. Inert until `using FIGlet`.
