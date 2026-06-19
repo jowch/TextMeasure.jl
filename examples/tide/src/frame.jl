@@ -355,13 +355,7 @@ function _diag_edge(dir, yl, b, phase, Wpx, deep_y, top_y, line_advance)
     λ = wave_L(line_advance)
     wav(t) = WAVE_A * sin(2π * t / λ + phase)
     dy = Float64(deep_y); ty = Float64(top_y); Wf = Float64(Wpx)
-    if dir === :SW
-        return (yl - (dy - b)) + wav(yl)                # distance from LEFT, deepest at deep_y
-    elseif dir === :SE
-        return Wf - ((yl - (dy - b)) + wav(yl))         # x = W - distance from RIGHT
-    elseif dir === :NW
-        return (b - (yl - ty)) + wav(yl)                # distance from LEFT, deepest at top_y
-    else  # :NE
-        return Wf - ((b - (yl - ty)) + wav(yl))
-    end
+    cut = _diag_cut(dir, Float64(yl), Float64(b), dy, ty, wav)   # same cut region_mask uses
+    # W-corners measure the cut from the LEFT edge; E-corners mirror it across the width.
+    return (dir === :SW || dir === :NW) ? cut : Wf - cut
 end

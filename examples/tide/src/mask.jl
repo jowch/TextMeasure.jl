@@ -22,6 +22,15 @@ const CELL   = 1.0          # raster cell size (px); 1 cell = 1 px
 "Tide-line wavelength (px) ≈ 2 line-advances — a graceful, type-scaled wave."
 wave_L(line_advance) = 2.0 * line_advance
 
+# Distance of a diagonal corner-cut's edge from its NEAR side (the LEFT edge for the W-corners,
+# the RIGHT edge for the E-corners) at local y `yy`, depth `b`. Bottom corners (SW/SE) ramp
+# 0 → b up to `deep_y` (the deepest occupied line); top corners (NW/NE) ramp b → 0 from `top_y`.
+# `wav(yy)` adds the WAVE_A sine that rides on the straight diagonal. ONE source of the cut
+# geometry — shared by `region_mask` (the raster cut) and frame.jl's `_diag_edge` (the coral
+# tideline), so the drawn waterline provably traces the same bite the packer flows text against.
+_diag_cut(dir::Symbol, yy::Float64, b::Float64, deep_y::Float64, top_y::Float64, wav) =
+    ((dir === :SW || dir === :SE) ? (yy - (deep_y - b)) : (b - (yy - top_y))) + wav(yy)
+
 # ---------------------------------------------------------------------------------------------
 # region_mask — the 6 raking directions (W, E, SW, SE, NW, NE).
 # ---------------------------------------------------------------------------------------------
@@ -97,7 +106,7 @@ function region_mask(W, H, dir::Symbol, depth_px::Real, phase::Real;
         cut_top = dy - b - WAVE_A
         for row in 1:nr
             yy = yc(row); (yy < cut_top || yy > dy) && continue
-            cut = (yy - (dy - b)) + wav(yy)
+            cut = _diag_cut(:SW, yy, b, dy, ty, wav)
             for col in 1:nc; xc(col) < cut && (r[row, col] = false); end
         end
     elseif dir === :SE
@@ -105,7 +114,7 @@ function region_mask(W, H, dir::Symbol, depth_px::Real, phase::Real;
         cut_top = dy - b - WAVE_A
         for row in 1:nr
             yy = yc(row); (yy < cut_top || yy > dy) && continue
-            cut = (yy - (dy - b)) + wav(yy)
+            cut = _diag_cut(:SE, yy, b, dy, ty, wav)
             for col in 1:nc; (Wf - xc(col)) < cut && (r[row, col] = false); end
         end
     elseif dir === :NW
@@ -114,7 +123,7 @@ function region_mask(W, H, dir::Symbol, depth_px::Real, phase::Real;
         cut_bot = ty + b + WAVE_A
         for row in 1:nr
             yy = yc(row); (yy < ty || yy > cut_bot) && continue
-            cut = (b - (yy - ty)) + wav(yy)
+            cut = _diag_cut(:NW, yy, b, dy, ty, wav)
             for col in 1:nc; xc(col) < cut && (r[row, col] = false); end
         end
     elseif dir === :NE
@@ -122,7 +131,7 @@ function region_mask(W, H, dir::Symbol, depth_px::Real, phase::Real;
         cut_bot = ty + b + WAVE_A
         for row in 1:nr
             yy = yc(row); (yy < ty || yy > cut_bot) && continue
-            cut = (b - (yy - ty)) + wav(yy)
+            cut = _diag_cut(:NE, yy, b, dy, ty, wav)
             for col in 1:nc; (Wf - xc(col)) < cut && (r[row, col] = false); end
         end
     else
