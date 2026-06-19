@@ -43,6 +43,23 @@ placement table (one `Placement` per word, in reading order) plus the raw `Justi
 The measure→synthetic-Prepared→`knuth_plass` pipeline is parameterized only by `make_backend`,
 so the hero passes `MakieBackend` (real font widths) and the golden passes `MonospaceBackend`
 (deterministic widths) through the SAME code.
+
+# Examples
+Drive it with the deterministic `golden_backend` (a `MonospaceBackend` factory):
+
+```jldoctest
+julia> placements, jl, pitch = placement_table(golden_backend;
+                                   ghost_color=:ghost, red_color=:red, black_color=:black);
+
+julia> length(jl.lines) > 1          # the LICENSE justifies to many lines
+true
+
+julia> length(placements) > 100      # one Placement per word, in reading order
+true
+
+julia> Set(p.role for p in placements) == Set([:ghost, :red, :black])
+true
+```
 """
 function placement_table(make_backend; ghost_color, red_color, black_color,
                          measure_ch = MEASURE_CH)

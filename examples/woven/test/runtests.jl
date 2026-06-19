@@ -10,4 +10,5 @@ using Woven, Test
     include("test_golden.jl")
     include("test_render.jl")
     include("test_hero.jl")
+    include("test_doctests.jl")
 end

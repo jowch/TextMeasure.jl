@@ -33,6 +33,15 @@ and the "TextMeasure.jl" footer in the local palette, then writes the PNG.
 
 Built on `placement_table` with `MakieBackend` (real font widths). Faithful to the locked
 prototype (`render_woven.jl`); the look is fixed.
+
+# Examples
+```julia
+using Woven
+
+result = hero("woven-hero.png")   # measures, justifies, draws, and writes the PNG
+result.png                        # => "woven-hero.png"
+length(result.placements)         # one Placement per license word
+```
 """
 function hero(path)
     placements, jl, pitch = placement_table(_make_hero_backend;
@@ -64,6 +73,7 @@ function hero(path)
         ty = mt + 34
         text!(ax, Point2f(ml, ty); text = "Free,", color = RED,
               font = title_font, fontsize = title_sz, align = (:left, :baseline))
+        # "As Is" starts one "Free," width plus a 1.8-space gap to the right of the left margin.
         fx = _chrome_w(title_font, title_sz, "Free,") + 1.8 * _chrome_w(title_font, title_sz, " ")
         text!(ax, Point2f(ml + fx, ty); text = "As Is", color = INK,
               font = title_font, fontsize = title_sz, align = (:left, :baseline))
