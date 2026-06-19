@@ -404,6 +404,38 @@ function _areal_glyphs(a::Areal, apx::Point2f, fpx::Real)
     return (glyphs, boxes)
 end
 
+# ── Shared LoD orchestration (single source of truth for the golden) ──────────
+
+"""
+    feature_lod(kind, ground, w, content_px_w; is_slo=false, is_river=false, max_px=Inf)
+        -> (fpx_geo, fpx, band)
+
+The per-feature LoD/opacity orchestration, shared by `assemble_frame` (the live render path)
+and `golden_rows` (the deterministic golden table) so their scaling/fade math CANNOT drift —
+the golden mechanically guards this arithmetic. Pure (no Makie, no fonts): just the lod.jl
+primitives composed the one canonical way.
+
+- `fpx_geo` — geographic type height `ground·P` (drives the band fade); SLO is pinned to `SLO_PX`.
+- `fpx`     — the DRAWN size: `fpx_geo` capped at the per-kind ceiling (`MAX_LABEL_PX` for the
+              point kinds `:town`/`:poi`, `MAX_AREAL_PX` for `:areal`).
+- `band`    — PRE-EDGE opacity (the legibility/size focus-band fade): `1.0` for SLO,
+              `river_alpha(w)` for a `:river` areal, else `band_alpha(fpx_geo, max_px)`.
+
+Callers apply their own viewport factor on top: `assemble_frame` multiplies `band` by its
+Makie-projected `_edge_alpha`; `golden_rows` by the affine `_golden_px`-derived edge (point
+features only — areals carry no edge factor in either path).
+"""
+function feature_lod(kind::Symbol, ground::Real, w::Real, content_px_w::Real;
+                     is_slo::Bool = false, is_river::Bool = false, max_px::Real = Inf)
+    cap     = kind === :areal ? MAX_AREAL_PX : MAX_LABEL_PX
+    fpx_geo = is_slo ? SLO_PX : font_px(ground, w, content_px_w)
+    band    = is_slo   ? 1.0 :
+              is_river ? river_alpha(w) :
+                         band_alpha(fpx_geo, max_px)
+    fpx     = min(fpx_geo, cap)
+    return (fpx_geo, fpx, band)
+end
+
 # ── Frame assembly (the honest core) ─────────────────────────────────────────
 
 "Everything render needs for one frame — all label boxes measured + solver-placed."
@@ -473,10 +505,9 @@ function assemble_frame(d::AtlasData, p::Real;
         is_slo = t.town_id == _SLO_ID
         # GEOGRAPHIC size drives the band FADE; the DRAWN/solved size is capped at MAX_LABEL_PX
         # so a deep-zoom town can't out-size the masthead. SLO is pinned (already ≤ cap).
-        fpx_geo = is_slo ? SLO_PX : font_px(town_ground(t.rank), w, content_px_w)
-        ba  = (is_slo ? 1.0 : band_alpha(fpx_geo, Inf)) * edge
+        _, fpx, band = feature_lod(:town, town_ground(t.rank), w, content_px_w; is_slo)
+        ba = band * edge
         ba > 0.02 || continue
-        fpx = min(fpx_geo, MAX_LABEL_PX)
         font, _ = _point_style(:town, t.rank ≤ 5)
         unit = _unit_box(t.name, font)
         push!(ids, t.town_id); push!(px_anch, px); push!(sizes, _scaled_box(unit, fpx))
@@ -486,10 +517,9 @@ function assemble_frame(d::AtlasData, p::Real;
         px = _data_to_px(ax, poi.pos)
         edge = _edge_alpha(px, content_px_w, content_px_h)
         edge > 0.02 || continue
-        fpx_geo = font_px(POI_GROUND, w, content_px_w)
-        ba  = band_alpha(fpx_geo, Inf) * edge
+        _, fpx, band = feature_lod(:poi, POI_GROUND, w, content_px_w)
+        ba = band * edge
         ba > 0.02 || continue
-        fpx = min(fpx_geo, MAX_LABEL_PX)
         pid = _POI_BASE + k
         font, _ = _point_style(:poi, false)
         unit = _unit_box(poi.name, font)
@@ -529,15 +559,16 @@ function assemble_frame(d::AtlasData, p::Real;
         # NO viewport gate on the anchor: a swollen areal's anchor can leave the frame while its
         # glyphs still span it — gating on the anchor made the Range POOF out and back. Opacity
         # (the size hand-off below) decides visibility; Makie clips the off-screen glyphs.
-        fpx_geo = font_px(a.ground, w, content_px_w)   # GEOGRAPHIC: grows as the camera dives
-        # :river follows the hydrography LoD. Region areals scale with altitude AND hand off
-        # smoothly by their OWN size: band_alpha(fpx, max_px) fades each in as it's legible,
-        # lets it swell, then fades it OUT as it outgrows the frame (you pass through the cloud).
-        # Per-areal, so the big Range is gone by the time the inland towns appear, while the
-        # small Estero Bay persists at depth. (No global recede — that made the Range linger.)
-        ba  = a.kind === :river ? river_alpha(w) : band_alpha(fpx_geo, a.max_px)
+        # GEOGRAPHIC: grows as the camera dives. :river follows the hydrography LoD. Region
+        # areals scale with altitude AND hand off smoothly by their OWN size: band_alpha(fpx,
+        # max_px) fades each in as it's legible, lets it swell, then fades it OUT as it outgrows
+        # the frame (you pass through the cloud). Per-areal, so the big Range is gone by the time
+        # the inland towns appear, while the small Estero Bay persists at depth. (No global
+        # recede — that made the Range linger.) fpx is capped only at the high MAX_AREAL_PX safety
+        # ceiling.
+        _, fpx, ba = feature_lod(:areal, a.ground, w, content_px_w;
+                                 is_river = a.kind === :river, max_px = a.max_px)
         ba > 0.02 || continue
-        fpx = min(fpx_geo, MAX_AREAL_PX)               # only a high safety ceiling now
         glyphs, gboxes = _areal_glyphs(a, apx, fpx)
         # Obstacle only while SUBSTANTIAL (near full opacity at the wide shot). Once an areal
         # recedes to a faint cloud, town labels are free to sit over it — a giant faint glyph

@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **`examples/atlas`** — extracted a shared `feature_lod` helper consumed by both the
+  live render path (`assemble_frame`) and the deterministic golden table (`golden_rows`),
+  so the per-feature LoD/opacity math is defined once and the golden mechanically guards
+  it against drift. Digest-invariant — no golden baseline change.
+  [#37](https://github.com/jowch/TextMeasure.jl/pull/37), closes
+  [#31](https://github.com/jowch/TextMeasure.jl/issues/31).
 
 ## [0.1.0] - 2026-06-18
 
