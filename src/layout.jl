@@ -15,9 +15,27 @@ _align_x(align::Symbol, total::Float64, w::Float64) =
 """
     layout(prep; max_width=Inf, align=:left, lineheight=1.0) -> Layout
 
-Pure greedy line-breaking over a `Prepared`. Breaks at whitespace and `\\n`; words are
-atomic (an over-wide word overflows its own line). `lineheight` multiplies
-`prep.metrics.line_advance`. Trims leading/trailing whitespace per line.
+Pure greedy line-breaking over a [`Prepared`](@ref) — no font engine, just arithmetic over
+the cached widths, so call it as many times as you like with different settings. Breaks at
+whitespace and `\\n`; words are atomic (an over-wide word overflows its own line).
+`lineheight` multiplies `prep.metrics.line_advance`. Leading/trailing whitespace is trimmed
+per line. A non-positive or `NaN` `max_width` is treated as `Inf` (no wrapping).
+
+# Examples
+Measure once, then lay the same `Prepared` out at several widths:
+
+```jldoctest
+julia> prep = prepare(MonospaceBackend(fontsize=10, advance_ratio=1.0), "the quick brown fox");
+
+julia> layout(prep; max_width=100).size    # wraps to 2 lines
+(90.0, 22.0)
+
+julia> layout(prep; max_width=60).size     # narrower → 4 lines, same prep
+(50.0, 46.0)
+
+julia> layout(prep).size                   # max_width=Inf → one line
+(190.0, 10.0)
+```
 """
 function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, lineheight::Real=1.0)::Layout
     m  = prep.metrics
@@ -29,7 +47,8 @@ function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, linehe
     raw = Tuple{String,Float64}[]
     committed = Segment[]
     committed_w = 0.0
-    pending::Union{Nothing,Segment} = nothing
+    pending::Union{Nothing,Segment} = nothing   # a trailing space, held back: it only joins
+                                                 # the line if the following word also fits.
 
     for seg in prep.segments
         if seg.kind === :newline
@@ -53,10 +72,10 @@ function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, linehe
             end
         end
     end
-    _emit_line!(raw, committed)   # final line
+    _emit_line!(raw, committed)   # final line — so `raw` is always non-empty here
 
     N = length(raw)
-    total_w = maximum(t -> t[2], raw)
+    total_w = maximum(t -> t[2], raw)   # safe: the final _emit_line! guarantees ≥ 1 tuple
     height  = m.ascent + (N - 1) * la + m.descent
     lines = Vector{Line}(undef, N)
     for (i, (s, w)) in enumerate(raw)
@@ -65,7 +84,21 @@ function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, linehe
     return Layout(lines, (total_w, height), m)
 end
 
-"""    line_top(lay, ln) -> Float64
+"""
+    line_top(lay::Layout, ln::Line) -> Float64
 
-Top-left y of line `ln` (block top = 0). `ln` must be a line of `lay`."""
+Top-left y of line `ln` within the block (block top = 0, y increasing downward); `ln` must
+be a line of `lay`. Equals `ln.baseline - lay.metrics.ascent`.
+
+# Examples
+```jldoctest
+julia> lay = layout(prepare(MonospaceBackend(fontsize=10, advance_ratio=1.0), "a\\nb"));
+
+julia> line_top(lay, lay.lines[1])         # first line's top is the block top
+0.0
+
+julia> line_top(lay, lay.lines[2])         # next line down by one line_advance
+12.0
+```
+"""
 line_top(lay::Layout, ln::Line) = ln.baseline - lay.metrics.ascent

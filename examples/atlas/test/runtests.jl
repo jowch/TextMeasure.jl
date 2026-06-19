@@ -13,4 +13,5 @@ using Atlas, Test
     include("test_clearance.jl")
     include("test_golden.jl")
     include("test_loop.jl")
+    include("test_doctests.jl")
 end

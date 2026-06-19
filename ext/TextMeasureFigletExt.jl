@@ -45,6 +45,25 @@ end
 
 # String → _readfont(name); FIGletFont → use directly. FIGlet.readfont(io) already handles
 # user-supplied streams, so no separate `font_data` escape hatch is needed.
+"""
+    FigletBackend(; font="Standard", letter_gap=0)
+
+Keyword constructor for [`FigletBackend`](@ref), available once `using FIGlet`. `font` is a
+FIGlet font name (resolved case-insensitively, so the default `"Standard"` works on
+case-sensitive filesystems) or a ready `FIGlet.FIGletFont`. `letter_gap` is an integer count
+of blank cells inserted between glyphs.
+
+Unlike the pixel backends, `measure` returns widths in **character cells**, not pixels, and
+there is no `measure_bounds` (FIGlet text has no styled-run analog).
+
+# Examples
+```julia
+using TextMeasure, FIGlet
+
+b = FigletBackend(font="Standard")
+TextMeasure.measure(b, "Hi")   # width in cells (Int-valued), not pixels
+```
+"""
 function TextMeasure.FigletBackend(; font::Union{AbstractString,FIGlet.FIGletFont}=FIGlet.DEFAULTFONT,
                                    letter_gap::Int=0)
     f = font isa FIGlet.FIGletFont ? font : _readfont(font)

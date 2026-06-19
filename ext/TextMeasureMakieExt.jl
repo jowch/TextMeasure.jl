@@ -4,6 +4,25 @@ using TextMeasure
 using Makie
 const FTA = Makie.FreeTypeAbstraction   # Makie.NativeFont === FTA.FTFont
 
+"""
+    MakieBackend(; font=Makie.automatic, fontsize=12, px_per_unit=1.0)
+
+Keyword constructor for [`MakieBackend`](@ref), available once `using Makie`. `font` is
+resolved with `Makie.to_font` to the exact `FTFont` `text!` would use, so run widths match
+a Makie render (glyph advances, no kerning). Widths scale with `fontsize * px_per_unit`;
+keep `px_per_unit = 1` to stay in Makie's markerspace geometry — [`measure_bounds`](@ref)
+requires it.
+
+# Examples
+```julia
+using TextMeasure, Makie
+
+b    = MakieBackend(fontsize=20)            # px_per_unit defaults to 1
+prep = prepare(b, "measured like text!")    # advances match Makie's
+lay  = layout(prep; max_width=200)
+lay.size                                    # (width, height) in px
+```
+"""
 function TextMeasure.MakieBackend(; font=Makie.automatic, fontsize=12, px_per_unit=1.0)
     face = Makie.to_font(font)          # resolves to an FTFont (identical to text!'s)
     return TextMeasure.MakieBackend(face, Float64(fontsize), Float64(px_per_unit))
@@ -11,24 +30,13 @@ end
 
 _pixel_size(b::TextMeasure.MakieBackend) = b.fontsize * b.px_per_unit
 
-function TextMeasure.measure(b::TextMeasure.MakieBackend, text::AbstractString)
-    px = _pixel_size(b)
-    w = 0.0
-    for c in text
-        w += FTA.hadvance(FTA.get_extent(b.face, c))
-    end
-    return w * px
-end
+include("shared_metrics.jl")   # _advance_units / _face_metrics, shared with the FreeType backend
 
-function TextMeasure.font_metrics(b::TextMeasure.MakieBackend)
-    px   = _pixel_size(b)
-    upem = b.face.units_per_EM
-    asc  = FTA.ascender(b.face)  * px
-    desc = -FTA.descender(b.face) * px
-    h    = b.face.height
-    la   = h == 0 ? asc + desc : (h / upem) * px
-    return TextMeasure.FontMetrics(asc, desc, la)
-end
+TextMeasure.measure(b::TextMeasure.MakieBackend, text::AbstractString) =
+    _advance_units(b.face, text) * _pixel_size(b)
+
+TextMeasure.font_metrics(b::TextMeasure.MakieBackend) =
+    _face_metrics(b.face, _pixel_size(b))
 
 # ---- RichText bounding box -------------------------------------------------
 # Mirrors Makie's process_rt_node!/new_glyphstate (src/basic_recipes/text.jl) so the
@@ -160,6 +168,28 @@ function _rt_walk!(runs::Vector{TextMeasure.StyledRun}, drop::Ref{Float64},
     end
 end
 
+"""
+    measure_bounds(b::MakieBackend, rt::Makie.RichText) -> TextBounds
+
+Axis-aligned bounding box of a Makie `RichText`, matching what `text!` would render. Walks
+the same span tree as Makie (`:span`, `:sup`, `:sub`, `:subsup`, `:leftsubsup`; nested
+spans, per-span `font`/`fontsize`/`offset`, and `\\n`), unioning each glyph run. Coordinates
+follow Makie's convention: **+y is up**, root baseline `= 0`, so `bounds.origin[2]` is the
+box bottom.
+
+Requires `b.px_per_unit == 1` (the line-drop is a flat 20 px that does not scale, so mixed
+scales would skew heights); otherwise throws `ArgumentError`. Build `rt` with Makie's
+[`rich`](https://docs.makie.org/stable/reference/blocks/axis#rich-text) helpers.
+
+# Examples
+```julia
+using TextMeasure, Makie
+
+b  = MakieBackend(fontsize=24)                 # px_per_unit = 1
+bb = measure_bounds(b, rich("x", superscript("2")))
+bb.size                                        # (width, height) in px, incl. the superscript
+```
+"""
 function TextMeasure.measure_bounds(b::TextMeasure.MakieBackend, rt::Makie.RichText)
     # _RT_LINE_DROP is a flat 20 px (Makie's apply_lineheight! stub), so it does not
     # scale with px_per_unit; mixed-scale glyphs + unscaled line drops would silently

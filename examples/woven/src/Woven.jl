@@ -1,4 +1,17 @@
 # SPDX-License-Identifier: MIT
+
+"""
+    Woven
+
+A gallery piece that weaves TWO found poems through the project's own MIT License, laid out
+by TextMeasure's engine. Every word is MEASURED at its real face/size, packed into a
+synthetic mixed-size `Prepared`, and justified with Knuth–Plass (`placement_table`) so
+nothing overlaps; the source license is faded to a Plex Mono ghost while the two poems (a RED
+grant clause, a BLACK notice→warranty) are lit in place. `hero(path)` renders the locked
+still. The measure → synthetic-Prepared → `knuth_plass` pipeline is parameterized only by the
+backend, so the hero (real Makie font widths) and the golden (deterministic MonospaceBackend)
+run the SAME code.
+"""
 module Woven
 
 # The project's own LICENSE, verbatim — the FULL body of /LICENSE: the grant paragraph,

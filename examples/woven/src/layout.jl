@@ -43,6 +43,23 @@ placement table (one `Placement` per word, in reading order) plus the raw `Justi
 The measure→synthetic-Prepared→`knuth_plass` pipeline is parameterized only by `make_backend`,
 so the hero passes `MakieBackend` (real font widths) and the golden passes `MonospaceBackend`
 (deterministic widths) through the SAME code.
+
+# Examples
+Drive it with the deterministic `golden_backend` (a `MonospaceBackend` factory):
+
+```jldoctest
+julia> placements, jl, pitch = placement_table(golden_backend;
+                                   ghost_color=:ghost, red_color=:red, black_color=:black);
+
+julia> length(jl.lines) > 1          # the LICENSE justifies to many lines
+true
+
+julia> length(placements) > 100      # one Placement per word, in reading order
+true
+
+julia> Set(p.role for p in placements) == Set([:ghost, :red, :black])
+true
+```
 """
 function placement_table(make_backend; ghost_color, red_color, black_color,
                          measure_ch = MEASURE_CH)
@@ -97,14 +114,10 @@ function placement_table(make_backend; ghost_color, red_color, black_color,
             s = styles[i]
             push!(placements, Placement(i, disp(i), s.font, s.size, s.color,
                                         _role(s, ghost_color, red_color, black_color),
-                                        x, body_top_baseline(ln.baseline)))
+                                        x, ln.baseline))
         end
     end
     # keep placements in reading order (word index) for stable downstream consumers.
     sort!(placements; by = p -> p.index)
     return placements, jl, pitch
 end
-
-# Identity offset hook: the layout frame's baselines are block-top = 0. The hero adds its
-# own page offset; the golden hashes these raw baselines. Kept as a named seam for clarity.
-body_top_baseline(b) = b

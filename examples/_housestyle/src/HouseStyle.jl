@@ -1,4 +1,15 @@
 # SPDX-License-Identifier: MIT
+
+"""
+    HouseStyle
+
+The gallery's shared house style: the palette (`PAPER`/`INK`/`BRASS` identity colours plus the
+data-encode `BLUE`/`GREEN`/`RED`/`GRAY`), the √2 type `RAMP`, pinned font paths
+(`fraunces`/`plexmono`/`hanken`), the `footer` string, and the `digest_rows` golden hash.
+Nothing is exported — reference everything qualified (`HouseStyle.PAPER`,
+`HouseStyle.footer(...)`). See README.md for the design rules; `test/runtests.jl` is the
+executable guard (if a pinned value disagrees, that is a bug).
+"""
 module HouseStyle
 using Colors
 using SHA
@@ -30,7 +41,12 @@ is correct; `fraunces("Regular")` would silently yield the non-existent path
 """
 fraunces(name::AbstractString) = _checked(joinpath(FONTS_DIR, "Fraunces", "Fraunces$(name).ttf"))
 
-"Absolute path to a pinned IBM Plex Mono static, e.g. `plexmono(\"Medium\")` (default Regular)."
+"""
+    plexmono(name="Regular") -> String
+
+Absolute path to a pinned IBM Plex Mono static (file form `IBMPlexMono-<name>.ttf`), e.g.
+`plexmono("Medium")`; the default is `Regular`.
+"""
 plexmono(name::AbstractString="Regular") = _checked(joinpath(FONTS_DIR, "IBMPlexMono", "IBMPlexMono-$(name).ttf"))
 
 """
@@ -50,7 +66,17 @@ _checked(path::AbstractString) =
     error("HouseStyle: no font file at $path — check the name/weight argument (see the \
            fraunces/plexmono/hanken docstrings for the required filename form).")
 
-"The shared footer string: `TextMeasure.jl · <piece>` (middot U+00B7)."
+"""
+    footer(piece) -> String
+
+The shared gallery footer `TextMeasure.jl · <piece>` (middot U+00B7).
+
+# Examples
+```jldoctest
+julia> footer("Woven")
+"TextMeasure.jl · Woven"
+```
+"""
 footer(piece::AbstractString) = "TextMeasure.jl · $(piece)"
 
 """
@@ -62,6 +88,17 @@ fixed precision before formatting). Rows are sorted so the digest is independent
 emission order. This is the gallery's golden invariant — hash the computed table,
 never the rendered pixels. Rows must NOT contain newlines: `"\\n"` is the row
 separator, so an embedded newline would silently change the digest.
+
+# Examples
+```jldoctest
+julia> d = digest_rows(["w2|40.00", "w1|0.00"]);
+
+julia> length(d)                                   # SHA-256 hex
+64
+
+julia> digest_rows(["w1|0.00", "w2|40.00"]) == d   # rows are sorted ⇒ order-independent
+true
+```
 """
 function digest_rows(rows::AbstractVector{<:AbstractString})
     bytes2hex(sha2_256(join(sort(collect(rows)), "\n")))

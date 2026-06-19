@@ -32,6 +32,24 @@ function _ffmpeg_cmd()
     end
 end
 
+# ── warm-start bookkeeping (shared by render_loop and warmstart_delta_stats) ─────
+
+# Euclidean offset deltas (px) for every label shared between the previous frame's `prev`
+# (id => offset) and this frame's placement `fp` — the warm-start stability signal.
+function _shared_deltas(prev, fp)
+    deltas = Float32[]
+    for (k, id) in enumerate(fp.ids)
+        if haskey(prev, id)
+            old = prev[id]; new = fp.offsets[k]
+            push!(deltas, sqrt((new[1]-old[1])^2 + (new[2]-old[2])^2))
+        end
+    end
+    return deltas
+end
+
+# This frame's solved offsets as the next frame's warm-start seed: id => offset.
+_carry_offsets(fp) = Dict{Int,Vec2f}(fp.ids[k] => fp.offsets[k] for k in eachindex(fp.ids))
+
 # ── Loop driver ──────────────────────────────────────────────────────────────
 
 """
@@ -73,19 +91,13 @@ function render_loop(path::String = joinpath(@__DIR__, "..", "atlas-dive.mp4");
 
         # Per-frame warm-start stability: max |offset_new − offset_prev| over shared ids.
         if !isempty(prev) && !isempty(fp.ids)
-            shared_deltas = Float32[]
-            for (k, id) in enumerate(fp.ids)
-                if haskey(prev, id)
-                    old = prev[id]; new = fp.offsets[k]
-                    push!(shared_deltas, sqrt((new[1]-old[1])^2 + (new[2]-old[2])^2))
-                end
-            end
-            !isempty(shared_deltas) && push!(frame_deltas, maximum(shared_deltas))
+            sd = _shared_deltas(prev, fp)
+            !isempty(sd) && push!(frame_deltas, maximum(sd))
         end
 
         # Carry offsets to the next frame (warm-start). Pin nothing — labels must adapt
         # as the camera zooms and their pixel-space boxes grow.
-        prev = Dict{Int,Vec2f}(fp.ids[k] => fp.offsets[k] for k in eachindex(fp.ids))
+        prev = _carry_offsets(fp)
 
         # Draw all layers.
         w     = view_width(p)
@@ -211,14 +223,9 @@ function warmstart_delta_stats(n_frames::Int = 3; pagepx = (1620, 1080))
         _, _, af = assemble_frame(d, p; pagepx, prev)
         fp = af.fp
         if !isempty(prev)
-            for (k, id) in enumerate(fp.ids)
-                if haskey(prev, id)
-                    old = prev[id]; new = fp.offsets[k]
-                    push!(all_deltas, sqrt((new[1]-old[1])^2 + (new[2]-old[2])^2))
-                end
-            end
+            append!(all_deltas, _shared_deltas(prev, fp))
         end
-        prev = Dict{Int,Vec2f}(fp.ids[k] => fp.offsets[k] for k in eachindex(fp.ids))
+        prev = _carry_offsets(fp)
     end
     isempty(all_deltas) && return (0.0f0, 0.0f0)
     sort!(all_deltas)

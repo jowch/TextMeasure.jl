@@ -25,7 +25,9 @@ function font_metrics end
 
 2-D analog of [`measure`](@ref) for styled text (e.g. Makie's `RichText`). Returns an
 axis-aligned [`TextBounds`](@ref) in the backend's coordinate space. Not implemented
-in the base package — each extension adds a method for its own styled type. `backend`
-must be an [`AbstractMeasurementBackend`](@ref).
+in the base package — each extension adds a method for its own styled type, so calling it
+on a backend without one (e.g. `MonospaceBackend`) is a `MethodError`. `backend` must be an
+[`AbstractMeasurementBackend`](@ref). See the Makie extension's
+`measure_bounds(::MakieBackend, ::Makie.RichText)`.
 """
 function measure_bounds end

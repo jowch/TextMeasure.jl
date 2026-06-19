@@ -38,6 +38,19 @@ end
 Pure union of each run's box `[x, x+width] × [baseline-descent, baseline+ascent]`.
 Does no measuring — `runs` are already measured. Empty input → zero box. The union
 takes only differences of extents, so it is correct regardless of the y sign.
+
+# Examples
+```jldoctest
+julia> using TextMeasure: StyledRun, bounds
+
+julia> b = bounds([StyledRun(0.0, 0.0, 10.0, 8.0, 2.0)]);  # baseline 0, ascent 8, descent 2
+
+julia> b.size                              # (width, height) in px
+(10.0, 10.0)
+
+julia> b.origin                            # +y up → origin[2] is the box bottom
+(0.0, -2.0)
+```
 """
 function bounds(runs::AbstractVector{StyledRun})
     isempty(runs) && return TextBounds((0.0, 0.0), (0.0, 0.0))

@@ -85,7 +85,9 @@ function _boxes_glue(prep::Prepared)
             pending_forced = true
         end
     end
-    # Paragraph end is a forced break (moot for the DP, which special-cases j == W).
+    # Paragraph end is a forced break. The DP/greedy also special-case `j == W` for the
+    # last line, but this flag still feeds `_assemble`'s `is_last` and the
+    # `forced[a] && break` guard, so it is load-bearing — don't drop it.
     have_word && (forced[end] = true)
     return segidx, w, g, forced
 end
@@ -162,7 +164,25 @@ Optimal whole-paragraph line breaks minimizing total badness (the Knuth–Plass 
 program). `:newline` segments are forced breaks; the last line and any line ending at a
 forced break are set ragged. `max_width` is the target measure; `stretch_ratio` /
 `shrink_ratio` scale interword glue elasticity; `lineheight` multiplies
-`prep.metrics.line_advance`.
+`prep.metrics.line_advance`. Compare [`greedy_justify`](@ref), which uses the same badness
+geometry but the greedy break set — `knuth_plass`'s `total_badness` is always ≤ greedy's.
+
+# Examples
+```jldoctest
+julia> using TextMeasure, TextMeasureLayouts
+
+julia> prep = prepare(MonospaceBackend(), "xxxxxxx x x xxxxxxx");
+
+julia> k = knuth_plass(prep; max_width=79.2);
+
+julia> [[prep.segments[i].str for i in ln.words] for ln in k.lines]
+2-element Vector{Vector{String}}:
+ ["xxxxxxx", "x", "x"]
+ ["xxxxxxx"]
+
+julia> k.total_badness < 1e-6      # the first line fills the measure exactly: optimal
+true
+```
 """
 function knuth_plass(prep::Prepared; max_width::Real, stretch_ratio::Real=0.5,
                      shrink_ratio::Real=1/3, lineheight::Real=1.0)::JustifiedLayout
@@ -175,8 +195,8 @@ function knuth_plass(prep::Prepared; max_width::Real, stretch_ratio::Real=0.5,
     W = length(w)
     W == 0 && return JustifiedLayout(JustifiedLine[], 0.0, target, m)
 
-    # bestAfter[k+1] = min total badness for words 1..k with a line ending after word k.
-    bestAfter = fill(Inf, W + 1); bestAfter[1] = 0.0
+    # best_after[k+1] = min total badness for words 1..k with a line ending after word k.
+    best_after = fill(Inf, W + 1); best_after[1] = 0.0
     prev = zeros(Int, W + 1)
     for j in 1:W
         is_last = forced[j] || j == W
@@ -191,9 +211,9 @@ function knuth_plass(prep::Prepared; max_width::Real, stretch_ratio::Real=0.5,
             end
             stretch = sr * gl; shrink = zr * gl
             _, bad = _badness(nat, stretch, shrink, target, is_last)
-            cand = bestAfter[a] + bad           # bestAfter[a] == best ending after word a-1
-            if cand < bestAfter[j + 1]
-                bestAfter[j + 1] = cand
+            cand = best_after[a] + bad           # best_after[a] == best ending after word a-1
+            if cand < best_after[j + 1]
+                best_after[j + 1] = cand
                 prev[j + 1] = a - 1
             end
         end

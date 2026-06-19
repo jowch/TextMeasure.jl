@@ -10,15 +10,30 @@ const PACK_HOOK = Ref{Any}(shape_pack)
 _packcall(args...; kwargs...) = PACK_HOOK[](args...; kwargs...)
 
 """
-    prepare_tide(make_backend; body_font, fontsize=11.0) -> prep_bundle
+    prepare_tide(make_backend; body_font, fontsize=11.0, grow_dirs=DIRECTIONS) -> prep_bundle
 
 The ONLY font-touching phase. Calls `prepare` exactly once on `TIDE_TEXT`, then caches
 everything the per-frame math needs: the `Prepared`, per-segment advance widths, metrics,
 the natural space advance, `floor_w`, the rest region width `Wpx`, `line_advance`, the grown
 region height `Hpx`, and the per-direction max depth `d_max`. `make_backend(font, size) ->
 backend` is the backend factory (MakieBackend for render, MonospaceBackend for tests).
+`grow_dirs` restricts which press directions the region is grown to fit (default all of
+`DIRECTIONS`).
 
-Returns a NamedTuple `prep_bundle` consumed by `frame_layout`.
+Returns a NamedTuple `prep_bundle` consumed by [`frame_layout`](@ref).
+
+# Examples
+```jldoctest
+julia> mono = (font, size) -> MonospaceBackend(fontsize=Float64(size));  # deterministic factory
+
+julia> pb = prepare_tide(mono; body_font="monospace");                   # the one prepare call
+
+julia> pb.fontsize
+11.0
+
+julia> pb.n_words >= 60        # TIDE_TEXT measured once into this many word boxes
+true
+```
 """
 function prepare_tide(make_backend; body_font::String, fontsize::Float64 = 11.0,
                       grow_dirs = DIRECTIONS)
@@ -141,6 +156,24 @@ overflow list, and geometry. `prep_bundle` comes from `prepare_tide`.
 Fields: `placements, justx, band_order, bands, band_interval, tideline_pts, tideline_alpha,
 lit_idx, overflowed, segs, backend, asc, desc, line_advance, region_x, region_y, margin, Wpx,
 Hpx, b, dir, depth, phase, pad, n_words, all_placed, n_justified, n_ragged`.
+
+# Examples
+```jldoctest
+julia> mono = (font, size) -> MonospaceBackend(fontsize=Float64(size));
+
+julia> pb = prepare_tide(mono; body_font="monospace");   # measure once...
+
+julia> fr0 = frame_layout(pb, 0);                        # ...lay out frame 0 (the rest trough)
+
+julia> fr0.dir
+:W
+
+julia> fr0.b              # the tide wall has advanced 0px at rest
+0.0
+
+julia> length(fr0.placements) >= 60   # every word still placed
+true
+```
 """
 function frame_layout(prep_bundle, frame::Int)
     dir, depth, phase = press_at(frame)
@@ -322,13 +355,7 @@ function _diag_edge(dir, yl, b, phase, Wpx, deep_y, top_y, line_advance)
     λ = wave_L(line_advance)
     wav(t) = WAVE_A * sin(2π * t / λ + phase)
     dy = Float64(deep_y); ty = Float64(top_y); Wf = Float64(Wpx)
-    if dir === :SW
-        return (yl - (dy - b)) + wav(yl)                # distance from LEFT, deepest at deep_y
-    elseif dir === :SE
-        return Wf - ((yl - (dy - b)) + wav(yl))         # x = W - distance from RIGHT
-    elseif dir === :NW
-        return (b - (yl - ty)) + wav(yl)                # distance from LEFT, deepest at top_y
-    else  # :NE
-        return Wf - ((b - (yl - ty)) + wav(yl))
-    end
+    cut = _diag_cut(dir, Float64(yl), Float64(b), dy, ty, wav)   # same cut region_mask uses
+    # W-corners measure the cut from the LEFT edge; E-corners mirror it across the width.
+    return (dir === :SW || dir === :NW) ? cut : Wf - cut
 end

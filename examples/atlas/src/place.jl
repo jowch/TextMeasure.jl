@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: MIT
-# DECISION (Task 1 spike): the raw warm-start solve + our own overlap recompute. Originally the
-# unexported `solve_cluster`; migrated to the public `warm_solve` (same seam) once it shipped.
-# Per-frame data→pixel projection (used by the loop task, NOT here):
-#   px = Point2f(Makie.project(ax.scene, :data, :pixel, data_pt)[Vec(1,2)])  # no frame lag after update_state_before_display!
+# place.jl — the label-placement layer. Measure each label into a pixel box (`measure_boxes`,
+# the TextMeasure seam) and solve per-frame non-overlapping offsets via MakieTextRepel's public
+# `warm_solve`, warm-started from the previous frame for temporal stability.
 using Makie
 using GeometryBasics: Point2f, Vec2f, Rect2f
 
@@ -16,7 +15,28 @@ struct FramePlacement
     dropped :: BitVector
 end
 
-"Measured pixel boxes (w,h) for label strings via a TextMeasure backend (px_per_unit=1 for Makie)."
+"""
+    measure_boxes(strings; fontsize=RAMP.body, font=_LABEL_FONT, backend=MakieBackend(...)) -> Vector{Vec2f}
+
+The TextMeasure seam of the piece: measure each label string into a pixel `(width, height)`
+box for the placement solver. Runs the two-phase API once per string —
+`layout(prepare(backend, s)).size[1]` gives the width, `ascent + descent` the height. The
+default `backend` is a `MakieBackend` at `px_per_unit=1` so the boxes match Makie's render;
+pass any backend to measure against it.
+
+# Examples
+```jldoctest
+julia> mono = MonospaceBackend(fontsize=10, advance_ratio=1.0);   # deterministic backend
+
+julia> boxes = measure_boxes(["SLO", "San Luis Obispo"]; backend=mono);
+
+julia> boxes[1][1]                 # "SLO": 3 glyphs × 10px wide
+30.0f0
+
+julia> boxes[2][1] > boxes[1][1]   # the longer label gets a wider box
+true
+```
+"""
 function measure_boxes(strings; fontsize = Float64(HouseStyle.RAMP.body), font = _LABEL_FONT,
                        backend = MakieBackend(; font=font, fontsize=fontsize, px_per_unit=1))
     m = TextMeasure.font_metrics(backend)

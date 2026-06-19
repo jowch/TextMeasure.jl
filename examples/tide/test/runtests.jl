@@ -13,4 +13,5 @@ using Tide, Test
     include("test_justify.jl")
     include("test_frame.jl")
     include("test_golden.jl")
+    include("test_doctests.jl")
 end

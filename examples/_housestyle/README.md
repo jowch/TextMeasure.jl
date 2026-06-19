@@ -4,7 +4,8 @@
 The single source of truth for the gallery's look — *The Tide · Woven · The Atlas* — paired
 with the `HouseStyle` Julia module that encodes these values as constants. Each piece depends on
 the module by path so colours / ramp / fonts / footer come from ONE place. **If a value in this
-doc and the module ever disagree, that is a bug.**
+doc and the module ever disagree, that is a bug.** `test/runtests.jl` is the executable guard —
+it pins the palette, ramp, font paths, footer, and digest against this doc.
 
 Coherence ≠ uniformity: a kinetic press, a redacted document, and a map should *feel* different —
 they share this spine so the gallery reads as authored by one hand, not assembled.
@@ -83,6 +84,9 @@ the documented floor; do **not** use 8.)
   face is **Libre Caslon Text** (not Fraunces). Theme = the tide kneading the shore; warm/dusk so it
   stays distinct from the blue water of The Atlas.
 - **The Atlas** uses a water layer: fill `#DCE3E5`, hairline `#9FB2BA`. Land = PAPER, coast = INK.
+  Its editorial serif (masthead "The Atlas" + water/hydrography labels) is **Newsreader** (italic
+  for water), not Fraunces — the one pinned family outside the Fraunces/Plex Mono spine besides the
+  Tide's Libre Caslon and the chrome's Hanken Grotesk.
 - **Woven** flies a *type-specimen* flag: off-white `#F6F6F4` · near-black `#161616` · vermillion
   `#C8341F`; chrome in **Hanken Grotesk**.
 

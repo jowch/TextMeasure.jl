@@ -37,3 +37,5 @@ end
     @test HouseStyle.digest_rows(a) == HouseStyle.digest_rows(reverse(a))  # order-independent
     @test HouseStyle.digest_rows(a) != HouseStyle.digest_rows(["w1|0.01|12.50", "w2|40.00|12.50"])
 end
+
+include("test_doctests.jl")

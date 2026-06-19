@@ -19,11 +19,22 @@ const _BAND_HYST = 0.08 # once shown, widen the band ±8% before hiding (anti-fl
 const POI_GROUND = 0.00576  # POI ground em (degrees) → landmarks enter last (~w0.65)
 
 """
+    town_ground(rank::Integer) -> Float64
+
 Ground em (degrees lat) for a town by census rank. SLO (rank 1) is pinned, not here.
 Sizes are 1.2× the original tuning (MIN_PX + every ground scaled together), so each feature
 still ENTERS at the SAME view width — just 20% larger on screen. For the [2.0, 0.55]
 dive: majors fade in ~w1.6 (0.5-α ~w1.3), the 6–7 band ~w1.1, the 8–9 necklace ~w0.9
 (content_px_w≈1588 → font_px = ground·1588/(KX·w)).
+
+# Examples
+```jldoctest
+julia> town_ground(3)      # a major town (rank ≤ 5)
+0.0132
+
+julia> town_ground(8)      # the small-town necklace (ranks 8–9)
+0.00744
+```
 """
 function town_ground(rank::Integer)::Float64
     rank ≤ 5 ? 0.0132 :   # majors → fade in ~w1.6
