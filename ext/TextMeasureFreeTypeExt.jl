@@ -4,6 +4,24 @@ using TextMeasure
 using FreeTypeAbstraction
 const FTA = FreeTypeAbstraction
 
+"""
+    FreeTypeBackend(; font="Inter", fontsize=12, dpi=72)
+
+Keyword constructor for [`FreeTypeBackend`](@ref), available once
+`using FreeTypeAbstraction`. `font` is a family name or font-file path resolved through
+`FreeTypeAbstraction.findfont`; a name it cannot resolve throws `ArgumentError`. Run widths
+scale with the pixel size `fontsize * dpi / 72`.
+
+# Examples
+```julia
+using TextMeasure, FreeTypeAbstraction
+
+b    = FreeTypeBackend(font="Inter", fontsize=14)   # resolved via findfont
+prep = prepare(b, "the quick brown fox")            # measure once, against Inter@14px
+lay  = layout(prep; max_width=120)                  # lay out; widths come from the font
+lay.size                                            # (width, height) in px
+```
+"""
 function TextMeasure.FreeTypeBackend(; font="Inter", fontsize=12, dpi=72)
     face = FTA.findfont(font)
     face === nothing && throw(ArgumentError("font not found: $(repr(font))"))
