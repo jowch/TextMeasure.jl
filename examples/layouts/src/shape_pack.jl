@@ -71,6 +71,19 @@ function _widest(intervals)
     return best
 end
 
+# The fill list for one band `[(band-1)·la, band·la]`: `:widest` ⇒ at most the single widest
+# interval (if ≥ mcw); `:all` ⇒ every interval ≥ mcw, left-to-right. Empty ⇒ band unusable.
+function _band_intervals(chord_fn, band::Int, la::Float64, mcw::Float64, fill::Symbol)
+    ivs = chord_fn((band - 1) * la, band * la)
+    if fill === :widest
+        iv = _widest(ivs)
+        (iv !== nothing && (iv[2] - iv[1]) >= mcw) || return Tuple{Float64,Float64}[]
+        return [(Float64(iv[1]), Float64(iv[2]))]
+    else  # :all
+        return [(Float64(l), Float64(r)) for (l, r) in ivs if (Float64(r) - Float64(l)) >= mcw]
+    end
+end
+
 # Pack ONE line into a single interval [L, R] at baseline `y`, starting at segment
 # `si`. Mirrors src/layout.jl's greedy inner loop, scoped to this one interval; both
 # the :widest (one interval/band) and :all (each disjoint interval/band) paths reuse
@@ -223,21 +236,11 @@ function shape_pack(prep::Prepared, chord_fn;
     empty_run = 0
 
     while si <= n
-        # ---- find next usable band: collect the interval(s) to fill ----
-        # `:widest` ⇒ at most the single widest interval (if >= mcw); `:all` ⇒ every
-        # interval >= mcw, left-to-right. A band is usable iff that list is non-empty.
+        # ---- find the next usable band: the first whose fill list is non-empty ----
         intervals = Tuple{Float64,Float64}[]
         usable = false
         while band <= max_bands
-            ivs = chord_fn((band - 1) * la, band * la)
-            if fill === :widest
-                iv = _widest(ivs)
-                if iv !== nothing && (iv[2] - iv[1]) >= mcw
-                    intervals = [(Float64(iv[1]), Float64(iv[2]))]
-                end
-            else  # :all — keep each interval wide enough, in left-to-right order
-                intervals = [(Float64(l), Float64(r)) for (l, r) in ivs if (Float64(r) - Float64(l)) >= mcw]
-            end
+            intervals = _band_intervals(chord_fn, band, la, mcw, fill)
             if !isempty(intervals)
                 usable = true
                 entered = true
