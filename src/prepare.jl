@@ -4,13 +4,15 @@ function _measure_checked(backend::AbstractMeasurementBackend, s::AbstractString
     return max(0.0, Float64(w))
 end
 
+# Emit the buffered run (if any) as a Segment of class `bufclass` and clear the buffer.
+# The caller owns the `bufclass` state machine, so this returns nothing.
 function _flush!(segs::Vector{Segment}, buf::IOBuffer, bufclass::Symbol,
                  backend::AbstractMeasurementBackend)
     if bufclass !== :none
         s = String(take!(buf))
         push!(segs, Segment(s, _measure_checked(backend, s), bufclass))
     end
-    return :none
+    return nothing
 end
 
 """
@@ -48,13 +50,12 @@ function prepare(backend::AbstractMeasurementBackend, text::AbstractString)::Pre
     bufclass = :none
     for c in text
         if c == '\n'
-            bufclass = _flush!(segs, buf, bufclass, backend)
+            _flush!(segs, buf, bufclass, backend); bufclass = :none
             push!(segs, Segment("\n", 0.0, :newline))
         else
             cls = (c == ' ' || c == '\t') ? :space : :word
             if cls !== bufclass
-                bufclass = _flush!(segs, buf, bufclass, backend)
-                bufclass = cls
+                _flush!(segs, buf, bufclass, backend); bufclass = cls
             end
             print(buf, c)
         end

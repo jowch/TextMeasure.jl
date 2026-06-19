@@ -47,7 +47,8 @@ function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, linehe
     raw = Tuple{String,Float64}[]
     committed = Segment[]
     committed_w = 0.0
-    pending::Union{Nothing,Segment} = nothing
+    pending::Union{Nothing,Segment} = nothing   # a trailing space, held back: it only joins
+                                                 # the line if the following word also fits.
 
     for seg in prep.segments
         if seg.kind === :newline
@@ -71,10 +72,10 @@ function layout(prep::Prepared; max_width::Real=Inf, align::Symbol=:left, linehe
             end
         end
     end
-    _emit_line!(raw, committed)   # final line
+    _emit_line!(raw, committed)   # final line — so `raw` is always non-empty here
 
     N = length(raw)
-    total_w = maximum(t -> t[2], raw)
+    total_w = maximum(t -> t[2], raw)   # safe: the final _emit_line! guarantees ≥ 1 tuple
     height  = m.ascent + (N - 1) * la + m.descent
     lines = Vector{Line}(undef, N)
     for (i, (s, w)) in enumerate(raw)

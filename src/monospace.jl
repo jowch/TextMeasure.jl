@@ -44,5 +44,6 @@ MonospaceBackend(; fontsize=12.0, advance_ratio=0.6, lineheight_ratio=1.2) =
 measure(b::MonospaceBackend, text::AbstractString) =
     length(graphemes(text)) * b.advance_ratio * b.fontsize
 
+# Nominal 80/20 ascent/descent split — models a plausible font, not a real one.
 font_metrics(b::MonospaceBackend) =
     FontMetrics(0.8 * b.fontsize, 0.2 * b.fontsize, b.lineheight_ratio * b.fontsize)
