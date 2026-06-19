@@ -171,7 +171,6 @@ end
     end
     @test byidx["cc"].x >= 100.0                       # the word that didn't fit left
     # placements appended left-to-right: every left-run placement precedes right-run
-    xs = getfield.(pk.placements, :x)
     band1 = [p.x for p in pk.placements if isapprox(p.y, base; atol=1e-9)]
     leftmost_right = minimum(x for x in band1 if x >= 100.0)
     @test all(x -> x < leftmost_right, (x for x in band1 if x < 50.0))
