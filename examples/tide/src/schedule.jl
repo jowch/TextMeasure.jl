@@ -42,6 +42,15 @@ press window is ONE continuous pulse (see `_press_depth`): `depth==0` with zero 
 start of every press (l==0) and again at its end, a single flat-but-moving crest at u=0.5, so
 presses chain back-to-back into a relentless tide and frame 0 is a bare-rest trough. `phase =
 2π·frame/N_FRAMES` completes one cycle over the loop, so phase at frame N_FRAMES matches frame 0.
+
+# Examples
+```jldoctest
+julia> press_at(0)               # frame 0: the first (W) press at bare rest
+(:W, 0.0, 0.0)
+
+julia> press_at(N_FRAMES) == press_at(0)   # seamless loop: last frame wraps to the first
+true
+```
 """
 function press_at(frame::Int)
     f = mod(frame, N_FRAMES)

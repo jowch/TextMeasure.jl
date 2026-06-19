@@ -26,7 +26,7 @@ wave_L(line_advance) = 2.0 * line_advance
 # region_mask — the 6 raking directions (W, E, SW, SE, NW, NE).
 # ---------------------------------------------------------------------------------------------
 """
-    region_mask(W, H, dir, depth_px, phase; cell=1.0, line_advance=..., floor_y=H,
+    region_mask(W, H, dir, depth_px, phase; cell=1.0, line_advance=2.0, floor_y=H,
                 deep_y=floor_y, top_y=0.0) -> BitMatrix
 
 Wavy advancing-tide raster of size ⌈H⌉×⌈W⌉. `dir ∈ DIRECTIONS`; `depth_px` is how far the wall
@@ -48,6 +48,17 @@ A diagonal cut is monotone across a row ⇒ one interval.
 
 `depth_px` is assumed pre-clamped by the caller (`frame.jl` clamps to each direction's d_max so
 no surviving band falls below `floor_w`); this builder applies the geometry only.
+
+# Examples
+```jldoctest
+julia> m = region_mask(10, 4, :W, 0.0, 0.0);   # depth 0 ⇒ the full rest rectangle
+
+julia> size(m)                                 # ⌈H⌉ rows × ⌈W⌉ cols
+(4, 10)
+
+julia> all(m)                                  # nothing flooded yet
+true
+```
 """
 function region_mask(W, H, dir::Symbol, depth_px::Real, phase::Real;
                      cell::Real = CELL, line_advance::Real = wave_L(1.0),

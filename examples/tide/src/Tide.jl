@@ -1,18 +1,22 @@
 # SPDX-License-Identifier: MIT
-module Tide
 
-# The Tide — a kinetic-typography gallery piece built on TextMeasure's layout engine.
-#
-# THE THESIS the piece demonstrates: measure ONCE, lay out MANY. The font engine is touched
-# exactly once (`prepare_tide`), caching every glyph-advance width. Every frame is then pure
-# arithmetic over those cached widths — one `shape_pack` re-flows the prose into the frame's
-# surviving region, and a demo-side justify pass rewrites positions flush to both margins. No
-# per-frame measuring; no new engine surface.
-#
-# WHAT YOU SEE: a justified prose sea-passage on a warm sunset palette. A wavy coral tide-line
-# sweeps counterclockwise around the block; each press is a smooth swell that kneads the text by
-# re-flowing it into the region the wave leaves behind. Shipped as a seamless 60fps MP4 loop, a
-# hero still, and a ghosted thumbnail. See README.md for the full pipeline + the ideas to lift.
+"""
+    Tide
+
+A kinetic-typography gallery piece built on TextMeasure's layout engine.
+
+**The thesis it demonstrates: measure ONCE, lay out MANY.** The font engine is touched
+exactly once (`prepare_tide`), caching every glyph-advance width. Every one of the `N_FRAMES`
+frames is then pure arithmetic over those cached widths (`frame_layout`): one `shape_pack`
+re-flows the prose into the frame's surviving region, and a demo-side justify pass rewrites
+positions flush to both margins. No per-frame measuring; no new engine surface.
+
+What you see: a justified prose sea-passage on a warm sunset palette, a wavy coral tide-line
+sweeping counterclockwise as each press kneads the text by re-flowing it into the region the
+wave leaves behind. Shipped as a seamless loop, a hero still, and a ghosted thumbnail; see
+README.md for the full pipeline and the ideas to lift.
+"""
+module Tide
 
 using TextMeasure
 using TextMeasure: prepare, MakieBackend, MonospaceBackend, Prepared, Segment

@@ -16,10 +16,38 @@ _norm(s) = lowercase(filter(c -> isletter(c) || isdigit(c), s))
     is_lit(word) -> Bool
 
 True when the punctuation-stripped, lowercased `word` equals "kneads". The compound token
-"kneads—smoothing" is split at render time; `has_lit` below catches that prefix form.
+"kneads—smoothing" is split at render time; [`has_lit`](@ref) catches that prefix form.
+
+# Examples
+```jldoctest
+julia> is_lit("kneads")
+true
+
+julia> is_lit("Kneads,")     # punctuation stripped, lowercased
+true
+
+julia> is_lit("smoothing")
+false
+```
 """
 is_lit(word::AbstractString) = _norm(word) == "kneads"
 
-# A token is lit-bearing if it IS "kneads" or BEGINS "kneads—" (the tight-em-dash compound,
-# whose "kneads" run is split out and lit at render time).
+"""
+    has_lit(word) -> Bool
+
+True when `word` IS "kneads" or BEGINS "kneads—" — the tight-em-dash compound
+"kneads—smoothing", whose "kneads" run is split out and lit coral at render time.
+
+# Examples
+```jldoctest
+julia> has_lit("kneads")
+true
+
+julia> has_lit("kneads—smoothing")   # the tight em-dash compound is lit-bearing
+true
+
+julia> has_lit("smoothing")
+false
+```
+"""
 has_lit(word::AbstractString) = is_lit(word) || startswith(_norm(word), "kneads")
