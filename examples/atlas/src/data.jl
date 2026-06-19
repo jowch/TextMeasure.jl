@@ -5,9 +5,33 @@ using GeometryBasics: Point2f
 const PHI0 = 35.7                       # reference latitude (deg)
 const KX   = cosd(PHI0)                 # ≈ 0.812 — x-correction factor
 
-"Pure affine lon/lat → shared map-units (x compressed by cos φ0, y = lat)."
+"""
+    project_point(lon, lat) -> (x, y)
+
+Pure affine projection of `(lon, lat)` degrees into shared map-units: `x = KX * lon` (with
+`KX = cosd(PHI0)` compressing longitude so a degree of lon spans the same ground distance as a
+degree of lat near the reference latitude `PHI0`), and `y = lat` unchanged. No I/O.
+
+# Examples
+```jldoctest
+julia> x, y = project_point(-120.0, 35.5);
+
+julia> y                       # latitude is the y map-unit, passed through
+35.5
+
+julia> x ≈ -120.0 * KX         # longitude compressed by cos(φ0) for isotropy
+true
+```
+"""
 project_point(lon::Real, lat::Real) = (KX * lon, float(lat))
 
+"""
+    Town(town_id, name, pos, pop, rank, source)
+
+One labelled town in projected map-units. `rank` is the census-rank level-of-detail key that
+drives [`town_ground`](@ref) (1 = largest, enters first); `pos` is the projected `Point2f`;
+`pop` the population; `source` the dataset it came from.
+"""
 struct Town
     town_id :: Int
     name    :: String
@@ -17,6 +41,13 @@ struct Town
     source  :: String
 end
 
+"""
+    AtlasData(coastline, land, towns, lakes, rivers)
+
+The projected map: coastline/land/lake/river geometry as vectors of `Point2f` polylines/rings
+(map-units), plus the labelled [`Town`](@ref)s. Built by [`load_atlas_data`](@ref); everything
+downstream is pure arithmetic over it.
+"""
 struct AtlasData
     coastline :: Vector{Vector{Point2f}}   # projected polylines
     land      :: Vector{Vector{Point2f}}   # projected rings
@@ -87,6 +118,14 @@ function _load_optional(name, smooth)
     [_chaikin(seg, smooth) for seg in _load_lines(path)]
 end
 
+"""
+    load_atlas_data(; smooth=2) -> AtlasData
+
+Read the bundled GeoJSON/CSV under `../data` (coastline, land, optional lakes/rivers, and the
+towns table), project every coordinate via [`project_point`](@ref), and Chaikin-smooth the
+line work `smooth` times. The disk-touching front door of the piece — call it once, then drive
+the pure render/loop arithmetic off the returned [`AtlasData`](@ref).
+"""
 function load_atlas_data(; smooth::Int = 2)
     coastline = [_chaikin(seg, smooth) for seg in _load_lines(joinpath(_DATA_DIR, "coastline.geojson"))]
     land      = [_chaikin(ring, smooth) for ring in _load_lines(joinpath(_DATA_DIR, "land.geojson"))]

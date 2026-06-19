@@ -6,6 +6,18 @@ const FPS      = 30
 const _CWIDE   = (-120.90, 35.45)   # central-coast overview
 const _CTIGHT  = (-120.74, 35.31)   # Morro Bay–Los Osos–SLO–Pismo cluster centroid
 
+"""
+    smoothstep(t) -> Float64
+
+Hermite smoothstep easing: `clamp(t, 0, 1)` then `t²·(3 − 2t)`, with zero velocity at both
+endpoints. Used throughout the camera dive and the LoD opacity fades.
+
+# Examples
+```jldoctest
+julia> smoothstep(0.0), smoothstep(0.5), smoothstep(1.0)
+(0.0, 0.5, 1.0)
+```
+"""
 smoothstep(t) = (t = clamp(t, 0, 1); t*t*(3 - 2t))
 
 "Triangle phase 0→1→0 over the loop, smoothstep-eased per half (vel=0 at 0,½,1)."
