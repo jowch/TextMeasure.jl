@@ -70,6 +70,9 @@ A backend subtypes `AbstractMeasurementBackend` and implements two **non-exporte
   the user runs `using FreeTypeAbstraction` / `using Makie`. The two extensions share near-identical
   metric math; keep them in sync. `MakieBackend` should be used with `px_per_unit = 1` to match
   Makie's markerspace geometry.
+- **`FigletBackend`** (`ext/TextMeasureFigletExt.jl`, gated on `FIGlet`) — `measure` returns widths
+  in **character cells, not pixels** (FIGlet glyphs live on a fixed integer grid), so it has no
+  `fontsize` and no `measure_bounds`. Inert until `using FIGlet`.
 
 ### Types (`src/types.jl`)
 
