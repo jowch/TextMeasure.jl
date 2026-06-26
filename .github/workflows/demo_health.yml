@@ -42,7 +42,7 @@ jobs:
     name: License audit (SPDX MIT headers)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Audit SPDX MIT headers on examples/*.jl
         run: bash .github/scripts/license_audit.sh
 
@@ -58,7 +58,7 @@ jobs:
         # The three gallery pieces + the shared layouts library.
         demo: [atlas, tide, woven, layouts]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: julia-actions/setup-julia@v3
         with:
