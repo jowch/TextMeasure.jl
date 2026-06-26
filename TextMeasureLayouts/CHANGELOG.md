@@ -5,11 +5,11 @@ All notable changes to TextMeasureLayouts are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-06-25
 
 First release of `TextMeasureLayouts` — shape-conforming layout utilities built on top of
-TextMeasure's measure-once `Prepared`. Promoted from the in-repo `examples/layouts` package to
-a top-level sibling; registration in the General registry is pending.
+TextMeasure's measure-once `Prepared`. (Promoted from the former in-repo `examples/layouts`
+package to a top-level sibling.)
 
 ### Added
 
@@ -40,4 +40,4 @@ a top-level sibling; registration in the General registry is pending.
 - `examples/optimal_linebreaks.jl` — `knuth_plass` vs `greedy_justify` on one paragraph,
   flush-justified, showing the lower total badness of the optimal breaks.
 
-[Unreleased]: https://github.com/jowch/TextMeasure.jl/tree/main/TextMeasureLayouts
+[0.1.0]: https://github.com/jowch/TextMeasure.jl/releases/tag/TextMeasureLayouts-v0.1.0
