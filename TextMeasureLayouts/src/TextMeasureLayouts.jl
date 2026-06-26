@@ -19,8 +19,8 @@ README); this sibling package shows how a downstream consumer adds them.
 """
 module TextMeasureLayouts
 
-# Consumed by per-demo projects via `Pkg.develop(path="../layouts")`.
-# Long-term migration target: a registered `TextMeasureLayouts.jl` sibling package.
+# A top-level sibling package; demos consume it via a path `[sources]` entry.
+# Registration target: a registered `TextMeasureLayouts.jl`.
 
 using TextMeasure: FontMetrics, Prepared, Segment
 using GeometryBasics: Point2

@@ -1,11 +1,13 @@
 <!-- SPDX-License-Identifier: MIT -->
-# TextMeasureLayouts (`examples/layouts`)
+# TextMeasureLayouts
 
-Shared layout utilities for the TextMeasure.jl demos milestone. Houses `shape_pack` (#C)
-— a shape-conforming text-layout consumer — and (stretch) `knuth_plass` (#K).
+Shared layout utilities that sit on top of TextMeasure. Houses `shape_pack`
+— a shape-conforming text-layout consumer — and `knuth_plass`.
 
-Consumed by per-demo projects via `Pkg.develop(path="../layouts")`. Long-term migration
-target: a registered `TextMeasureLayouts.jl` sibling package.
+A top-level sibling package in this repo (registration target: a registered
+`TextMeasureLayouts.jl`). The demos under `examples/` consume it via a path
+`[sources]` entry (`path = "../../TextMeasureLayouts"`); external consumers install
+it from General once registered.
 
 > The `Manifest.toml` is intentionally **not** committed (per-demo manifests stay
 > gitignored). Reproducibility comes from `Pkg.instantiate()` at run/CI time against the
@@ -36,7 +38,7 @@ of word `Placement`s in reading order. A full-width rectangle chord_fn reproduce
 
 All coordinates share `chord_fn`'s frame and `prep.metrics` units.
 
-## `knuth_plass` (#K)
+## `knuth_plass`
 
 ```julia
 using TextMeasure, TextMeasureLayouts
@@ -66,8 +68,74 @@ stretch/shrink glue, and `:newline` as forced breaks.
 Justification is **out of TextMeasure's library scope** (see `CLAUDE.md`); `knuth_plass`
 lives here as a downstream demo utility, consumed by the gallery pieces (The Tide / Woven).
 
+## Examples
+
+Runnable, zero-dependency demos — they print to the terminal (no graphics backend, using
+the deterministic `MonospaceBackend`).
+
+### `shape_pack_ascii.jl`
+
+Pours one paragraph of prose into a triangle (`polygon_chord_fn`) and a circle
+(`raster_chord_fn`), flush-justifying each line to its band's margins so the silhouette reads
+solid.
+
+```bash
+julia --project=TextMeasureLayouts TextMeasureLayouts/examples/shape_pack_ascii.jl
+```
+
+```
+polygon_chord_fn — justified inside a triangle:
+
+      the
+     sea
+    kneads
+   the  shore
+  in slow
+
+raster_chord_fn — justified inside a circle:
+
+    the sea
+ kneads    the
+shore  in  slow
+folds  of  foam
+and  salt while
+ light  spills
+    wide
+```
+
+### `optimal_linebreaks.jl`
+
+`knuth_plass` vs `greedy_justify` on one paragraph, shown flush-justified to the measure —
+optimal breaks minimize *total* badness across the whole paragraph, not line by line (greedy
+strands a short last line; K-P packs six fuller ones).
+
+```bash
+julia --project=TextMeasureLayouts TextMeasureLayouts/examples/optimal_linebreaks.jl
+```
+
+```
+greedy_justify:  (total badness 3512.6)
+  | in   the   practice   of  typesetting  a
+  | paragraph  reads best when its lines are
+  | evenly loose rather than tight here then
+  | loose  there  which is exactly the trade
+  | the  greedy  rule keeps making while the
+  | optimal  program  looks  ahead to spread
+  | the slack
+
+knuth_plass:  (total badness 280.9)
+  | in the practice of typesetting a paragraph
+  | reads best when its lines are evenly loose
+  | rather  than tight here then loose there
+  | which is exactly the trade the greedy rule
+  | keeps  making  while the optimal program
+  | looks ahead to spread the slack
+
+✓ knuth_plass total badness ≤ greedy (280.9 ≤ 3512.6)
+```
+
 ## Run the tests
 
 ```bash
-julia --project=examples/layouts examples/layouts/test/runtests.jl
+julia --project=TextMeasureLayouts TextMeasureLayouts/test/runtests.jl
 ```

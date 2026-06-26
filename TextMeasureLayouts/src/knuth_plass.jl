@@ -3,7 +3,7 @@
 # knuth_plass — optimal whole-paragraph line breaking (#K, demos milestone).
 # Port of pretext.js kp.ts. Classic Knuth–Plass box/glue dynamic program minimizing
 # total badness. Justification is OUT of TextMeasure's library scope (CLAUDE.md) — this
-# is a downstream demo utility living in the examples/layouts package.
+# is a downstream utility living in the TextMeasureLayouts package.
 #
 # Box/glue model over `Prepared.segments`:
 #   :word     -> a box (fixed width)

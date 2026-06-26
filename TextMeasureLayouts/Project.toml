@@ -10,11 +10,12 @@ TextMeasure = "06791c1d-2336-41e1-bd6f-a74c63395da6"
 # Unregistered in-repo package — resolve by path so a plain `Pkg.instantiate()`
 # works without a manual `Pkg.develop` step (Julia 1.11+ [sources] feature).
 [sources]
-TextMeasure = { path = "../.." }
+TextMeasure = { path = ".." }
 
 [compat]
 Documenter = "1"
 GeometryBasics = "0.5.10"
+TextMeasure = "0.1"
 julia = "1.11"
 
 [extras]

@@ -14,7 +14,7 @@ TextMeasureLayouts = "57b0e3ea-cc01-4cc3-9e7e-6e97d1609b9f"
 [sources]
 HouseStyle = { path = "../_housestyle" }
 TextMeasure = { path = "../.." }
-TextMeasureLayouts = { path = "../layouts" }
+TextMeasureLayouts = { path = "../../TextMeasureLayouts" }
 
 [compat]
 Documenter = "1"

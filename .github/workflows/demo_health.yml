@@ -80,12 +80,11 @@ jobs:
 
       - name: Instantiate and run the demo test suite
         id: runtest
-        # Plain instantiate+test — no manual Pkg.develop. The unregistered in-repo deps
-        # (TextMeasure, and TextMeasureLayouts for the demos that use it) are resolved via
-        # each demo's [sources] table in Project.toml. This is the exact flow the per-demo
-        # READMEs document, so green CI here means the documented quickstart works too.
+        # Plain instantiate+test — no manual Pkg.develop; in-repo deps resolve via each
+        # project's [sources] table (and registries for anything registered). `layouts` lives
+        # at the repo root now, the demos under examples/ — hence the path split below.
         run: |
-          julia --color=yes --project=examples/${{ matrix.demo }} -e '
+          julia --color=yes --project=${{ matrix.demo == 'layouts' && 'TextMeasureLayouts' || format('examples/{0}', matrix.demo) }} -e '
             using Pkg
             Pkg.instantiate()
             Pkg.test()
