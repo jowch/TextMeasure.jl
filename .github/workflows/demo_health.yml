@@ -1,7 +1,7 @@
 # Demo-health CI (#J) — keeps the examples/ demos from rotting silently.
 #
 # What it does:
-#   * License-audit gate: every examples/*.jl file must carry an SPDX MIT header.
+#   * License-audit gate: every *.jl under examples/ and TextMeasureLayouts/ must carry an SPDX MIT header.
 #   * Per-demo matrix: boots each gallery piece in a clean env (plain Pkg.instantiate +
 #     Pkg.test; in-repo deps resolved via each piece's [sources] table). Each piece's own
 #     test suite carries its DETERMINISTIC GOLDEN (hash the computed layout table, never
@@ -80,12 +80,12 @@ jobs:
 
       - name: Instantiate and run the demo test suite
         id: runtest
-        # Plain instantiate+test — no manual Pkg.develop. The unregistered in-repo deps
-        # (TextMeasure, and TextMeasureLayouts for the demos that use it) are resolved via
-        # each demo's [sources] table in Project.toml. This is the exact flow the per-demo
-        # READMEs document, so green CI here means the documented quickstart works too.
+        # Plain instantiate+test — no manual Pkg.develop. The gallery demos resolve their
+        # in-repo deps via each project's [sources] table; TextMeasureLayouts has no [sources],
+        # so its TextMeasure dep resolves from General (the released 0.1.x, not repo src/).
+        # `layouts` lives at the repo root now, the demos under examples/ — hence the split.
         run: |
-          julia --color=yes --project=examples/${{ matrix.demo }} -e '
+          julia --color=yes --project=${{ matrix.demo == 'layouts' && 'TextMeasureLayouts' || format('examples/{0}', matrix.demo) }} -e '
             using Pkg
             Pkg.instantiate()
             Pkg.test()

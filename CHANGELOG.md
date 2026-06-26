@@ -69,7 +69,7 @@ project with its own `Project.toml`, README, and a deterministic golden test tha
 
 Shared infrastructure (libraries, not standalone demos):
 
-- **`examples/layouts`** — `TextMeasureLayouts`: shared `shape_pack` shape-conforming text packing
+- **`TextMeasureLayouts`** — shared `shape_pack` shape-conforming text packing
   with multi-interval per-band packing (unblocks two-sided wrap), plus the `knuth_plass` /
   `greedy_justify` justification utilities. Consumed by The Tide and Woven.
 - **`examples/_housestyle`** — `HouseStyle`: the shared spine (palette, type ramp, pinned font

@@ -14,7 +14,8 @@ jobs:
     # ubuntu-slim doesn't support containers, and thus won't work
     runs-on: ubuntu-latest
     steps:
-      - uses: JuliaRegistries/TagBot@304fc93e4623081443fee5b6317ac73b37923574 # v1.25.8
+      - name: Tag TextMeasure (top-level package)
+        uses: JuliaRegistries/TagBot@304fc93e4623081443fee5b6317ac73b37923574 # v1.25.8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           # For commits that modify workflow files: SSH key enables tagging, but
@@ -22,3 +23,13 @@ jobs:
           # use a PAT with `workflow` scope instead of GITHUB_TOKEN.
           # See: https://github.com/JuliaRegistries/TagBot#commits-that-modify-workflow-files
           ssh: ${{ secrets.DOCUMENTER_KEY }}
+
+      # The TextMeasureLayouts subpackage registers separately; `subdir` makes TagBot read
+      # its name/version from TextMeasureLayouts/Project.toml and create name-prefixed tags
+      # (TextMeasureLayouts-v0.1.0) so they don't collide with the top-level v0.1.0 tags.
+      - name: Tag TextMeasureLayouts (subpackage)
+        uses: JuliaRegistries/TagBot@304fc93e4623081443fee5b6317ac73b37923574 # v1.25.8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh: ${{ secrets.DOCUMENTER_KEY }}
+          subdir: TextMeasureLayouts
