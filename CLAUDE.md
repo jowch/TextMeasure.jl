@@ -80,6 +80,14 @@ A backend subtypes `AbstractMeasurementBackend` and implements two **non-exporte
 `FontMetrics`, `Segment`, `Prepared`, `Line`, `Layout`. All result structs are read-only by
 convention. `Line.str`/`width` are whitespace-trimmed; `Line.baseline` uses block-top = 0.
 
+### Downstream library (`TextMeasureLayouts/`)
+
+Shape-conforming packing (`shape_pack`) and optimal/greedy paragraph justification (`knuth_plass`
+/ `greedy_justify`) are **consumers** of a `Prepared`, not core engine surface (justification is
+out of scope — see "What this is"). They live in the top-level **`TextMeasureLayouts/`** sibling
+package — its own `Project.toml`, registrable separately, depending on registered `TextMeasure` —
+and are used by the Tide / Woven demos.
+
 ## Conventions
 
 - Adding a backend = subtype `AbstractMeasurementBackend` + implement the two methods. If it needs

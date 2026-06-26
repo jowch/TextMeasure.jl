@@ -3,13 +3,14 @@
 #
 # License-audit gate for the demos milestone (#J).
 #
-# Every Julia source file under examples/ MUST carry an SPDX MIT header
-# (`# SPDX-License-Identifier: MIT`) within its first few lines. This guards
-# against demo source drifting in without a license marker.
+# Every Julia source file under examples/ and the top-level TextMeasureLayouts/
+# package MUST carry an SPDX MIT header (`# SPDX-License-Identifier: MIT`) within
+# its first few lines. This guards against source drifting in without a license
+# marker.
 #
-# Scope: *.jl files under examples/. Data files (.toml/.shp/.json/.pdf/.png/...),
-# READMEs, and Manifest/Project metadata are intentionally NOT audited — they
-# cannot carry a comment header.
+# Scope: *.jl files under examples/ and TextMeasureLayouts/. Data files
+# (.toml/.shp/.json/.pdf/.png/...), READMEs, and Manifest/Project metadata are
+# intentionally NOT audited — they cannot carry a comment header.
 #
 # The asteroid TUI (examples/asteroid_tui, #E) is WIP and not yet on main; it is
 # excluded here and folded into the audit when #E merges.
@@ -31,9 +32,9 @@ while IFS= read -r -d '' f; do
   if ! head -n "$HEAD_LINES" "$f" | grep -qF "$EXPECTED"; then
     missing+=("$f")
   fi
-done < <(find examples -type f -name '*.jl' -not -path 'examples/asteroid_tui/*' -print0)
+done < <(find examples TextMeasureLayouts -type f -name '*.jl' -not -path 'examples/asteroid_tui/*' -print0)
 
-echo "license-audit: scanned ${total} Julia source file(s) under examples/ for '${EXPECTED}'"
+echo "license-audit: scanned ${total} Julia source file(s) under examples/ and TextMeasureLayouts/ for '${EXPECTED}'"
 
 if [ "${#missing[@]}" -ne 0 ]; then
   echo "::error::license-audit FAILED — ${#missing[@]} file(s) missing the SPDX MIT header:"
